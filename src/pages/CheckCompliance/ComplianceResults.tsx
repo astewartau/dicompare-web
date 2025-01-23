@@ -144,6 +144,9 @@ const ComplianceResults = ({ onNext }) => {
           </Box>
         ))}
       </Box>
+      <Button mt={6} colorScheme="green" onClick={onNext}>
+        Generate Signed Report
+      </Button>
     </Box>
   );
 };

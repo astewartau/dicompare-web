@@ -5,6 +5,7 @@ import UploadFiles from "./UploadFiles";
 import UploadConfiguration from "./UploadConfiguration";
 import ComplianceResults from "./ComplianceResults";
 import NavigationBar from "../../components/NavigationBar";
+import FinalizeMapping from "./FinalizeMapping";
 import { Box } from "@chakra-ui/react";
 
 const CheckCompliance = () => {
@@ -15,6 +16,7 @@ const CheckCompliance = () => {
       title: "Upload or Select Configuration",
       component: <UploadConfiguration onNext={() => {}} />
     },
+    { title: "Finalize Mapping", component: <FinalizeMapping onNext={() => {}} /> },
     { title: "Compliance Results", component: <ComplianceResults onNext={() => {}} /> },
   ];
 
