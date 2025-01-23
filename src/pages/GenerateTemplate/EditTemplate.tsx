@@ -133,7 +133,7 @@ const EditTemplate = () => {
       </Text>
 
       {/* Collapsible Cards */}
-      <VStack spacing={6} width={"200%"}>
+      <VStack spacing={6} minWidth="100vh">
         {mockProtocols.map((protocol, index) => (
           <CollapsibleCard key={index} protocol={protocol} validFields={validFields} />
         ))}

@@ -267,279 +267,268 @@ const CollapsibleCard = ({ protocol, validFields }) => {
   ];
 
   return (
-    <Box p={4} borderWidth="1px" borderRadius="md" bg="white" boxShadow="sm" minWidth="100%">
-      {/* Card Header */}
-      <HStack justify="space-between">
-        <Heading as="h3" size="md" color="teal.500">
-          {protocol.ProtocolName}
-        </Heading>
-        <Button size="sm" onClick={onToggle} colorScheme="teal">
-          {isOpen ? "Collapse" : "Expand"}
-        </Button>
-      </HStack>
+    <Box
+  p={4}
+  borderWidth="1px"
+  borderRadius="md"
+  bg="white"
+  boxShadow="sm"
+  width="100%"
+  maxWidth="none"
+  minWidth="600px"
+  overflow="hidden" // Prevents unnecessary content overflow
+>
+  {/* Header */}
+  <HStack justify="space-between">
+    <Heading as="h3" size="md" color="teal.500">
+      {protocol.ProtocolName}
+    </Heading>
+    <Button size="sm" onClick={onToggle} colorScheme="teal">
+      {isOpen ? "Collapse" : "Expand"}
+    </Button>
+  </HStack>
 
-      <Collapse in={isOpen} animateOpacity style={{ width: "100%" }}>
-        <Divider my={4} />
+  {/* Collapsible Content */}
+  <Collapse in={isOpen} animateOpacity style={{ width: "100%" }}>
+    <Divider my={4} />
 
-        {/* DICOM Data Display */}
-        <VStack align="start" spacing={2} maxHeight={200} overflowY="auto" width="100%">
-          {dicomData.map((item, index) => (
-            <Box key={index} width="100%">
-              {/* If the value is an array, display it as a table, else as normal text */}
-              {Array.isArray(item.value) ? (
-                <VStack align="start" spacing={1} width="100%">
-                  <HStack justify="space-between" width="100%">
-                    <Text fontWeight="bold" fontSize="md" color="gray.600">
-                      {item.key} (Tabular):
-                    </Text>
-                    <HStack>
-                      <IconButton
-                        icon={<EditIcon />}
-                        size="xs"
-                        colorScheme="blue"
-                        onClick={() => handleEditField(index)}
-                      />
-                      <IconButton
-                        icon={<CloseIcon />}
-                        size="xs"
-                        colorScheme="red"
-                        onClick={() => handleRemoveField(index)}
-                      />
-                    </HStack>
-                  </HStack>
-                  <Table size="sm" variant="simple">
-                    <Thead>
-                      <Tr>
-                        <Th>Series</Th>
-                        <Th>Value Type</Th>
-                        <Th>Value</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {item.value.map((row, rowIndex) => (
-                        <Tr key={rowIndex}>
-                          <Td>{row.series}</Td>
-                          <Td>{row.valueType}</Td>
-                          <Td>{row.value}</Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
-                </VStack>
-              ) : (
-                <HStack justify="space-between" width="100%">
-                  <HStack>
-                    <Text fontWeight="bold" fontSize="md" color="gray.600">
-                      {item.key}:
-                    </Text>
-                    <Text fontSize="md" color="gray.800">
-                      {item.value}
-                    </Text>
-                  </HStack>
-                  <HStack>
-                    <IconButton
-                      icon={<EditIcon />}
-                      size="xs"
-                      colorScheme="blue"
-                      onClick={() => handleEditField(index)}
-                    />
-                    <IconButton
-                      icon={<CloseIcon />}
-                      size="xs"
-                      colorScheme="red"
-                      onClick={() => handleRemoveField(index)}
-                    />
-                  </HStack>
-                </HStack>
-              )}
-            </Box>
-          ))}
-        </VStack>
-
-        <Divider my={4} />
-
-        {/* Add/Edit Form */}
-        <VStack align="start" spacing={4} width="100%">
-          {/* Field Selection */}
-          <Select
-            options={fieldOptions}
-            value={selectedField}
-            onChange={(selectedOption) => setSelectedField(selectedOption)}
-            placeholder="Search or select field"
-            isSearchable
-            styles={{ container: (base) => ({ ...base, width: "100%" }) }}
-          />
-
-          {/* Toggle between single-value and table */}
-          <FormControl display="flex" alignItems="center">
-            <FormLabel htmlFor="view-mode-switch" mb="0">
-              Tabular View?
-            </FormLabel>
-            <Switch
-              id="view-mode-switch"
-              isChecked={viewMode === "table"}
-              onChange={(e) => handleViewModeToggle(e.target.checked)}
-            />
-          </FormControl>
-
-          {/* If single-value view, show the existing input fields */}
-          {viewMode === "single" && (
-            <>
-              <ChakraSelect
-                value={inputType}
-                onChange={(e) => setInputType(e.target.value)}
-                placeholder="Select input type"
-              >
-                {inputTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </ChakraSelect>
-
-              {inputType === "Value" && (
-                <Input
-                  placeholder="Enter value"
-                  value={newFieldValue}
-                  onChange={(e) => setNewFieldValue(e.target.value)}
-                  width="100%"
-                />
-              )}
-              {inputType === "Range" && (
-                <HStack width="100%">
-                  <Input
-                    placeholder="Min value"
-                    value={rangeValue.min}
-                    onChange={(e) =>
-                      setRangeValue({ ...rangeValue, min: e.target.value })
-                    }
-                    width="48%"
+    {/* DICOM Data Display */}
+    <VStack align="start" spacing={2} maxHeight="300px" overflowY="auto" width="100%">
+      {dicomData.map((item, index) => (
+        <Box key={index} width="100%">
+          {Array.isArray(item.value) ? (
+            <VStack align="start" spacing={1} width="100%">
+              <HStack justify="space-between" width="100%">
+                <Text fontWeight="bold" fontSize="md" color="gray.600">
+                  {item.key} (Tabular):
+                </Text>
+                <HStack>
+                  <IconButton
+                    icon={<EditIcon />}
+                    size="xs"
+                    colorScheme="blue"
+                    onClick={() => handleEditField(index)}
                   />
-                  <Input
-                    placeholder="Max value"
-                    value={rangeValue.max}
-                    onChange={(e) =>
-                      setRangeValue({ ...rangeValue, max: e.target.value })
-                    }
-                    width="48%"
+                  <IconButton
+                    icon={<CloseIcon />}
+                    size="xs"
+                    colorScheme="red"
+                    onClick={() => handleRemoveField(index)}
                   />
                 </HStack>
-              )}
-              {inputType === "Value and Tolerance" && (
-                <HStack width="100%">
-                  <Input
-                    placeholder="Value"
-                    value={toleranceValue.value}
-                    onChange={(e) =>
-                      setToleranceValue({
-                        ...toleranceValue,
-                        value: e.target.value,
-                      })
-                    }
-                    width="48%"
-                  />
-                  <Input
-                    placeholder="Tolerance"
-                    value={toleranceValue.tolerance}
-                    onChange={(e) =>
-                      setToleranceValue({
-                        ...toleranceValue,
-                        tolerance: e.target.value,
-                      })
-                    }
-                    width="48%"
-                  />
-                </HStack>
-              )}
-              {inputType === "Contains" && (
-                <Input
-                  placeholder="Enter substring"
-                  value={containsValue}
-                  onChange={(e) => setContainsValue(e.target.value)}
-                  width="100%"
-                />
-              )}
-            </>
-          )}
-
-          {/* If table view, show the table input form */}
-          {viewMode === "table" && (
-            <VStack align="start" spacing={2} width="100%">
-              <Table size="sm" variant="simple">
+              </HStack>
+              <Table size="sm" variant="simple" width="100%">
                 <Thead>
                   <Tr>
                     <Th>Series</Th>
                     <Th>Value Type</Th>
                     <Th>Value</Th>
-                    <Th>Remove</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {rows.map((row, rowIndex) => (
+                  {item.value.map((row, rowIndex) => (
                     <Tr key={rowIndex}>
-                      <Td>
-                        <Input
-                          size="sm"
-                          value={row.series}
-                          onChange={(e) =>
-                            handleTableRowChange(rowIndex, "series", e.target.value)
-                          }
-                        />
-                      </Td>
-                      <Td>
-                        <ChakraSelect
-                          size="sm"
-                          value={row.valueType}
-                          onChange={(e) =>
-                            handleTableRowChange(rowIndex, "valueType", e.target.value)
-                          }
-                        >
-                          {inputTypeOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </ChakraSelect>
-                      </Td>
-                      <Td>
-                        <Input
-                          size="sm"
-                          value={row.value}
-                          onChange={(e) =>
-                            handleTableRowChange(rowIndex, "value", e.target.value)
-                          }
-                        />
-                      </Td>
-                      <Td>
-                        <IconButton
-                          icon={<CloseIcon />}
-                          size="sm"
-                          colorScheme="red"
-                          onClick={() => removeTableRow(rowIndex)}
-                        />
-                      </Td>
+                      <Td>{row.series}</Td>
+                      <Td>{row.valueType}</Td>
+                      <Td>{row.value}</Td>
                     </Tr>
                   ))}
                 </Tbody>
               </Table>
-              <Button size="sm" onClick={addTableRow} colorScheme="blue">
-                Add Row
-              </Button>
             </VStack>
+          ) : (
+            <HStack justify="space-between" width="100%">
+              <HStack>
+                <Text fontWeight="bold" fontSize="md" color="gray.600">
+                  {item.key}:
+                </Text>
+                <Text fontSize="md" color="gray.800">
+                  {item.value}
+                </Text>
+              </HStack>
+              <HStack>
+                <IconButton
+                  icon={<EditIcon />}
+                  size="xs"
+                  colorScheme="blue"
+                  onClick={() => handleEditField(index)}
+                />
+                <IconButton
+                  icon={<CloseIcon />}
+                  size="xs"
+                  colorScheme="red"
+                  onClick={() => handleRemoveField(index)}
+                />
+              </HStack>
+            </HStack>
           )}
+        </Box>
+      ))}
+    </VStack>
 
-          {/* Action Buttons */}
-          <HStack spacing={4} width="100%">
-            <Button colorScheme="teal" size="sm" onClick={handleAddOrEditField}>
-              {editingIndex !== null ? "Save Changes" : "Add Field"}
-            </Button>
-            <Button colorScheme="gray" size="sm" onClick={handleClearInputs}>
-              Clear
-            </Button>
-          </HStack>
+    <Divider my={4} />
+
+    {/* Add/Edit Form */}
+    <VStack align="start" spacing={4} width="100%">
+      <Select
+        options={fieldOptions}
+        value={selectedField}
+        onChange={(selectedOption) => setSelectedField(selectedOption)}
+        placeholder="Search or select field"
+        isSearchable
+        styles={{ container: (base) => ({ ...base, width: "100%" }) }}
+      />
+
+      <FormControl display="flex" alignItems="center">
+        <FormLabel htmlFor="view-mode-switch" mb="0">
+          Tabular View?
+        </FormLabel>
+        <Switch
+          id="view-mode-switch"
+          isChecked={viewMode === "table"}
+          onChange={(e) => handleViewModeToggle(e.target.checked)}
+        />
+      </FormControl>
+
+      {/* Single-Value Inputs */}
+      {viewMode === "single" && (
+        <>
+          <ChakraSelect
+            value={inputType}
+            onChange={(e) => setInputType(e.target.value)}
+            placeholder="Select input type"
+          >
+            {inputTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </ChakraSelect>
+
+          {inputType === "Value" && (
+            <Input
+              placeholder="Enter value"
+              value={newFieldValue}
+              onChange={(e) => setNewFieldValue(e.target.value)}
+              width="100%"
+            />
+          )}
+          {inputType === "Range" && (
+            <HStack width="100%">
+              <Input
+                placeholder="Min value"
+                value={rangeValue.min}
+                onChange={(e) => setRangeValue({ ...rangeValue, min: e.target.value })}
+                width="48%"
+              />
+              <Input
+                placeholder="Max value"
+                value={rangeValue.max}
+                onChange={(e) => setRangeValue({ ...rangeValue, max: e.target.value })}
+                width="48%"
+              />
+            </HStack>
+          )}
+          {inputType === "Value and Tolerance" && (
+            <HStack width="100%">
+              <Input
+                placeholder="Value"
+                value={toleranceValue.value}
+                onChange={(e) => setToleranceValue({ ...toleranceValue, value: e.target.value })}
+                width="48%"
+              />
+              <Input
+                placeholder="Tolerance"
+                value={toleranceValue.tolerance}
+                onChange={(e) => setToleranceValue({ ...toleranceValue, tolerance: e.target.value })}
+                width="48%"
+              />
+            </HStack>
+          )}
+          {inputType === "Contains" && (
+            <Input
+              placeholder="Enter substring"
+              value={containsValue}
+              onChange={(e) => setContainsValue(e.target.value)}
+              width="100%"
+            />
+          )}
+        </>
+      )}
+
+      {/* Table Inputs */}
+      {viewMode === "table" && (
+        <VStack align="start" spacing={2} width="100%">
+          <Table size="sm" variant="simple" width="100%">
+            <Thead>
+              <Tr>
+                <Th>Series</Th>
+                <Th>Value Type</Th>
+                <Th>Value</Th>
+                <Th>Remove</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {rows.map((row, rowIndex) => (
+                <Tr key={rowIndex}>
+                  <Td>
+                    <Input
+                      size="sm"
+                      value={row.series}
+                      onChange={(e) => handleTableRowChange(rowIndex, "series", e.target.value)}
+                    />
+                  </Td>
+                  <Td>
+                    <ChakraSelect
+                      size="sm"
+                      value={row.valueType}
+                      onChange={(e) => handleTableRowChange(rowIndex, "valueType", e.target.value)}
+                    >
+                      {inputTypeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </ChakraSelect>
+                  </Td>
+                  <Td>
+                    <Input
+                      size="sm"
+                      value={row.value}
+                      onChange={(e) => handleTableRowChange(rowIndex, "value", e.target.value)}
+                    />
+                  </Td>
+                  <Td>
+                    <IconButton
+                      icon={<CloseIcon />}
+                      size="sm"
+                      colorScheme="red"
+                      onClick={() => removeTableRow(rowIndex)}
+                    />
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+          <Button size="sm" onClick={addTableRow} colorScheme="blue">
+            Add Row
+          </Button>
         </VStack>
-      </Collapse>
-    </Box>
+      )}
+
+      {/* Action Buttons */}
+      <HStack spacing={4} width="100%">
+        <Button colorScheme="teal" size="sm" onClick={handleAddOrEditField}>
+          {editingIndex !== null ? "Save Changes" : "Add Field"}
+        </Button>
+        <Button colorScheme="gray" size="sm" onClick={handleClearInputs}>
+          Clear
+        </Button>
+      </HStack>
+    </VStack>
+  </Collapse>
+</Box>
+
   );
 };
 
