@@ -6,14 +6,10 @@ import GenerateTemplate from './pages/GenerateTemplate/GenerateTemplate';
 import CheckCompliance from './pages/CheckCompliance/CheckCompliance';
 
 const AppContent = () => {
-
-    useEffect(() => {
-    }, []);
-
+    useEffect(() => {}, []);
 
     return (
         <>
-
             <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/generate-template" element={<GenerateTemplate />} />

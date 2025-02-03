@@ -1,14 +1,4 @@
-import {
-    Box,
-    Heading,
-    Text,
-    Flex,
-    VStack,
-    Button,
-    HStack,
-    Icon,
-    Image,
-} from '@chakra-ui/react';
+import { Box, Heading, Text, Flex, VStack, Button, HStack, Icon, Image } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircleIcon, EditIcon } from '@chakra-ui/icons';
 import CertificateList from './CertificateList';
@@ -19,58 +9,40 @@ const LandingPage = () => {
     return (
         <Box>
             {/* Header Section */}
-            <Flex
-                justify="space-between"
-                align="center"
-                padding="1rem 2rem"
-                bg="teal.500"
-                color="white"
-                boxShadow="md"
-            >
+            <Flex justify="space-between" align="center" padding="1rem 2rem" bg="teal.500" color="white" boxShadow="md">
                 <Heading as="h1" size="xl">
                     dicompare
                 </Heading>
             </Flex>
 
-                        {/* Introductory Section */}
+            {/* Introductory Section */}
             <Flex
                 direction={{ base: 'column', md: 'row' }}
                 padding="4rem 2rem"
                 bgGradient="linear(to-r, teal.500, teal.300)"
                 color="white"
             >
-                <Box flex='2'>
+                <Box flex="2">
                     <VStack align="start" spacing={6} marginRight={20}>
-                        <Text fontSize="6xl" as='b'>
+                        <Text fontSize="6xl" as="b">
                             Empowering imaging research with privacy-first data validation
                         </Text>
                         <Text fontSize="lg" mr={20}>
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. DICOMpare is your trusted partner in achieving high-quality, compliant medical imaging workflows.
-                        </Text>e
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut
+                            labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco
+                            laboris nisi ut aliquip ex ea commodo consequat. DICOMpare is your trusted partner in
+                            achieving high-quality, compliant medical imaging workflows.
+                        </Text>
+                        e
                     </VStack>
                 </Box>
-                <Box
-                    flex='1'
-                    >
-                <Image
-                    src="../assets/ct-scan.png"
-                    alt="MRI Visualization"
-                    borderRadius="md"
-                    boxShadow="lg"
-                    />
+                <Box flex="1">
+                    <Image src="../assets/ct-scan.png" alt="MRI Visualization" borderRadius="md" boxShadow="lg" />
                 </Box>
             </Flex>
 
-
-
             {/* Main Content */}
-            <Flex
-                direction="column"
-                align="center"
-                justify="center"
-                padding="4rem 2rem"
-                bg="gray.100"
-            >
+            <Flex direction="column" align="center" justify="center" padding="4rem 2rem" bg="gray.100">
                 <Heading as="h2" size="lg" marginBottom="2rem" textAlign="center" color="teal.600">
                     Select to Begin
                 </Heading>
