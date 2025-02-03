@@ -11,6 +11,7 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircleIcon, EditIcon } from '@chakra-ui/icons';
+import CertificateList from './CertificateList';
 
 const LandingPage = () => {
     const navigate = useNavigate();
@@ -124,6 +125,7 @@ const LandingPage = () => {
                     </VStack>
                 </HStack>
             </Flex>
+            <CertificateList />
         </Box>
     );
 };

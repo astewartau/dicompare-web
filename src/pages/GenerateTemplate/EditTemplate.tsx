@@ -12,14 +12,65 @@ const EditTemplate = () => {
   const [validFields, setValidFields] = useState([]);
   const mockProtocols = [
     {
-      ProtocolName: "QSM_p2_1mmIso_TE20",
+      ProtocolName: "gre_qsm_5echoes_Iso1mm",
       dicomData: [
-        { key: "Series Description", value: "QSM_p2_1mmIso_TE20" },
-        { key: "Modality", value: "MRI" },
-        { key: "Patient ID", value: "12345" },
-        { key: "Study Date", value: "2023-01-01" },
-        { key: "Institution Name", value: "Medical Imaging Center" },
+        { key: "PatientID", value: "MASOP_MA001-0002_BL" },
+        { key: "RepetitionTime", value: 29 },
       ],
+      series: [
+        {
+          name: "1",
+          fields: [
+            { field: "EchoTime", value: 5.84 },
+            { field: "ImageType", contains: "M" },
+          ],
+        },
+        {
+          name: "2",
+          fields: [
+            { field: "EchoTime", value: 5.84 },
+            { field: "ImageType", contains: "P" },
+          ],
+        },
+        {
+          name: "3",
+          fields: [
+            { field: "EchoTime", min: 10.63, max: 11 },
+            {
+              field: "ImageType",
+              value: ["ORIGINAL", "PRIMARY", "M", "ND", "NORM"],
+            },
+          ],
+        },
+        {
+          name: "4",
+          fields: [
+            { field: "EchoTime", value: 10.63 },
+            {
+              field: "ImageType",
+              value: ["ORIGINAL", "PRIMARY", "P", "ND"],
+            },
+          ],
+        },
+        {
+          name: "5",
+          fields: [
+            { field: "EchoTime", value: 15.42, tolerance: 1 },
+            {
+              field: "ImageType",
+              value: ["ORIGINAL", "PRIMARY", "M", "ND", "NORM"],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      ProtocolName: "t1_mprage_sag_p2",
+      dicomData: [
+        { key: "PatientID", value: "T1_MPRAGE_001" },
+        { key: "Modality", value: "MRI" },
+      ],
+      series: [],
     },
     {
       ProtocolName: "T1w_MPRAGE",
@@ -29,6 +80,15 @@ const EditTemplate = () => {
         { key: "Patient ID", value: "67890" },
         { key: "Study Date", value: "2023-02-15" },
         { key: "Institution Name", value: "NeuroScan Institute" },
+      ],
+      series: [
+        {
+          name: "1",
+          fields: [
+            { field: "EchoTime", value: 4.3 },
+            { field: "ImageType", contains: "T1" },
+          ],
+        },
       ],
     },
     {
@@ -40,45 +100,101 @@ const EditTemplate = () => {
         { key: "Study Date", value: "2023-03-10" },
         { key: "Institution Name", value: "Brain Research Lab" },
       ],
+      series: [
+        {
+          name: "1",
+          fields: [
+            { field: "EchoTime", value: 35 },
+            { field: "ImageType", contains: "TASK" },
+          ],
+        },
+        {
+          name: "2",
+          fields: [
+            { field: "EchoTime", value: 40 },
+            { field: "ImageType", contains: "REST" },
+          ],
+        },
+      ],
     },
     {
       ProtocolName: "DTI_64Directions",
       dicomData: [
-        { key: "Series Description", value: "Diffusion Tensor Imaging - 64 directions" },
+        {
+          key: "Series Description",
+          value: "Diffusion Tensor Imaging - 64 directions",
+        },
         { key: "Modality", value: "DTI" },
         { key: "Patient ID", value: "11223" },
         { key: "Study Date", value: "2023-04-05" },
         { key: "Institution Name", value: "Advanced Imaging Center" },
       ],
+      series: [
+        {
+          name: "1",
+          fields: [
+            { field: "Directionality", value: "64" },
+            { field: "ImageType", value: ["ORIGINAL", "PRIMARY", "DTI"] },
+          ],
+        },
+      ],
     },
     {
       ProtocolName: "T2w_FLAIR",
       dicomData: [
-        { key: "Series Description", value: "T2-weighted Fluid-Attenuated Inversion Recovery" },
+        {
+          key: "Series Description",
+          value: "T2-weighted Fluid-Attenuated Inversion Recovery",
+        },
         { key: "Modality", value: "MRI" },
         { key: "Patient ID", value: "33445" },
         { key: "Study Date", value: "2023-05-20" },
         { key: "Institution Name", value: "Imaging Diagnostics Facility" },
       ],
+      series: [],
     },
     {
       ProtocolName: "ASL_Perfusion",
       dicomData: [
-        { key: "Series Description", value: "Arterial Spin Labeling Perfusion Imaging" },
+        {
+          key: "Series Description",
+          value: "Arterial Spin Labeling Perfusion Imaging",
+        },
         { key: "Modality", value: "MRI" },
         { key: "Patient ID", value: "77889" },
         { key: "Study Date", value: "2023-06-12" },
         { key: "Institution Name", value: "Perfusion Imaging Lab" },
       ],
+      series: [
+        {
+          name: "1",
+          fields: [
+            { field: "Labeling Efficiency", value: 85 },
+            { field: "ImageType", value: ["PERFUSION", "LABEL"] },
+          ],
+        },
+      ],
     },
     {
       ProtocolName: "MRA_CircleOfWillis",
       dicomData: [
-        { key: "Series Description", value: "Magnetic Resonance Angiography - Circle of Willis" },
+        {
+          key: "Series Description",
+          value: "Magnetic Resonance Angiography - Circle of Willis",
+        },
         { key: "Modality", value: "MRA" },
         { key: "Patient ID", value: "99112" },
         { key: "Study Date", value: "2023-07-08" },
         { key: "Institution Name", value: "Vascular Imaging Center" },
+      ],
+      series: [
+        {
+          name: "1",
+          fields: [
+            { field: "Contrast Agent", value: "Gadolinium" },
+            { field: "ImageType", value: ["MRA", "CONTRAST"] },
+          ],
+        },
       ],
     },
     {
@@ -90,18 +206,18 @@ const EditTemplate = () => {
         { key: "Study Date", value: "2023-08-18" },
         { key: "Institution Name", value: "Cardiac Imaging Lab" },
       ],
-    },
-    {
-      ProtocolName: "PET_CT_FDG",
-      dicomData: [
-        { key: "Series Description", value: "Positron Emission Tomography with FDG tracer" },
-        { key: "Modality", value: "PET/CT" },
-        { key: "Patient ID", value: "44567" },
-        { key: "Study Date", value: "2023-09-21" },
-        { key: "Institution Name", value: "Oncology Imaging Center" },
+      series: [
+        {
+          name: "1",
+          fields: [
+            { field: "Heart Rate", value: 72 },
+            { field: "ImageType", value: ["CARDIAC", "CINE"] },
+          ],
+        },
       ],
     },
   ];
+
 
 
   useEffect(() => {

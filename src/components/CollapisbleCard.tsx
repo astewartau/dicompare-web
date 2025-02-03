@@ -330,7 +330,11 @@ const CollapsibleCard = ({ protocol, validFields }) => {
                     <Tr key={rowIndex}>
                       <Td>{row.series}</Td>
                       <Td>{row.valueType}</Td>
-                      <Td>{row.value}</Td>
+                      <Td>
+                        {typeof row.value === "object"
+                          ? JSON.stringify(row.value) // Convert object to a string
+                          : row.value}
+                      </Td>
                     </Tr>
                   ))}
                 </Tbody>
@@ -469,44 +473,96 @@ const CollapsibleCard = ({ protocol, validFields }) => {
               </Tr>
             </Thead>
             <Tbody>
-              {rows.map((row, rowIndex) => (
-                <Tr key={rowIndex}>
-                  <Td>
-                    <Input
-                      size="sm"
-                      value={row.series}
-                      onChange={(e) => handleTableRowChange(rowIndex, "series", e.target.value)}
-                    />
-                  </Td>
-                  <Td>
-                    <ChakraSelect
-                      size="sm"
-                      value={row.valueType}
-                      onChange={(e) => handleTableRowChange(rowIndex, "valueType", e.target.value)}
-                    >
-                      {inputTypeOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </ChakraSelect>
-                  </Td>
-                  <Td>
-                    <Input
-                      size="sm"
-                      value={row.value}
-                      onChange={(e) => handleTableRowChange(rowIndex, "value", e.target.value)}
-                    />
-                  </Td>
-                  <Td>
-                    <IconButton
-                      icon={<CloseIcon />}
-                      size="sm"
-                      colorScheme="red"
-                      onClick={() => removeTableRow(rowIndex)}
-                    />
-                  </Td>
-                </Tr>
+            {rows.map((row, rowIndex) => (
+  <Tr key={rowIndex}>
+    <Td>
+      <Input
+        size="sm"
+        value={row.series}
+        onChange={(e) => handleTableRowChange(rowIndex, "series", e.target.value)}
+      />
+    </Td>
+    <Td>
+      <ChakraSelect
+        size="sm"
+        value={row.valueType}
+        onChange={(e) => handleTableRowChange(rowIndex, "valueType", e.target.value)}
+      >
+        {inputTypeOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </ChakraSelect>
+    </Td>
+    <Td>
+      {/* Dynamic input based on valueType */}
+      {row.valueType === "Value" && (
+        <Input
+          size="sm"
+          placeholder="Enter value"
+          value={row.value}
+          onChange={(e) => handleTableRowChange(rowIndex, "value", e.target.value)}
+        />
+      )}
+      {row.valueType === "Range" && (
+        <HStack>
+          <Input
+            size="sm"
+            placeholder="Min"
+            value={row.value?.min || ""}
+            onChange={(e) =>
+              handleTableRowChange(rowIndex, "value", { ...row.value, min: e.target.value })
+            }
+          />
+          <Input
+            size="sm"
+            placeholder="Max"
+            value={row.value?.max || ""}
+            onChange={(e) =>
+              handleTableRowChange(rowIndex, "value", { ...row.value, max: e.target.value })
+            }
+          />
+        </HStack>
+      )}
+      {row.valueType === "Value and Tolerance" && (
+        <HStack>
+          <Input
+            size="sm"
+            placeholder="Value"
+            value={row.value?.value || ""}
+            onChange={(e) =>
+              handleTableRowChange(rowIndex, "value", { ...row.value, value: e.target.value })
+            }
+          />
+          <Input
+            size="sm"
+            placeholder="Tolerance"
+            value={row.value?.tolerance || ""}
+            onChange={(e) =>
+              handleTableRowChange(rowIndex, "value", { ...row.value, tolerance: e.target.value })
+            }
+          />
+        </HStack>
+      )}
+      {row.valueType === "Contains" && (
+        <Input
+          size="sm"
+          placeholder="Enter substring"
+          value={row.value || ""}
+          onChange={(e) => handleTableRowChange(rowIndex, "value", e.target.value)}
+        />
+      )}
+    </Td>
+    <Td>
+      <IconButton
+        icon={<CloseIcon />}
+        size="sm"
+        colorScheme="red"
+        onClick={() => removeTableRow(rowIndex)}
+      />
+    </Td>
+  </Tr>
               ))}
             </Tbody>
           </Table>
