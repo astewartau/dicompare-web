@@ -17,9 +17,14 @@ const AppContent = () => {
                 script.src = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js";
                 script.onload = async () => {
                     const pyodideInstance = await (window as any).loadPyodide();
+                    await pyodideInstance.loadPackage("micropip");
+                    await pyodideInstance.runPythonAsync(`
+                        import micropip
+                        await micropip.install("dicompare==0.1.12")
+                    `);
                     setPyodide(pyodideInstance);
                     setPyodideReady(true);
-                    console.log("Pyodide Loaded Successfully!");
+                    console.log("Pyodide and dicompare installed successfully!");
                 };
                 document.body.appendChild(script);
             } catch (error) {
@@ -38,9 +43,11 @@ const AppContent = () => {
         try {
             const result = await pyodide.runPythonAsync(code);
             setOutput(result);
+            return result;
         } catch (error) {
             console.error("Python Execution Error:", error);
             setOutput(`Error: ${error}`);
+            return `Error: ${error}`;
         }
     };
 
@@ -49,7 +56,11 @@ const AppContent = () => {
             <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/generate-template" element={<GenerateTemplate />} />
-                <Route path="/check-compliance" element={<CheckCompliance />} />
+                {/* Pass runPythonCode here */}
+                <Route
+                  path="/check-compliance"
+                  element={<CheckCompliance runPythonCode={runPythonCode} pyodide={pyodide} />}
+                />
             </Routes>
         </>
     );
