@@ -12,7 +12,13 @@ import {
     Button,
 } from '@chakra-ui/react';
 
-const Introduction = ({ onNext }) => {
+interface IntroductionProps {
+  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const Introduction: React.FC<IntroductionProps> = ({ 
+  setNextEnabled
+}) => {
     return (
         <Box width="100%">
             {/* Walkthrough Heading and Description */}
@@ -77,10 +83,6 @@ const Introduction = ({ onNext }) => {
                         mt={5}
                     />
                 </FormControl>
-                Navigation Button
-                <Button colorScheme="teal" width="100%" size="lg" onClick={onNext}>
-                    Next
-                </Button>
             </VStack>
         </Box>
     );

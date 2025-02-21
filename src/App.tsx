@@ -56,7 +56,7 @@ const AppContent = () => {
         <>
             <Routes>
                 <Route path="/" element={<LandingPage />} />
-                <Route path="/generate-template" element={<GenerateTemplate />} />
+                <Route path="/generate-template" element={<GenerateTemplate runPythonCode={runPythonCode} pyodide={pyodide} />} />
                 {/* Pass runPythonCode here */}
                 <Route
                   path="/check-compliance"
