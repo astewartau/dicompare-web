@@ -17,7 +17,7 @@ import {
     Text,
 } from '@chakra-ui/react';
 
-const VerticalStepper = ({ steps }) => {
+const VerticalStepper = ({ steps, setNextEnabled, nextEnabled }) => {
     const [activeStep, setActiveStep] = useState(0);
 
     const handleNext = () => {
@@ -97,7 +97,7 @@ const VerticalStepper = ({ steps }) => {
                     <Button onClick={handlePrev} isDisabled={activeStep === 0} colorScheme="teal" variant="outline">
                         Prev
                     </Button>
-                    <Button onClick={handleNext} isDisabled={activeStep === steps.length - 1} colorScheme="teal">
+                    <Button onClick={handleNext} isDisabled={activeStep === steps.length - 1 || !nextEnabled} colorScheme="teal">
                         {activeStep === steps.length - 1 ? 'Submit' : 'Next'}
                     </Button>
                 </HStack>

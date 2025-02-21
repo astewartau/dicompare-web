@@ -77,30 +77,37 @@ const configurations: ConfigOption[] = [
 ];
 
 interface UploadConfigurationProps {
-  pyodide: any; // Pyodide instance
-  onNext: () => void; // Move to next step
+  pyodide: any;
+  referenceFile: { name: string; content: string } | null;
+  setReferenceFile: React.Dispatch<React.SetStateAction<{ name: string; content: string } | null>>;
+
+  // Radio + existing config states
+  option: 'existing' | 'upload';
+  setOption: React.Dispatch<React.SetStateAction<'existing' | 'upload'>>;
+  existingConfig: string;
+  setExistingConfig: React.Dispatch<React.SetStateAction<string>>;
+
+  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const UploadConfiguration: React.FC<UploadConfigurationProps> = ({
   pyodide,
-  onNext,
+  referenceFile,
+  setReferenceFile,
+  option,
+  setOption,
+  existingConfig,
+  setExistingConfig,
+  setNextEnabled
 }) => {
-  const [option, setOption] = useState<'existing' | 'upload'>('existing');
-  const [existingConfig, setExistingConfig] = useState<string>('');
-  const [localFile, setLocalFile] = useState<File | null>(null);
-  const [localFileContent, setLocalFileContent] = useState<string>('');
-
   const selectedConfig = configurations.find((c) => c.value === existingConfig);
 
   // Handle file upload for new configuration
-  const handleUploadFile = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleUploadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
       const file = event.target.files[0];
-      setLocalFile(file);
       const text = await file.text();
-      setLocalFileContent(text);
+      setReferenceFile({ name: file.name, content: text });
     }
   };
 
@@ -128,12 +135,12 @@ const UploadConfiguration: React.FC<UploadConfigurationProps> = ({
       configName = entry.name;
       configContent = entry.content;
     } else {
-      if (!localFile) {
+      if (!referenceFile) {
         console.warn('No file uploaded.');
         return;
       }
-      configName = localFile.name;
-      configContent = localFileContent;
+      configName = referenceFile.name;
+      configContent = referenceFile.content;
     }
 
     // Write the configuration file to Pyodide FS
@@ -171,13 +178,14 @@ else:
 `;
     try {
       await pyodide.runPythonAsync(code);
+      setNextEnabled(true);
       console.log(`Configuration "${configName}" loaded into Python globals.`);
     } catch (error) {
+      setNextEnabled(false);
       console.error('Error loading configuration:', error);
       return;
     }
 
-    onNext();
   };
 
   return (
@@ -188,11 +196,9 @@ else:
       <Text fontSize="sm" mb={4}>
         Choose an existing configuration or upload a new .py/.json configuration file.
       </Text>
-      <RadioGroup
-        onChange={(val) => setOption(val as 'existing' | 'upload')}
-        value={option}
-        mb={4}
-      >
+
+      {/* RadioGroup uses parent's option + setOption */}
+      <RadioGroup onChange={(val) => setOption(val as 'existing' | 'upload')} value={option} mb={4}>
         <VStack align="start" spacing={2}>
           <Radio value="existing">Use Existing Configuration</Radio>
           <Radio value="upload">Upload New Configuration</Radio>
@@ -221,7 +227,14 @@ else:
       )}
 
       {option === 'upload' && (
-        <Input type="file" accept=".py,.json" mb={4} onChange={handleUploadFile} />
+        <>
+          <Input type="file" accept=".py,.json" mb={4} onChange={handleUploadFile} />
+          {referenceFile && (
+            <Text fontSize="sm" color="gray.500">
+              Currently selected file: {referenceFile.name}
+            </Text>
+          )}
+        </>
       )}
 
       <Button colorScheme="teal" onClick={handleNextClick}>

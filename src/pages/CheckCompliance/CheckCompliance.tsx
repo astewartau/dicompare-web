@@ -16,23 +16,33 @@ interface CheckComplianceProps {
 
 const CheckCompliance: React.FC<CheckComplianceProps> = ({ runPythonCode, pyodide }) => {
   // Store the user’s uploaded DICOM files in state
-  const [dicomFiles, setDicomFiles] = useState<File[]>([]);
+  const [dicomCount, setDicomCount] = useState<number | null>(null);
+  const [dicomFolder, setDicomFolder] = useState<string | null>(null);
+  const [nextEnabled, setNextEnabled] = useState(false);
+  
   // Store the reference file (JSON or .py) in state
   const [referenceFile, setReferenceFile] = useState<{ name: string; content: string } | null>(null);
+
+  const [option, setOption] = useState<'existing' | 'upload'>('existing');
+  const [existingConfig, setExistingConfig] = useState('');
 
   const steps = [
     {
       title: 'Introduction',
-      component: <Introduction onNext={() => {}} />,
+      component: <Introduction 
+        setNextEnabled={setNextEnabled}
+      />,
     },
     {
       title: 'Upload Files',
       component: (
         <UploadFiles
           pyodide={pyodide}
-          onNext={(selectedFiles: File[]) => {
-            setDicomFiles(selectedFiles);
-          }}
+          dicomCount={dicomCount}
+          setDicomCount={setDicomCount}
+          dicomFolder={dicomFolder}
+          setDicomFolder={setDicomFolder}
+          setNextEnabled={setNextEnabled}
         />
       ),
     },
@@ -41,9 +51,13 @@ const CheckCompliance: React.FC<CheckComplianceProps> = ({ runPythonCode, pyodid
       component: (
         <UploadConfiguration
           pyodide={pyodide}
-          onNext={(reference: { name: string; content: string }) => {
-            setReferenceFile(reference);
-          }}
+          referenceFile={referenceFile}
+          setReferenceFile={setReferenceFile}
+          option={option}
+          setOption={setOption}
+          existingConfig={existingConfig}
+          setExistingConfig={setExistingConfig}
+          setNextEnabled={setNextEnabled}
         />
       ),
     },
@@ -52,16 +66,16 @@ const CheckCompliance: React.FC<CheckComplianceProps> = ({ runPythonCode, pyodid
       component: (
         <FinalizeMapping
           runPythonCode={runPythonCode}
-          pyodide={pyodide}
-          dicomFiles={dicomFiles}
-          referenceFile={referenceFile}
-          onNext={() => {}}
+          setNextEnabled={setNextEnabled}
         />
       ),
     },
     {
       title: 'Compliance Results',
-      component: <ComplianceResults onNext={() => {}} />,
+      component: <ComplianceResults 
+        runPythonCode={runPythonCode}
+        setNextEnabled={setNextEnabled}
+      />,
     },
   ];
 
@@ -70,7 +84,7 @@ const CheckCompliance: React.FC<CheckComplianceProps> = ({ runPythonCode, pyodid
       <Box position="sticky" top="0" zIndex="100">
         <NavigationBar />
       </Box>
-      <VerticalStepper steps={steps} />
+      <VerticalStepper steps={steps} setNextEnabled={setNextEnabled} nextEnabled={nextEnabled} />
     </>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Heading,
@@ -6,42 +6,63 @@ import {
   Input,
   Button,
   VStack,
-  IconButton,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
   Spinner,
 } from '@chakra-ui/react';
-import { CloseIcon } from '@chakra-ui/icons';
 
 interface UploadFilesProps {
-  pyodide: any;                // The Pyodide instance from parent
-  onNext: () => void;          // Callback when user wants to go to the next step
+  pyodide: any;
+  dicomCount: number | null;
+  setDicomCount: React.Dispatch<React.SetStateAction<number | null>>;
+  dicomFolder: string | null;
+  setDicomFolder: React.Dispatch<React.SetStateAction<string | null>>;
+  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-const UploadFiles: React.FC<UploadFilesProps> = ({ pyodide, onNext }) => {
+const UploadFiles: React.FC<UploadFilesProps> = ({
+  pyodide,
+  dicomCount,
+  setDicomCount,
+  dicomFolder,
+  setDicomFolder,
+  setNextEnabled
+}) => {
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isValid, setIsValid] = useState(false);
+
+  // UseEffect to disable the Next button when the component mounts
+  useEffect(() => {
+    // does pyodide exist?
+    if (!pyodide) {
+      setNextEnabled(false);
+    } else if (dicomCount === null || dicomCount === 0) {
+      setNextEnabled(false);
+    } else {
+      setNextEnabled(true);
+    }
+
+  } , [setNextEnabled]);
 
   // Handle file selection
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files) return;
     const uploadedFiles = Array.from(event.target.files);
-    setFiles((prevFiles) => [...prevFiles, ...uploadedFiles]);
+
+    // Determine the root folder (from webkitRelativePath if possible)
+    let rootFolder = null;
+    if (uploadedFiles.length > 0 && uploadedFiles[0].webkitRelativePath) {
+      rootFolder = uploadedFiles[0].webkitRelativePath.split('/')[0];
+    }
+
+    setFiles(uploadedFiles);
+    setDicomCount(uploadedFiles.length);
+    setDicomFolder(rootFolder);
   };
 
-  // Remove a file from the list
-  const handleFileRemove = (index: number) => {
-    setFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
-  };
-
-  // When user clicks "Next": load DICOMs, create a global in_session variable in Python
-  const handleNextClick = async () => {
+  // Analyze: Load DICOMs into Pyodide
+  const analyzeClick = async () => {
     if (!pyodide) {
-      console.error('Pyodide is not ready or not provided.');
+      console.error('Pyodide is not ready.');
       return;
     }
     if (files.length === 0) return;
@@ -49,49 +70,64 @@ const UploadFiles: React.FC<UploadFilesProps> = ({ pyodide, onNext }) => {
     setIsLoading(true);
 
     try {
-      //
-      // 1) Build a dictionary of { relativePath: Uint8Array } for DICOM files
-      //
+      // Build a dictionary of { relativePath: Uint8Array } for DICOM files
       const dicomFiles: Record<string, Uint8Array> = {};
+      console.log('Reading DICOM headers (first 8 KB)...');
+
       for (const file of files) {
-        // If you only want part of each file, you can slice the file. Otherwise read all:
-        const arrayBuf = await file.arrayBuffer();
+        const arrayBuf = await file.slice(0, 8192).arrayBuffer(); // Read only the first 8 KB
         const typedArray = new Uint8Array(arrayBuf);
-        // If you want folder paths, use `file.webkitRelativePath`, else just use file.name
         const key = file.webkitRelativePath || file.name;
         dicomFiles[key] = typedArray;
       }
 
-      // 2) Place dicomFiles in Pyodide's global scope.
-      //    Then run Python code that uses load_dicom_session(dicom_bytes=dicom_files).
+      console.log('Finished reading DICOMs');
+
+      // Place dicomFiles in Pyodide's global scope
       pyodide.globals.set('dicom_files', dicomFiles);
+      console.log('DICOMs loaded into Pyodide globals');
 
       const code = `
-from dicompare.io import load_dicom_session
+import json
+from dicompare.io import load_dicom_session, assign_acquisition_and_run_numbers
 
-# Create a global variable in Python called "in_session"
 global in_session
 
+print("PYTHON: Converting DICOMs to Python dict...")
+dicom_bytes = dicom_files.to_py()
+
+print("PYTHON: Loading DICOM session using dicompare...")
 in_session = load_dicom_session(
-    dicom_bytes=dicom_files,    # dict of {filename: bytes}
-    acquisition_fields=["ProtocolName"]
+    dicom_bytes=dicom_bytes
 )
 
+print("PYTHON: DICOM session loaded successfully.")
 if in_session is None or in_session.empty:
     raise ValueError("No valid DICOM data loaded, or the session is empty.")
+
+print("PYTHON: Assigning acquisition and run numbers...")
+in_session = assign_acquisition_and_run_numbers(in_session)
+
+json.dumps({
+    "result": True,
+})
 `;
+      // Run the code in Pyodide to produce in_session
+      console.log('Running Python code...');
+      const result = await pyodide.runPythonAsync(code); 
+      const parsed = JSON.parse(result);
 
-      // 3) Actually run the code in Pyodide to produce the global in_session
-      await pyodide.runPythonAsync(code);
-
-      // We don't need to parse or return the session data here, because
-      // we've stored it in Python memory (in_session). We'll just proceed:
-      onNext();
+      if (!parsed.result) {
+        throw new Error('No valid DICOM data loaded, or the session is empty.');
+      } else {
+        setIsValid(true);
+        setIsLoading(false);
+        setNextEnabled(true);
+      }
     } catch (error) {
       console.error('Error loading DICOM session:', error);
-      // Optionally show a user-facing error message
-    } finally {
       setIsLoading(false);
+      setIsValid(false);
     }
   };
 
@@ -114,6 +150,12 @@ if in_session is None or in_session.empty:
         isDisabled={isLoading}
       />
 
+      {dicomCount !== null && (
+        <Text fontSize="sm" color="gray.500" mt={1} mb={4}>
+          {dicomCount} DICOMs selected {dicomFolder ? `(Root: ${dicomFolder})` : ''}
+        </Text>
+      )}
+
       {isLoading && (
         <VStack spacing={4} mb={4}>
           <Spinner size="lg" color="teal.500" />
@@ -121,55 +163,13 @@ if in_session is None or in_session.empty:
         </VStack>
       )}
 
-      {!isLoading && files.length > 0 && (
-        <Box
-          p={4}
-          borderWidth="1px"
-          borderRadius="md"
-          bg="gray.50"
-          maxHeight="500px"
-          overflowY="auto"
-          mb={4}
-        >
-          <Text fontWeight="bold" mb={4}>
-            Uploaded Files:
-          </Text>
-          <Table variant="simple" size="sm">
-            <Thead>
-              <Tr>
-                <Th>Filename</Th>
-                <Th isNumeric>Size (KB)</Th>
-                <Th>Actions</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {files.map((file, index) => (
-                <Tr key={index}>
-                  <Td>{file.name}</Td>
-                  <Td isNumeric>{(file.size / 1024).toFixed(2)}</Td>
-                  <Td>
-                    <IconButton
-                      aria-label="Remove file"
-                      icon={<CloseIcon />}
-                      size="sm"
-                      colorScheme="red"
-                      onClick={() => handleFileRemove(index)}
-                    />
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
-        </Box>
-      )}
-
       <VStack spacing={4}>
         <Button
-          colorScheme="teal"
-          onClick={handleNextClick}
+          colorScheme="blue"
+          onClick={analyzeClick}
           isDisabled={isLoading || files.length === 0}
         >
-          Next
+          Analyze
         </Button>
       </VStack>
     </Box>

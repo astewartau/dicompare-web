@@ -20,7 +20,8 @@ const AppContent = () => {
                     await pyodideInstance.loadPackage("micropip");
                     await pyodideInstance.runPythonAsync(`
                         import micropip
-                        await micropip.install("dicompare==0.1.12")
+                        await micropip.install("dicompare==0.1.16")
+                        #await micropip.install("http://localhost:8000/dist/dicompare-0.1.16-py3-none-any.whl")
                     `);
                     setPyodide(pyodideInstance);
                     setPyodideReady(true);

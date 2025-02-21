@@ -1,8 +1,21 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Heading, Text, Button, VStack, Flex, Icon } from '@chakra-ui/react';
 import { FiUpload, FiSettings, FiCheckCircle } from 'react-icons/fi';
 
-const Introduction = ({ onNext }) => (
+interface IntroductionProps {
+  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const Introduction: React.FC<IntroductionProps> = ({ 
+  setNextEnabled
+}) => {
+
+    // useEffect to enable the Next button when the component mounts
+    useEffect(() => {
+        setNextEnabled(true);
+    }, [setNextEnabled]);
+
+    return (
     <Box p={8}>
         <Heading as="h1" size="lg" mb={4}>
             Compliance Check
@@ -37,12 +50,9 @@ const Introduction = ({ onNext }) => (
                     <Text fontSize="sm">Check the compliance summary</Text>
                 </Box>
             </Flex>
-            {/* Start Button */}
-            <Button colorScheme="teal" onClick={onNext}>
-                Start Compliance Check
-            </Button>
         </VStack>
     </Box>
-);
+    );
+}
 
 export default Introduction;
