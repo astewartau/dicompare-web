@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChakraProvider } from '@chakra-ui/react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AlertProvider } from './components/Alert';
 import LandingPage from './pages/LandingPage/LandingPage';
 import GenerateTemplate from './pages/GenerateTemplate/GenerateTemplate';
 import CheckCompliance from './pages/CheckCompliance/CheckCompliance';
@@ -59,8 +60,8 @@ const AppContent = () => {
                 <Route path="/generate-template" element={<GenerateTemplate runPythonCode={runPythonCode} pyodide={pyodide} />} />
                 {/* Pass runPythonCode here */}
                 <Route
-                  path="/check-compliance"
-                  element={<CheckCompliance runPythonCode={runPythonCode} pyodide={pyodide} />}
+                    path="/check-compliance"
+                    element={<CheckCompliance runPythonCode={runPythonCode} pyodide={pyodide} />}
                 />
             </Routes>
         </>
@@ -70,9 +71,11 @@ const AppContent = () => {
 const App = () => {
     return (
         <ChakraProvider>
-            <BrowserRouter>
-                <AppContent />
-            </BrowserRouter>
+            <AlertProvider>
+                <BrowserRouter>
+                    <AppContent />
+                </BrowserRouter>
+            </AlertProvider>
         </ChakraProvider>
     );
 };

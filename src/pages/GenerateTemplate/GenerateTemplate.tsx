@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import VerticalStepper from '../../components/Stepper';
 import Introduction from './Introduction';
 import NavigationBar from '../../components/NavigationBar';
@@ -14,21 +14,27 @@ interface GenerateTemplateProps {
 
 const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ runPythonCode, pyodide }) => {
     const [nextEnabled, setNextEnabled] = useState(false);
+    const [templateJson, setTemplateJson] = useState<any>(null);
+    const actionOnNext = useRef<(() => void) | null>(null);
 
     const steps = [
         { title: 'Introduction', component: <Introduction setNextEnabled={setNextEnabled} /> },
         { title: 'DICOM Analysis', component: <DicomAnalysis pyodide={pyodide} setNextEnabled={setNextEnabled} /> },
-        { title: 'Edit Template', component: <EditTemplate pyodide={pyodide} setNextEnabled={setNextEnabled} /> },
-        { title: 'Review', component: <Review /> },
+        { title: 'Edit Template', component: <EditTemplate pyodide={pyodide} setNextEnabled={setNextEnabled} setTemplateJson={setTemplateJson} actionOnNext={actionOnNext} /> },
+        { title: 'Review', component: <Review templateJson={templateJson} /> },
     ];
 
     return (
         <>
-            {/* Navigation Bar */}
             <Box position="sticky" top="0" zIndex="100">
                 <NavigationBar />
             </Box>
-            <VerticalStepper steps={steps} setNextEnabled={setNextEnabled} nextEnabled={nextEnabled} />
+            <VerticalStepper
+                steps={steps}
+                setNextEnabled={setNextEnabled}
+                nextEnabled={nextEnabled}
+                actionOnNext={actionOnNext}
+            />
         </>
     );
 };

@@ -17,10 +17,20 @@ import {
     Text,
 } from '@chakra-ui/react';
 
-const VerticalStepper = ({ steps, setNextEnabled, nextEnabled }) => {
+interface VerticalStepperProps {
+    steps: { title: string; component: React.ReactNode }[];
+    setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+    nextEnabled: boolean;
+    actionOnNext: React.RefObject<() => void>;
+}
+
+const VerticalStepper: React.FC<VerticalStepperProps> = ({ steps, setNextEnabled, nextEnabled, actionOnNext }) => {
     const [activeStep, setActiveStep] = useState(0);
 
     const handleNext = () => {
+        if (actionOnNext.current) {
+            actionOnNext.current();
+        }
         if (activeStep < steps.length - 1) {
             setActiveStep((prev) => prev + 1);
         }
