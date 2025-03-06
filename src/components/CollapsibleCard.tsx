@@ -11,8 +11,6 @@ import {
   Input,
   Select,
 } from "@chakra-ui/react";
-import Tagify from "@yaireo/tagify";
-import "@yaireo/tagify/dist/tagify.css";
 
 type ConstraintType = "value" | "range" | "value+tolerance" | "contains";
 
@@ -50,6 +48,41 @@ interface CollapsibleCardProps {
   hideBackButton?: boolean;
 }
 
+interface AutocompleteInputProps {
+  initialValue: string;
+  validFields: string[];
+  onChange: (value: string) => void;
+}
+
+const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
+  initialValue,
+  validFields,
+  onChange,
+}) => {
+  const [value, setValue] = useState(initialValue);
+  // Create a unique id for the datalist to prevent collisions.
+  const idRef = useRef("valid-fields-" + Math.random().toString(36).substr(2, 9));
+
+  return (
+    <>
+      <Input
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          onChange(e.target.value);
+        }}
+        list={idRef.current}
+        placeholder="Enter field name"
+      />
+      <datalist id={idRef.current}>
+        {validFields.map((field) => (
+          <option key={field} value={field} />
+        ))}
+      </datalist>
+    </>
+  );
+};
+
 const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   acquisition,
   pyodide,
@@ -86,19 +119,22 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     },
   ];
 
+  // Retain the existing Tagify usage for the stage-one field selector
   useEffect(() => {
     if (stage === 1 && inputRef.current && validFields.length) {
       if (tagifyRef.current) {
         tagifyRef.current.destroy();
         tagifyRef.current = null;
       }
-      tagifyRef.current = new Tagify(inputRef.current, {
+      // Setup Tagify for the main text area
+      // (This can remain unchanged if you still like that for multi-select)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tagifyRef.current = new (window as any).Tagify(inputRef.current, {
         enforceWhitelist: true,
         whitelist: validFields,
         dropdown: { enabled: 1, maxItems: 10, position: "all" },
         outerWidth: "100%",
       });
-      // If there are already selected tags, add them to the Tagify instance.
       if (selectedFields.length > 0) {
         tagifyRef.current.addTags(selectedFields);
       }
@@ -107,9 +143,8 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
         setSelectedFields(tags);
       });
     }
-  }, [stage, validFields]);
+  }, [stage, validFields, selectedFields]);
 
-  // make onDeleteAcquisition usable as a prop
   const handleDeleteAcquisition = () => {
     if (onDeleteAcquisition) {
       onDeleteAcquisition(acquisition);
@@ -238,9 +273,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     }));
   };
 
-
-
-  // Helper function (make sure this is defined in your file)
   const computeConstantFields = (data: any[], selectedFields: string[]) => {
     let constantFields: Record<string, any> = {};
     let variableFields: string[] = [];
@@ -257,7 +289,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     }
     return { constantFields, variableFields };
   };
-
 
   const handleMakeConstant = (column: string) => {
     setFormData((prev) => {
@@ -527,7 +558,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   const renderConstantFieldsTable = () => (
     <Box width="100%" mb={4}>
       {formData.constant.length === 0 ? null : (
-
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
@@ -541,14 +571,10 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
               <tr key={fieldObj.id}>
                 <td style={{ borderBottom: "1px solid #eee", padding: "4px" }}>
                   {globalEdit && editingConstants[fieldObj.id] ? (
-                    <Input
-                      size="sm"
-                      defaultValue={fieldObj.name}
-                      placeholder="Enter field name"
-                      onBlur={(e) => {
-                        const newName = e.target.value;
-                        updateConstantField(fieldObj.id, { name: newName });
-                      }}
+                    <AutocompleteInput
+                      initialValue={fieldObj.name}
+                      validFields={validFields}
+                      onChange={(value) => updateConstantField(fieldObj.id, { name: value })}
                     />
                   ) : (
                     <Text>{fieldObj.name || "(no name)"}</Text>
@@ -581,7 +607,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             ))}
           </tbody>
         </table>
-
       )}
       {globalEdit && (
         <Button size="sm" mt={2} onClick={handleAddConstantField}>
@@ -683,7 +708,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       <HStack justify="space-between" align="start" mb={4}>
         <Box>
           {globalEdit ? (
-            <>
             <VStack align="start" spacing={2}>
               <Input
                 size="md"
@@ -701,7 +725,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
                 width="100%"
               />
             </VStack>
-            </>
           ) : (
             <>
               <Heading as="h4" size="md" color="teal.500">
@@ -732,7 +755,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
                   Back
                 </Button>
               )}
-              
               <Button size="sm" onClick={() => setGlobalEdit(!globalEdit)} colorScheme="blue" disabled={(Object.values(editingRows).some((v) => v) || Object.values(editingConstants).some((v) => v))}>
                 {globalEdit ? "Save" : "Edit"}
               </Button>

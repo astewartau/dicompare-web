@@ -1,5 +1,4 @@
-// EditTemplate.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Heading, Text, Wrap, WrapItem, Button, Icon, Spinner, VStack } from '@chakra-ui/react';
 import { FiPlus } from 'react-icons/fi';
 import CollapsibleCard from '../../components/CollapsibleCard';
@@ -7,15 +6,26 @@ import { useAlert } from '../../components/Alert';
 
 const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, setTemplateJson, actionOnNext }) => {
   const [acquisitionList, setAcquisitionList] = useState<string[]>([]);
-  const [validFields, setValidFields] = useState<string[]>([]);
   const [newAcqCounter, setNewAcqCounter] = useState<number>(1);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [manualValidFields, setManualValidFields] = useState<string[]>([]);
+  const [sessionValidFields, setSessionValidFields] = useState<string[]>([]);
 
   const { displayAlert } = useAlert();
 
+  useEffect(() => {
+    fetch("https://raw.githubusercontent.com/astewartau/dcm-check/refs/heads/main/valid_fields.json")
+      .then(response => response.json())
+      .then(data => {
+        setManualValidFields(data);
+      })
+      .catch(error => {
+        console.error("Error fetching valid fields:", error);
+      });
+  }, []);
+
   const processDicomFiles = async (pyodide: any, files: File[]): Promise<any[]> => {
-    // Convert files into a dictionary of Uint8Arrays
     const dicomFiles: Record<string, Uint8Array> = {};
     for (const file of files) {
       const arrayBuf = await file.slice(0, 8192).arrayBuffer();
@@ -23,10 +33,8 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
       dicomFiles[file.webkitRelativePath || file.name] = typedArray;
     }
 
-    // Set the files into pyodide globals
     pyodide.globals.set("dicom_files", dicomFiles);
 
-    // Update or create the session:
     const code = `
       import json
       from dicompare.io import load_dicom_session, assign_acquisition_and_run_numbers
@@ -51,50 +59,53 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
       else:
           session = new_session
 
-
-      # Build the acquisition list
       acquisition_list = [
           {
               'Acquisition': str(acquisition),
               'ProtocolName': str(acquisition_data['ProtocolName'].unique()[0]),
               'SeriesDescription': str(acquisition_data['SeriesDescription'].unique()),
               'TotalFiles': f"{len(acquisition_data)} files"
-          } 
+          }
           for acquisition in session['Acquisition'].unique()
           for acquisition_data in [session[session['Acquisition'] == acquisition]]
       ]
       json.dumps(acquisition_list)
       `;
     const result = await pyodide.runPythonAsync(code);
-    return JSON.parse(result);
+    const acquisitions = JSON.parse(result);
+
+    try {
+      const sessionColumns = await pyodide.runPythonAsync("list(session.columns)");
+      const sessionColumnsJs = sessionColumns.toJs ? sessionColumns.toJs() : sessionColumns;
+      setSessionValidFields(sessionColumnsJs);
+    } catch (err) {
+      console.error("Error retrieving session columns:", err);
+    }
+
+    return acquisitions;
   };
 
-  // New function to handle file upload (or drag & drop)
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files) return;
-    const files = Array.from(event.target.files);
+  const uploadFiles = async (files: File[]) => {
+    if (!files.length) return;
     setIsUploading(true);
     try {
       const dicomAcquisitions = await processDicomFiles(pyodide, files);
-
       setAcquisitionList(prev => {
         const newAcqs = dicomAcquisitions.map((acq: any) => acq.Acquisition);
-        // Combine the current and new acquisitions, then create a unique list.
         const merged = Array.from(new Set([...prev, ...newAcqs]));
         return merged;
       });
-
-      // Update valid fields from the new session columns
-      const newColNames = await pyodide.runPythonAsync(`
-        import json
-        json.dumps(list(session.columns))
-      `);
-      setValidFields(JSON.parse(newColNames));
     } catch (error) {
       console.error('Error processing DICOM files:', error);
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files) return;
+    const files = Array.from(event.target.files);
+    uploadFiles(files);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -122,7 +133,6 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
           item.file((file: File) => {
             let newFile: File;
             if (!file.webkitRelativePath) {
-              // Create a new File and attach a custom relative path
               newFile = new File([file], file.name, { type: file.type, lastModified: file.lastModified });
               Object.defineProperty(newFile, 'webkitRelativePath', {
                 value: path + file.name,
@@ -147,7 +157,6 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
       });
     };
 
-
     const promises: Promise<void>[] = [];
     for (let i = 0; i < dtItems.length; i++) {
       const entry = dtItems[i].webkitGetAsEntry();
@@ -160,19 +169,16 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
       if (files.length > 0) {
         const dataTransfer = new DataTransfer();
         files.forEach((file) => dataTransfer.items.add(file));
-        // Create a fake event with a file list from the folder drop.
         const fakeEvent = { target: { files: dataTransfer.files } } as React.ChangeEvent<HTMLInputElement>;
         handleFileUpload(fakeEvent);
       }
     });
   };
 
-
   const handleAddAcquisition = () => {
     const newAcqName = `New Acquisition ${newAcqCounter}`;
     setAcquisitionList(prev => [...prev, newAcqName]);
     setNewAcqCounter(prev => prev + 1);
-    
   };
 
   const handleDeleteAcquisition = (acq: string) => {
@@ -190,7 +196,7 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
             `);
           },
         },
-        { option: "Cancel", callback: () => { } }
+        { option: "Cancel", callback: () => {} }
       ]
     );
   };
@@ -204,7 +210,6 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
         Use this tool to build a schema for a DICOM session. The schema can be used to validate future sessions for compliance.<br />
         Start by uploading DICOMs for a representative session or manually adding acquisitions.
       </Text>
-      {/* New DICOM Upload Area */}
       <Box
         mb={6}
         p={4}
@@ -242,19 +247,15 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
           </>
         )}
       </Box>
-
-
-
-      {/* Existing manual acquisition cards */}
       <Wrap spacing="6">
         {acquisitionList.map((acq) => (
           <WrapItem key={acq}>
             <CollapsibleCard
               acquisition={acq}
               pyodide={pyodide}
-              validFields={validFields}
               onDeleteAcquisition={handleDeleteAcquisition}
-              initialEditMode={acq.startsWith("New Acquisition") ? true : false}
+              validFields={acq.startsWith("New Acquisition") ? manualValidFields : sessionValidFields}
+              initialEditMode={acq.startsWith("New Acquisition")}
               initialStage={acq.startsWith("New Acquisition") ? 2 : 1}
               hideBackButton={acq.startsWith("New Acquisition")}
             />
