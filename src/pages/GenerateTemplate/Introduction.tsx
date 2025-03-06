@@ -13,11 +13,11 @@ import {
 } from '@chakra-ui/react';
 
 interface IntroductionProps {
-  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+    setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-const Introduction: React.FC<IntroductionProps> = ({ 
-  setNextEnabled
+const Introduction: React.FC<IntroductionProps> = ({
+    setNextEnabled
 }) => {
     return (
         <Box width="100%">

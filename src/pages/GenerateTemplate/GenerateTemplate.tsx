@@ -3,7 +3,6 @@ import VerticalStepper from '../../components/Stepper';
 import Introduction from './Introduction';
 import NavigationBar from '../../components/NavigationBar';
 import { Box } from '@chakra-ui/react';
-import DicomAnalysis from './DicomAnalysis';
 import EditTemplate from './EditTemplate';
 import Review from './Review';
 
@@ -18,9 +17,8 @@ const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ runPythonCode, pyod
     const actionOnNext = useRef<(() => void) | null>(null);
 
     const steps = [
-        { title: 'Introduction', component: <Introduction setNextEnabled={setNextEnabled} /> },
-        { title: 'DICOM Analysis', component: <DicomAnalysis pyodide={pyodide} setNextEnabled={setNextEnabled} /> },
-        { title: 'Edit Template', component: <EditTemplate pyodide={pyodide} setNextEnabled={setNextEnabled} setTemplateJson={setTemplateJson} actionOnNext={actionOnNext} /> },
+        { title: 'Build template', component: <EditTemplate pyodide={pyodide} setNextEnabled={setNextEnabled} setTemplateJson={setTemplateJson} actionOnNext={actionOnNext} /> },
+        { title: 'Enter metadata', component: <Introduction setNextEnabled={setNextEnabled} /> },
         { title: 'Review', component: <Review templateJson={templateJson} /> },
     ];
 

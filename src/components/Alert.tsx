@@ -11,13 +11,13 @@ import {
   useDisclosure,
 } from "@chakra-ui/react";
 
-interface AlertOptions {
-  confirmText?: string;
-  onConfirm?: () => void;
+export interface AlertButton {
+  option: string;
+  callback?: () => void;
 }
 
 interface AlertContextProps {
-  displayAlert: (message: string, title?: string, options?: AlertOptions) => void;
+  displayAlert: (message: string, title?: string, options?: AlertButton[]) => void;
 }
 
 const AlertContext = createContext<AlertContextProps | undefined>(undefined);
@@ -26,23 +26,20 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [alertMessage, setAlertMessage] = useState("");
   const [alertTitle, setAlertTitle] = useState("Alert");
-  const [confirmText, setConfirmText] = useState("Ok");
-  const [onConfirmCallback, setOnConfirmCallback] = useState<(() => void) | undefined>(undefined);
-
+  const [alertOptions, setAlertOptions] = useState<AlertButton[]>([]);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
 
-  const displayAlert = (message: string, title?: string, options?: AlertOptions) => {
+  const displayAlert = (message: string, title?: string, options?: AlertButton[]) => {
     setAlertMessage(message);
     setAlertTitle(title || "Alert");
-    setConfirmText(options?.confirmText || "Ok");
-    setOnConfirmCallback(() => options?.onConfirm);
+    setAlertOptions(options || []);
     onOpen();
   };
 
-  const handleConfirm = () => {
+  const handleButtonClick = (callback?: () => void) => {
     onClose();
-    if (onConfirmCallback) {
-      onConfirmCallback();
+    if (callback) {
+      callback();
     }
   };
 
@@ -62,9 +59,16 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             <AlertDialogCloseButton />
             <AlertDialogBody>{alertMessage}</AlertDialogBody>
             <AlertDialogFooter>
-              <Button colorScheme="red" ml={3} ref={cancelRef} onClick={handleConfirm}>
-                {confirmText}
-              </Button>
+              {alertOptions.map((btn, index) => (
+                <Button
+                  key={index}
+                  onClick={() => handleButtonClick(btn.callback)}
+                  ml={index > 0 ? 3 : 0}
+                  ref={index === 0 ? cancelRef : undefined}
+                >
+                  {btn.option}
+                </Button>
+              ))}
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>

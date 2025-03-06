@@ -25,96 +25,56 @@ interface FieldData {
 }
 
 interface ConstantField {
-  id: string; // unique ID
-  name: string; // field name (may be empty initially)
+  id: string;
+  name: string;
   data: FieldData;
 }
 
 interface VariableRow {
-  // Each row must include a "Series" field.
   Series: FieldData;
   [key: string]: FieldData;
 }
 
 interface FormData {
-  constant: ConstantField[]; // constant fields array
-  variable: VariableRow[];   // variable rows array
+  constant: ConstantField[];
+  variable: VariableRow[];
 }
 
 interface CollapsibleCardProps {
   acquisition: string;
   pyodide: any;
   validFields: string[];
-  onDataChange: (acquisition: string, data: any) => void;
+  onDeleteAcquisition?: (acquisition: string) => void;
+  initialEditMode?: boolean;
+  initialStage?: number;
+  hideBackButton?: boolean;
 }
 
-/** Given an array of plain row objects and a list of fields,
- * compute which fields are constant (all rows have the same value) and which vary.
- */
-function computeConstantFields(
-  rows: Record<string, any>[],
-  fields: string[]
-): { constantFields: Record<string, any>; variableFields: string[] } {
-  const constantFields: Record<string, any> = {};
-  const variableFields = [...fields];
-  if (!rows.length || !fields.length) return { constantFields, variableFields };
-  for (const field of fields) {
-    const firstVal = rows[0][field];
-    let isConstant = true;
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i][field] !== firstVal) {
-        isConstant = false;
-        break;
-      }
-    }
-    if (isConstant) {
-      constantFields[field] = firstVal;
-      const idx = variableFields.indexOf(field);
-      if (idx !== -1) variableFields.splice(idx, 1);
-    }
-  }
-  return { constantFields, variableFields };
-}
-
-/**
- * This component has two stages:
- *
- * 1. Stage 1 – The user selects tags via a Tagify input.
- *
- * 2. Stage 2 – Data is fetched via Python and used to prefill a form data object.
- *    The UI then displays two tables (constant fields and variable rows).
- *
- * Initially, stage 2 displays a neat, read‑only table (no extra buttons or actions).
- * At the top of stage 2 (along with the Back button) is a large "EDIT" button.
- * When the user clicks EDIT, all the action buttons (Edit/Save, Delete, Make variable, etc.)
- * and an extra Actions column appear in both tables. The global button then changes to "SAVE".
- * Clicking SAVE returns the tables to read‑only mode.
- */
 const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   acquisition,
   pyodide,
   validFields,
-  onDataChange,
+  onDeleteAcquisition,
+  initialEditMode = false,
+  initialStage = 1,
+  hideBackButton = false,
 }) => {
-  const [stage, setStage] = useState<number>(1);
+  const [stage, setStage] = useState<number>(initialStage);
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [formData, setFormData] = useState<FormData>({ constant: [], variable: [] });
-  // Use row index as the unique identifier for editing variable rows.
   const [editingRows, setEditingRows] = useState<Record<number, boolean>>({});
-  // Flags for constant fields editing.
   const [editingConstants, setEditingConstants] = useState<Record<string, boolean>>({});
-  // Global edit mode for stage 2.
-  const [globalEdit, setGlobalEdit] = useState<boolean>(false);
+  const [globalEdit, setGlobalEdit] = useState<boolean>(initialEditMode);
 
-  // Refs for Tagify.
+  const [acquisitionTitle, setAcquisitionTitle] = useState<string>(acquisition);
+  const [acquisitionDescription, setAcquisitionDescription] = useState<string>("");
+
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const tagifyRef = useRef<any>(null);
 
-  // Refs for useAlert
   const { displayAlert } = useAlert();
 
-  // Define preset options for stage 1.
   const presetOptions = [
     {
       label: "QSM",
@@ -126,7 +86,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     },
   ];
 
-  // Initialize Tagify in stage 1.
   useEffect(() => {
     if (stage === 1 && inputRef.current && validFields.length) {
       if (tagifyRef.current) {
@@ -139,6 +98,10 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
         dropdown: { enabled: 1, maxItems: 10, position: "all" },
         outerWidth: "100%",
       });
+      // If there are already selected tags, add them to the Tagify instance.
+      if (selectedFields.length > 0) {
+        tagifyRef.current.addTags(selectedFields);
+      }
       tagifyRef.current.on("change", () => {
         const tags = tagifyRef.current.value.map((tag: any) => tag.value);
         setSelectedFields(tags);
@@ -146,31 +109,14 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     }
   }, [stage, validFields]);
 
-  // Push updated data to parent when formData changes in stage 2.
-  useEffect(() => {
-    if (stage === 2) {
-      const constantFields = formData.constant.map(field => ({
-        field: field.name,
-        value: field.data.value
-      }));
-      const series = formData.variable.map(row => {
-        const seriesName = row.Series.value; // now directly use the text
-        const fields = Object.keys(row)
-          .filter(key => key !== "Series")
-          .map(key => ({
-            field: key,
-            value: row[key].value
-          }));
-        return { name: seriesName, fields };
-      });
-      const formattedData = { fields: constantFields, series: series };
-      onDataChange(acquisition, formattedData);
+  // make onDeleteAcquisition usable as a prop
+  const handleDeleteAcquisition = () => {
+    if (onDeleteAcquisition) {
+      onDeleteAcquisition(acquisition);
     }
-  }, [formData, stage, acquisition, onDataChange]);
+  };
 
-  // When Next is pressed, fetch data via Python and prefill formData.
   const handleNext = async () => {
-    if (!selectedFields.length) return;
     setLoading(true);
     try {
       pyodide.globals.set("current_acquisition", acquisition);
@@ -183,9 +129,8 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
           result[i]['Series'] = i + 1
         result
       `);
-      const data = uniqueRows.toJs(); // data is an array of plain objects
+      const data = uniqueRows.toJs();
       const { constantFields, variableFields } = computeConstantFields(data, selectedFields);
-      // Build constant formData as an array.
       const newConstant: ConstantField[] = [];
       for (const field in constantFields) {
         newConstant.push({
@@ -194,7 +139,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
           data: { constraintType: "value", value: String(constantFields[field]) },
         });
       }
-      // Build variable rows. Store Series as a string.
       const newVariable: VariableRow[] = data.map((row: Record<string, any>) => {
         const newRow: VariableRow = {
           Series: { constraintType: "value", value: String(row["Series"]) },
@@ -206,7 +150,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       });
       setFormData({ constant: newConstant, variable: newVariable });
       setStage(2);
-      setGlobalEdit(false); // start read-only
+      setGlobalEdit(false);
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -214,7 +158,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     }
   };
 
-  // Functions to update formData.
   const updateConstantField = (
     id: string,
     updates: Partial<FieldData> & { name?: string }
@@ -245,8 +188,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     });
   };
 
-  // "Make variable": remove constant field (by id) and add it as a new column in every variable row.
-  // If no variable row exists, create one.
   const handleMakeVariable = (id: string) => {
     const fieldToConvert = formData.constant.find((f) => f.id === id);
     if (!fieldToConvert) return;
@@ -278,7 +219,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     const seen = new Set<string>();
     const deduped = rows.filter((row) => {
       const { Series, ...rest } = row;
-      // Sort keys for consistency.
       const sorted = Object.keys(rest)
         .sort()
         .reduce((acc, key) => {
@@ -292,7 +232,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       seen.add(key);
       return true;
     });
-    // Renumber Series values.
     return deduped.map((row, index) => ({
       ...row,
       Series: { ...row.Series, value: String(index + 1) },
@@ -300,24 +239,38 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   };
 
 
-  // "Make constant" for a variable column: delete the column and add a new constant field.
-  // Its value is taken from the first variable row.
+
+  // Helper function (make sure this is defined in your file)
+  const computeConstantFields = (data: any[], selectedFields: string[]) => {
+    let constantFields: Record<string, any> = {};
+    let variableFields: string[] = [];
+
+    if (data.length > 0) {
+      selectedFields.forEach((field) => {
+        const allSame = data.every((row) => row[field] === data[0][field]);
+        if (allSame) {
+          constantFields[field] = data[0][field];
+        } else {
+          variableFields.push(field);
+        }
+      });
+    }
+    return { constantFields, variableFields };
+  };
+
+
   const handleMakeConstant = (column: string) => {
     setFormData((prev) => {
-      // Get the earliest value from the first row for the column.
       let earliestValue: FieldData = { constraintType: "value", value: "" };
       if (prev.variable.length > 0 && prev.variable[0][column]) {
         earliestValue = prev.variable[0][column];
       }
-      // Remove the column from each variable row.
       let newVariable = prev.variable.map((row) => {
         const newRow = { ...row };
         delete newRow[column];
         return newRow;
       });
-      // Deduplicate rows using the helper.
       newVariable = deduplicateRows(newVariable);
-      // Create the new constant field.
       const newConstantField = {
         id: column,
         name: column,
@@ -327,9 +280,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     });
   };
 
-
-
-  // Add a new constant field row with an empty field name.
   const handleAddConstantField = () => {
     const newField = {
       id: String(Date.now()),
@@ -356,7 +306,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       }
       return { ...prev, variable: [...prev.variable, newRow] };
     });
-    // Set edit mode for the new row using its index.
     setEditingRows((prev) => ({ ...prev, [formData.variable.length]: true }));
   };
 
@@ -372,7 +321,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     });
   };
 
-  // When deleting a row, renumber Series so they remain consecutive (as strings).
   const handleDeleteSeries = (rowIndex: number) => {
     setFormData((prev) => {
       const filtered = prev.variable.filter((_, idx) => idx !== rowIndex);
@@ -385,7 +333,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     setEditingRows({});
   };
 
-  // Delete an entire variable column.
   const handleDeleteVariableColumn = (column: string) => {
     setFormData((prev) => {
       let newVariable = prev.variable.map((row) => {
@@ -393,9 +340,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
         delete newRow[column];
         return newRow;
       });
-      // Deduplicate rows using the helper function.
       newVariable = deduplicateRows(newVariable);
-      // If no variable column remains besides Series, clear variable rows.
       const colsRemaining = new Set<string>();
       newVariable.forEach((row) => {
         Object.keys(row).forEach((k) => {
@@ -409,7 +354,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     });
   };
 
-  // Helper: build a unique key for a variable row (excluding the Series field).
   const getRowUniqueKey = (row: VariableRow): string => {
     const keys = Object.keys(row).filter((key) => key !== "Series").sort();
     return keys
@@ -420,16 +364,13 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       .join("|");
   };
 
-  // Toggle edit mode for a constant field.
   const toggleEditConstant = (id: string) => {
     const field = formData.constant.find((f) => f.id === id);
-    // If we are saving (currently editing)...
     if (editingConstants[id]) {
       if (!field?.name.trim()) {
         displayAlert("Field name cannot be empty.", "Validation Error");
         return;
       }
-      // Check that constant names are unique.
       const duplicates = formData.constant.filter((f) => f.name === field.name);
       if (duplicates.length > 1) {
         displayAlert("Field names must be unique.", "Validation Error");
@@ -439,7 +380,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     setEditingConstants((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Toggle edit mode for a variable row using the row index.
   const toggleEditRow = (rowIndex: number) => {
     if (editingRows[rowIndex]) {
       const currentRow = formData.variable[rowIndex];
@@ -449,7 +389,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
           if (idx === rowIndex) return false;
           return getRowUniqueKey(row) === currentKey;
         });
-        // if series name is not unique, show error
         const duplicateSeries = formData.variable.some((row, idx) => {
           if (idx === rowIndex) return false;
           return row.Series.value === currentRow.Series.value;
@@ -467,7 +406,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     setEditingRows((prev) => ({ ...prev, [rowIndex]: !prev[rowIndex] }));
   };
 
-  // Reusable cell component.
   const EditableCell: React.FC<{
     cellData: FieldData;
     editable: boolean;
@@ -586,62 +524,65 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     );
   };
 
-  // Render the Constant Fields table.
   const renderConstantFieldsTable = () => (
     <Box width="100%" mb={4}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={{ borderBottom: "1px solid #ccc" }}>Field</th>
-            <th style={{ borderBottom: "1px solid #ccc", textAlign: "right" }}>Value</th>
-            {globalEdit && <th style={{ borderBottom: "1px solid #ccc", textAlign: "center" }}>Actions</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {formData.constant.map((fieldObj) => (
-            <tr key={fieldObj.id}>
-              <td style={{ borderBottom: "1px solid #eee", padding: "4px" }}>
-                {globalEdit && editingConstants[fieldObj.id] ? (
-                  <Input
-                    size="sm"
-                    defaultValue={fieldObj.name}
-                    placeholder="Enter field name"
-                    onBlur={(e) => {
-                      const newName = e.target.value;
-                      updateConstantField(fieldObj.id, { name: newName });
-                    }}
-                  />
-                ) : (
-                  <Text>{fieldObj.name || "(no name)"}</Text>
-                )}
-              </td>
-              <td style={{ borderBottom: "1px solid #eee", padding: "4px", textAlign: "right" }}>
-                <EditableCell
-                  cellData={fieldObj.data}
-                  editable={globalEdit && !!editingConstants[fieldObj.id]}
-                  onChange={(updates) => updateConstantField(fieldObj.id, updates)}
-                  fieldName={fieldObj.name}
-                />
-              </td>
-              {globalEdit && (
-                <td style={{ borderBottom: "1px solid #eee", padding: "4px", textAlign: "center" }}>
-                  <Button size="xs" onClick={() => toggleEditConstant(fieldObj.id)}>
-                    {editingConstants[fieldObj.id] ? "Save" : "Edit"}
-                  </Button>
-                  {!editingConstants[fieldObj.id] && (
-                    <Button size="xs" ml={2} onClick={() => handleMakeVariable(fieldObj.id)}>
-                      Make variable
-                    </Button>
-                  )}
-                  <Button size="xs" colorScheme="red" ml={2} onClick={() => handleDeleteConstantField(fieldObj.id)}>
-                    Delete
-                  </Button>
-                </td>
-              )}
+      {formData.constant.length === 0 ? null : (
+
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ borderBottom: "1px solid #ccc" }}>Field</th>
+              <th style={{ borderBottom: "1px solid #ccc", textAlign: "right" }}>Value</th>
+              {globalEdit && <th style={{ borderBottom: "1px solid #ccc", textAlign: "center" }}>Actions</th>}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {formData.constant.map((fieldObj) => (
+              <tr key={fieldObj.id}>
+                <td style={{ borderBottom: "1px solid #eee", padding: "4px" }}>
+                  {globalEdit && editingConstants[fieldObj.id] ? (
+                    <Input
+                      size="sm"
+                      defaultValue={fieldObj.name}
+                      placeholder="Enter field name"
+                      onBlur={(e) => {
+                        const newName = e.target.value;
+                        updateConstantField(fieldObj.id, { name: newName });
+                      }}
+                    />
+                  ) : (
+                    <Text>{fieldObj.name || "(no name)"}</Text>
+                  )}
+                </td>
+                <td style={{ borderBottom: "1px solid #eee", padding: "4px", textAlign: "right" }}>
+                  <EditableCell
+                    cellData={fieldObj.data}
+                    editable={globalEdit && !!editingConstants[fieldObj.id]}
+                    onChange={(updates) => updateConstantField(fieldObj.id, updates)}
+                    fieldName={fieldObj.name}
+                  />
+                </td>
+                {globalEdit && (
+                  <td style={{ borderBottom: "1px solid #eee", padding: "4px", textAlign: "center" }}>
+                    <Button size="xs" onClick={() => toggleEditConstant(fieldObj.id)}>
+                      {editingConstants[fieldObj.id] ? "Save" : "Edit"}
+                    </Button>
+                    {!editingConstants[fieldObj.id] && (
+                      <Button size="xs" ml={2} onClick={() => handleMakeVariable(fieldObj.id)}>
+                        Make variable
+                      </Button>
+                    )}
+                    <Button size="xs" colorScheme="red" ml={2} onClick={() => handleDeleteConstantField(fieldObj.id)}>
+                      Delete
+                    </Button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+      )}
       {globalEdit && (
         <Button size="sm" mt={2} onClick={handleAddConstantField}>
           Add Constant Field
@@ -650,7 +591,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     </Box>
   );
 
-  // Render the Variable Rows table with Series as the first column.
   const renderVariableRowsTable = () => {
     if (formData.variable.length === 0) return null;
     const firstRow = formData.variable[0];
@@ -670,10 +610,10 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
                       <Text>{col}</Text>
                       {globalEdit && (
                         <HStack spacing={1}>
-                          <Button size="xs" variant="ghost" onClick={() => handleMakeConstant(col)}>
+                          <Button size="xs" onClick={() => handleMakeConstant(col)}>
                             Make constant
                           </Button>
-                          <Button size="xs" variant="ghost" colorScheme="red" onClick={() => handleDeleteVariableColumn(col)}>
+                          <Button size="xs" colorScheme="red" onClick={() => handleDeleteVariableColumn(col)}>
                             Delete
                           </Button>
                         </HStack>
@@ -740,22 +680,74 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
 
   return (
     <Box p={4} borderWidth="1px" borderRadius="md" bg="white" boxShadow="sm" width="100%">
-      <Heading as="h4" size="md" color="teal.500">
-        {acquisition}
-      </Heading>
+      <HStack justify="space-between" align="start" mb={4}>
+        <Box>
+          {globalEdit ? (
+            <>
+            <VStack align="start" spacing={2}>
+              <Input
+                size="md"
+                value={acquisitionTitle}
+                onChange={(e) => setAcquisitionTitle(e.target.value)}
+                placeholder="Enter acquisition title"
+                width="100%"
+                mb={2}
+              />
+              <Input
+                size="sm"
+                value={acquisitionDescription}
+                onChange={(e) => setAcquisitionDescription(e.target.value)}
+                placeholder="Enter acquisition description (optional)"
+                width="100%"
+              />
+            </VStack>
+            </>
+          ) : (
+            <>
+              <Heading as="h4" size="md" color="teal.500">
+                {acquisitionTitle}
+              </Heading>
+              {acquisitionDescription && (
+                <Text fontSize="sm" color="gray.600">
+                  {acquisitionDescription}
+                </Text>
+              )}
+            </>
+          )}
+        </Box>
+        <HStack spacing={2}>
+          {stage === 1 ? (
+            <>
+              <Button size="sm" onClick={handleNext} isLoading={loading} colorScheme="teal" disabled={!selectedFields.length}>
+                Next
+              </Button>
+              <Button size="sm" colorScheme="red" onClick={handleDeleteAcquisition}>
+                Delete
+              </Button>
+            </>
+          ) : (
+            <>
+              {!hideBackButton && !globalEdit && (
+                <Button size="sm" onClick={() => setStage(1)} colorScheme="teal">
+                  Back
+                </Button>
+              )}
+              
+              <Button size="sm" onClick={() => setGlobalEdit(!globalEdit)} colorScheme="blue" disabled={(Object.values(editingRows).some((v) => v) || Object.values(editingConstants).some((v) => v))}>
+                {globalEdit ? "Save" : "Edit"}
+              </Button>
+              <Button size="sm" colorScheme="red" onClick={handleDeleteAcquisition}>
+                Delete
+              </Button>
+            </>
+          )}
+        </HStack>
+      </HStack>
       {stage === 1 ? (
         <>
-          <Text fontSize="xs" mb={2} color="gray.500">
-            Enter fields for validation:
-          </Text>
-          <textarea
-            ref={inputRef}
-            placeholder="Type or choose a field..."
-            style={{ width: "100%", minHeight: "40px" }}
-          />
           <Box mt={2}>
             <Text fontSize="xs" color="gray.500" mb={1}>
-              Preset Tag Combination:
+              Presets:
             </Text>
             <Select
               size="sm"
@@ -775,6 +767,14 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
               ))}
             </Select>
           </Box>
+          <Text fontSize="xs" mb={2} color="gray.500">
+            Enter fields for validation:
+          </Text>
+          <textarea
+            ref={inputRef}
+            placeholder="Type or choose a field..."
+            style={{ width: "100%", minHeight: "40px" }}
+          />
           <Box mt={2}>
             <Text fontSize="xs" color="gray.500" mb={1}>
               All DICOM tags:
@@ -798,23 +798,10 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
               </VStack>
             </Box>
           </Box>
-          <Box mt={2}>
-            <Button size="sm" onClick={handleNext} isLoading={loading}>
-              Next
-            </Button>
-          </Box>
         </>
       ) : (
         <>
           <Divider my={4} />
-          <HStack justify="space-between" width="100%" mb={4}>
-            <Button size="sm" onClick={() => setStage(1)}>
-              Back
-            </Button>
-            <Button size="sm" onClick={() => setGlobalEdit(!globalEdit)} colorScheme="teal">
-              {globalEdit ? "Save" : "Edit"}
-            </Button>
-          </HStack>
           <VStack align="start" spacing={4} width="100%">
             {renderConstantFieldsTable()}
             {renderVariableRowsTable()}
