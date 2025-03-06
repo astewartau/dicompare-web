@@ -11,6 +11,8 @@ import {
   Input,
   Select,
 } from "@chakra-ui/react";
+import Tagify from "@yaireo/tagify"; // Use the imported module directly
+import "@yaireo/tagify/dist/tagify.css";
 
 type ConstraintType = "value" | "range" | "value+tolerance" | "contains";
 
@@ -43,6 +45,9 @@ interface CollapsibleCardProps {
   pyodide: any;
   validFields: string[];
   onDeleteAcquisition?: (acquisition: string) => void;
+  onSaveAcquisition?: (acquisition: string, acquisitionJson: any) => void;
+  onGlobalEditChange?: (acq: string, isEditing: boolean) => void;
+  onStageChange?: (acq: string, stage: number) => void;
   initialEditMode?: boolean;
   initialStage?: number;
   hideBackButton?: boolean;
@@ -54,6 +59,7 @@ interface AutocompleteInputProps {
   onChange: (value: string) => void;
 }
 
+// AutocompleteInput using a native datalist for constant fields
 const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   initialValue,
   validFields,
@@ -88,6 +94,9 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   pyodide,
   validFields,
   onDeleteAcquisition,
+  onSaveAcquisition,
+  onGlobalEditChange,
+  onStageChange,
   initialEditMode = false,
   initialStage = 1,
   hideBackButton = false,
@@ -103,10 +112,18 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   const [acquisitionTitle, setAcquisitionTitle] = useState<string>(acquisition);
   const [acquisitionDescription, setAcquisitionDescription] = useState<string>("");
 
+  // The multi-select field for stage 1 still uses Tagify.
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const tagifyRef = useRef<any>(null);
 
   const { displayAlert } = useAlert();
+
+  // Helper function to transform a FieldData value.
+  const transformField = (data: FieldData): any => {
+    // Attempt to parse as a number; if valid, return numeric value.
+    const num = parseFloat(data.value);
+    return !isNaN(num) ? num : data.value;
+  };
 
   const presetOptions = [
     {
@@ -119,17 +136,25 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     },
   ];
 
-  // Retain the existing Tagify usage for the stage-one field selector
+  useEffect(() => {
+    if (onGlobalEditChange) {
+      onGlobalEditChange(acquisition, globalEdit);
+    }
+  }, [globalEdit, onGlobalEditChange, acquisition]);
+
+  useEffect(() => {
+    if (onStageChange) {
+      onStageChange(acquisition, stage);
+    }
+  }, [stage, onStageChange, acquisition]);
+
   useEffect(() => {
     if (stage === 1 && inputRef.current && validFields.length) {
       if (tagifyRef.current) {
         tagifyRef.current.destroy();
         tagifyRef.current = null;
       }
-      // Setup Tagify for the main text area
-      // (This can remain unchanged if you still like that for multi-select)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tagifyRef.current = new (window as any).Tagify(inputRef.current, {
+      tagifyRef.current = new Tagify(inputRef.current, {
         enforceWhitelist: true,
         whitelist: validFields,
         dropdown: { enabled: 1, maxItems: 10, position: "all" },
@@ -143,7 +168,31 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
         setSelectedFields(tags);
       });
     }
-  }, [stage, validFields, selectedFields]);
+  }, [stage, validFields]);
+
+  const handleGlobalSave = () => {
+    const constantFieldsJson = formData.constant.map(field => ({
+      field: field.name,
+      value: transformField(field.data),
+    }));
+    const seriesJson = formData.variable.map(row => {
+      const seriesName = row.Series.value;
+      const fields = Object.keys(row)
+        .filter(key => key !== "Series")
+        .map(key => ({
+          field: key,
+          value: transformField(row[key]),
+        }));
+      return { name: seriesName, fields };
+    });
+    const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
+    // Pass the JSON upward
+    if (onSaveAcquisition) {
+      onSaveAcquisition(acquisition, acquisitionJson);
+    }
+    // Exit global edit mode
+    setGlobalEdit(false);
+  };
 
   const handleDeleteAcquisition = () => {
     if (onDeleteAcquisition) {
@@ -186,6 +235,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       setFormData({ constant: newConstant, variable: newVariable });
       setStage(2);
       setGlobalEdit(false);
+      handleGlobalSave();
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -755,9 +805,17 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
                   Back
                 </Button>
               )}
-              <Button size="sm" onClick={() => setGlobalEdit(!globalEdit)} colorScheme="blue" disabled={(Object.values(editingRows).some((v) => v) || Object.values(editingConstants).some((v) => v))}>
-                {globalEdit ? "Save" : "Edit"}
-              </Button>
+              {globalEdit ? (
+                <Button size="sm" onClick={handleGlobalSave} colorScheme="blue" disabled={
+                  Object.values(editingRows).some(v => v) || Object.values(editingConstants).some(v => v)
+                }>
+                  Save
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => setGlobalEdit(true)} colorScheme="blue">
+                  Edit
+                </Button>
+              )}
               <Button size="sm" colorScheme="red" onClick={handleDeleteAcquisition}>
                 Delete
               </Button>

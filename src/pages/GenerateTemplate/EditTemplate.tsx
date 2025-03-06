@@ -1,16 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Heading, Text, Wrap, WrapItem, Button, Icon, Spinner, VStack } from '@chakra-ui/react';
 import { FiPlus } from 'react-icons/fi';
 import CollapsibleCard from '../../components/CollapsibleCard';
 import { useAlert } from '../../components/Alert';
 
-const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, setTemplateJson, actionOnNext }) => {
+interface EditTemplateProps {
+  pyodide: any;
+  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  setAcquisitionsData: (data: Record<string, any>) => void;
+  actionOnNext: React.MutableRefObject<(() => void) | null>;
+}
+
+const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, setAcquisitionsData, actionOnNext }) => {
   const [acquisitionList, setAcquisitionList] = useState<string[]>([]);
+  const [acquisitionsJson, setAcquisitionsJson] = useState<Record<string, any>>({});
   const [newAcqCounter, setNewAcqCounter] = useState<number>(1);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [manualValidFields, setManualValidFields] = useState<string[]>([]);
   const [sessionValidFields, setSessionValidFields] = useState<string[]>([]);
+  const [cardsEditState, setCardsEditState] = useState<Record<string, boolean>>({});
+  const [cardsStageState, setCardsStageState] = useState<Record<string, number>>({});
 
   const { displayAlert } = useAlert();
 
@@ -95,12 +105,42 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
         const merged = Array.from(new Set([...prev, ...newAcqs]));
         return merged;
       });
+      // Build acquisitions object in the desired format.
+      // For each acquisition we create an entry with empty fields and series.
+      const acquisitionsData: Record<string, any> = {};
+      dicomAcquisitions.forEach((acq: any) => {
+        acquisitionsData[acq.Acquisition] = { fields: [], series: [] };
+      });
+      setAcquisitionsData(acquisitionsData);
     } catch (error) {
       console.error('Error processing DICOM files:', error);
     } finally {
       setIsUploading(false);
     }
   };
+
+  const handleGlobalEditChange = useCallback((acq: string, isEditing: boolean) => {
+    setCardsEditState(prev => ({ ...prev, [acq]: isEditing }));
+  }, []);
+
+  const handleStageChange = useCallback((acq: string, stage: number) => {
+    setCardsStageState(prev => ({ ...prev, [acq]: stage }));
+  }, []);
+
+  useEffect(() => {
+    const allAreStage2 = acquisitionList.every(acq => cardsStageState[acq] === 2);
+    const noneEditing = Object.values(cardsEditState).every(editing => editing === false);
+    setNextEnabled(allAreStage2 && noneEditing);
+  }, [cardsEditState, cardsStageState, acquisitionList, setNextEnabled]);
+
+
+  const handleSaveAcquisition = (acq: string, jsonData: any) => {
+    setAcquisitionsJson(prev => ({ ...prev, [acq]: jsonData }));
+  };
+
+  useEffect(() => {
+    setAcquisitionsData(acquisitionsJson);
+  }, [acquisitionsJson, setAcquisitionsData]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files) return;
@@ -196,7 +236,7 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
             `);
           },
         },
-        { option: "Cancel", callback: () => {} }
+        { option: "Cancel", callback: () => { } }
       ]
     );
   };
@@ -258,6 +298,9 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
               initialEditMode={acq.startsWith("New Acquisition")}
               initialStage={acq.startsWith("New Acquisition") ? 2 : 1}
               hideBackButton={acq.startsWith("New Acquisition")}
+              onSaveAcquisition={handleSaveAcquisition}
+              onGlobalEditChange={handleGlobalEditChange}
+              onStageChange={handleStageChange}
             />
           </WrapItem>
         ))}
@@ -275,7 +318,11 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ pyodide, setNextEnabled, se
             justifyContent="center"
             cursor="pointer"
             _hover={{ bg: 'gray.100' }}
-            onClick={handleAddAcquisition}
+            onClick={() => {
+              const newAcqName = `New Acquisition ${newAcqCounter}`;
+              setAcquisitionList(prev => [...prev, newAcqName]);
+              setNewAcqCounter(prev => prev + 1);
+            }}
           >
             <Button variant="ghost" size="lg">
               <VStack spacing={2}>
