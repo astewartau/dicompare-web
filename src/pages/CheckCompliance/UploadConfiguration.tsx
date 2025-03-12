@@ -10,6 +10,7 @@ import {
   Radio,
   Select,
 } from '@chakra-ui/react';
+import { usePyodide } from '../../components/PyodideContext';
 
 /**
  * Example built-in configurations. In practice, you might fetch these from a server.
@@ -77,7 +78,6 @@ const configurations: ConfigOption[] = [
 ];
 
 interface UploadConfigurationProps {
-  pyodide: any;
   referenceFile: { name: string; content: string } | null;
   setReferenceFile: React.Dispatch<React.SetStateAction<{ name: string; content: string } | null>>;
 
@@ -86,21 +86,18 @@ interface UploadConfigurationProps {
   setOption: React.Dispatch<React.SetStateAction<'existing' | 'upload'>>;
   existingConfig: string;
   setExistingConfig: React.Dispatch<React.SetStateAction<string>>;
-
-  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const UploadConfiguration: React.FC<UploadConfigurationProps> = ({
-  pyodide,
   referenceFile,
   setReferenceFile,
   option,
   setOption,
   existingConfig,
-  setExistingConfig,
-  setNextEnabled
+  setExistingConfig
 }) => {
   const selectedConfig = configurations.find((c) => c.value === existingConfig);
+  const { runPythonCode, setPythonGlobal, writePythonFile } = usePyodide();
 
   // Handle file upload for new configuration
   const handleUploadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -114,11 +111,6 @@ const UploadConfiguration: React.FC<UploadConfigurationProps> = ({
   // When Next is clicked, write the configuration file to Pyodide FS,
   // set globals, and run the code that loads the configuration.
   const handleNextClick = async () => {
-    if (!pyodide) {
-      console.error('Pyodide instance is not ready.');
-      return;
-    }
-
     let configName = '';
     let configContent = '';
 
@@ -144,15 +136,14 @@ const UploadConfiguration: React.FC<UploadConfigurationProps> = ({
     }
 
     // Write the configuration file to Pyodide FS
-    pyodide.FS.writeFile(configName, configContent);
+    //pyodide.FS.writeFile(configName, configContent);
+    writePythonFile(configName, configContent);
 
     // Determine if the file is JSON or Python based on its extension
     const isJson = configName.endsWith('.json');
 
-    // Instead of embedding the values in the Python code,
-    // set them in Pyodide globals.
-    pyodide.globals.set('ref_config_name', configName);
-    pyodide.globals.set('is_json', isJson);
+    setPythonGlobal('ref_config_name', configName);
+    setPythonGlobal('is_json', isJson);
 
     // Now run a Python snippet that uses the globals.
     const code = `
@@ -177,11 +168,9 @@ else:
         ref_session = {"acquisitions": {k: {} for k in ref_models.keys()}}
 `;
     try {
-      await pyodide.runPythonAsync(code);
-      setNextEnabled(true);
+      await runPythonCode(code);
       console.log(`Configuration "${configName}" loaded into Python globals.`);
     } catch (error) {
-      setNextEnabled(false);
       console.error('Error loading configuration:', error);
       return;
     }

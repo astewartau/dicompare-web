@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAlert } from "./Alert";
+import { usePyodide } from './PyodideContext';
 import {
   Box,
   Heading,
@@ -42,7 +43,6 @@ interface FormData {
 
 interface CollapsibleCardProps {
   acquisition: string;
-  pyodide: any;
   validFields: string[];
   onDeleteAcquisition?: (acquisition: string) => void;
   onSaveAcquisition?: (acquisition: string, acquisitionJson: any) => void;
@@ -91,7 +91,6 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
 
 const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   acquisition,
-  pyodide,
   validFields,
   onDeleteAcquisition,
   onSaveAcquisition,
@@ -101,6 +100,8 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   initialStage = 1,
   hideBackButton = false,
 }) => {
+  const { runPythonCode, setPythonGlobal } = usePyodide();
+
   const [stage, setStage] = useState<number>(initialStage);
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
@@ -171,6 +172,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   }, [stage, validFields]);
 
   const handleGlobalSave = () => {
+    console.log("Saving acquisition...");
     const constantFieldsJson = formData.constant.map(field => ({
       field: field.name,
       value: transformField(field.data),
@@ -188,6 +190,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
     // Pass the JSON upward
     if (onSaveAcquisition) {
+      console.log("Acquisition saving upwards:", acquisitionJson);
       onSaveAcquisition(acquisition, acquisitionJson);
     }
     // Exit global edit mode
@@ -203,9 +206,10 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   const handleNext = async () => {
     setLoading(true);
     try {
-      pyodide.globals.set("current_acquisition", acquisition);
-      pyodide.globals.set("selected_fields", selectedFields);
-      const uniqueRows = await pyodide.runPythonAsync(`
+
+      setPythonGlobal("current_acquisition", acquisition);
+      setPythonGlobal("selected_fields", selectedFields);
+      const uniqueRows = await runPythonCode(`
         df = session[session['Acquisition'] == current_acquisition][selected_fields].drop_duplicates()
         df = df.sort_values(by=list(selected_fields))
         result = df.to_dict(orient='records')
@@ -232,10 +236,32 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
         }
         return newRow;
       });
+
+      // Update state and stage
       setFormData({ constant: newConstant, variable: newVariable });
       setStage(2);
       setGlobalEdit(false);
-      handleGlobalSave();
+
+      // Build the JSON object directly from newConstant and newVariable
+      const constantFieldsJson = newConstant.map(field => ({
+        field: field.name,
+        value: transformField(field.data),
+      }));
+      const seriesJson = newVariable.map(row => {
+        const seriesName = row.Series.value;
+        const fields = Object.keys(row)
+          .filter(key => key !== "Series")
+          .map(key => ({
+            field: key,
+            value: transformField(row[key]),
+          }));
+        return { name: seriesName, fields };
+      });
+      const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
+
+      if (onSaveAcquisition) {
+        onSaveAcquisition(acquisition, acquisitionJson);
+      }
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {

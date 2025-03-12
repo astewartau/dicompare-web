@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Heading,
@@ -13,10 +13,9 @@ import {
   Spinner
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
+import { usePyodide } from '../../components/PyodideContext';
 
 interface FinalizeMappingProps {
-  runPythonCode: (code: string) => Promise<any>;
-  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 interface Acquisition {
@@ -24,9 +23,7 @@ interface Acquisition {
   details: Record<string, any>;
 }
 
-const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ 
-  runPythonCode,
-  setNextEnabled
+const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
 }) => {
   const [referenceOptions, setReferenceOptions] = useState<Acquisition[]>([]);
   const [inputOptions, setInputOptions] = useState<Acquisition[]>([]);
@@ -35,36 +32,17 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
   const [expandedInputs, setExpandedInputs] = useState<Record<string, boolean>>({});
   const [allReferencesExpanded, setAllReferencesExpanded] = useState(false);
   const [allInputsExpanded, setAllInputsExpanded] = useState(false);
-
-  // New loading state for showing a spinner
   const [loading, setLoading] = useState(false);
+  const { runPythonCode } = usePyodide();
 
-  // Helper to render input details in a list
-  const renderInputDetails = (details: any) => {
-    return (
-      <Box>
-        {Object.entries(details).map(([key, value]) => (
-          <Text key={key}>
-            <strong>{key}:</strong>{" "}
-            {Array.isArray(value) ? value.join(', ') : String(value)}
-          </Text>
-        ))}
-      </Box>
-    );
-  };
-
-  useEffect(() => {
-    const fetchMapping = async () => {
-      try {
-        setLoading(true); // Start the spinner
-        // This snippet assumes that the following globals have been set in previous steps:
-        // in_session, ref_session, reference_fields, and is_json.
-        const code = `
+  const codeToRun = `
 import json
 from dicompare.mapping import map_to_json_reference
 from dicompare.cli.gen_session import create_json_reference
 
 acquisition_fields = ["ProtocolName"]
+
+global in_session
 
 in_session = in_session.reset_index(drop=True)
 in_session.sort_values(by=["Acquisition"] + acquisition_fields + reference_fields, inplace=True)
@@ -87,40 +65,36 @@ json.dumps({
     "session_map": session_map
 })
 `;
-        const result = await runPythonCode(code);
-        const parsed = JSON.parse(result);
 
-        // Convert reference_acquisitions to an array
-        const refArr: Acquisition[] = Object.entries(parsed.reference_acquisitions).map(
-          ([acqName, obj]) => ({
-            name: acqName,
-            details: obj as any,
-          })
-        );
+  const handleAnalyze = async () => {
+    try {
+      setLoading(true);
+      const result = await runPythonCode(codeToRun);
+      const parsed = JSON.parse(result);
 
-        // Convert input_acquisitions to an array
-        // Here we assume 'parsed.input_acquisitions' is shaped like: 
-        // { "acquisitions": { "acqName": {fields:..., series:...}, ... } }
-        const inArr: Acquisition[] = Object.entries(parsed.input_acquisitions.acquisitions).map(
-          ([acqName, acqObject]) => ({
-            name: acqName,
-            details: acqObject
-          })
-        );
+      const refArr: Acquisition[] = Object.entries(parsed.reference_acquisitions).map(
+        ([acqName, obj]) => ({
+          name: acqName,
+          details: obj as any,
+        })
+      );
 
-        setReferenceOptions(refArr);
-        setInputOptions(inArr);
+      const inArr: Acquisition[] = Object.entries(parsed.input_acquisitions.acquisitions).map(
+        ([acqName, acqObject]) => ({
+          name: acqName,
+          details: acqObject,
+        })
+      );
 
-        // Initialize mapping from session_map
-        setInputSelections(parsed.session_map || {});
-      } catch (err) {
-        console.error('Mapping error:', err);
-      } finally {
-        setLoading(false); // Stop the spinner
-      }
-    };
-    fetchMapping();
-  }, [runPythonCode]);
+      setReferenceOptions(refArr);
+      setInputOptions(inArr);
+      setInputSelections(parsed.session_map || {});
+    } catch (err) {
+      console.error('Mapping error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (referenceName: string, value: string) => {
     setInputSelections((prev) => ({ ...prev, [referenceName]: value }));
@@ -160,17 +134,14 @@ json.dumps({
     setAllInputsExpanded(newValue);
   };
 
-  /**
-  * Renders a table with one column for "Series Name"
-  * and one column per unique field encountered across all series.
-  */
-  const renderSeriesTable = (seriesArr: Array<{
-    name: string;
-    fields: Array<{ field: string; value?: any; tolerance?: number; contains?: any }>;
-  }>) => {
+  const renderSeriesTable = (
+    seriesArr: Array<{
+      name: string;
+      fields: Array<{ field: string; value?: any; tolerance?: number; contains?: any }>;
+    }>
+  ) => {
     if (!Array.isArray(seriesArr) || seriesArr.length === 0) return null;
 
-    // Gather all field names
     const allFieldNames = new Set<string>();
     for (const s of seriesArr) {
       for (const f of s.fields) {
@@ -202,7 +173,9 @@ json.dumps({
                 {fieldArray.map((fieldName) => {
                   const maybeFieldObj = s.fields.find((x) => x.field === fieldName);
                   const val = maybeFieldObj?.value ?? maybeFieldObj?.contains ?? '';
-                  const tol = maybeFieldObj?.tolerance !== undefined ? ` (tol:${maybeFieldObj.tolerance})` : '';
+                  const tol = maybeFieldObj?.tolerance !== undefined
+                    ? ` (tol:${maybeFieldObj.tolerance})`
+                    : '';
                   return (
                     <Box as="td" p={2} key={fieldName}>
                       {String(val) + tol}
@@ -217,11 +190,10 @@ json.dumps({
     );
   };
 
-  // If loading, just show a spinner in the middle of the screen
   if (loading) {
     return (
       <Flex align="center" justify="center" minH="80vh">
-        <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500"/>
+        <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
       </Flex>
     );
   }
@@ -232,11 +204,14 @@ json.dumps({
         Finalize Mapping
       </Heading>
       <Text mb={4}>
-        Match the reference acquisitions (left) to the input acquisitions (right). Expand rows to view details.
+        Press "Analyze" to retrieve and map acquisitions.
       </Text>
 
+      <Button mb={4} colorScheme="teal" onClick={handleAnalyze}>
+        Analyze
+      </Button>
+
       <Flex gap={6}>
-        {/* Reference Acquisitions */}
         <Box flex="1">
           <Flex justify="space-between" align="center" mb={4}>
             <Heading size="md">Reference Acquisitions</Heading>
@@ -274,30 +249,26 @@ json.dumps({
                       aria-label="Toggle reference details"
                     />
                   </Box>
-
                   <Collapse in={expanded}>
                     <Box p={3} bg="gray.50">
-                      {/* If there's a fields array */}
                       {Array.isArray(ref.details.fields) && ref.details.fields.length > 0 && (
                         <Box mb={2}>
                           <Text fontWeight="bold">Fields:</Text>
                           {ref.details.fields.map((fld: any, idx: number) => (
                             <Text key={idx}>
                               {fld.field}: {fld.value}
-                              {fld.tolerance !== undefined ? ` (tolerance: ${fld.tolerance})` : ''}
+                              {fld.tolerance !== undefined
+                                ? ` (tolerance: ${fld.tolerance})`
+                                : ''}
                             </Text>
                           ))}
                         </Box>
                       )}
-
-                      {/* If there's a series array -> render multi-column table */}
                       {Array.isArray(ref.details.series) && ref.details.series.length > 0 && (
                         renderSeriesTable(ref.details.series)
                       )}
                     </Box>
                   </Collapse>
-
-                  {/* Dropdown mapping */}
                   <Box p={3}>
                     <Select
                       placeholder="Select Input"
@@ -317,7 +288,6 @@ json.dumps({
           </VStack>
         </Box>
 
-        {/* Input Acquisitions */}
         <Box flex="1">
           <Flex justify="space-between" align="center" mb={4}>
             <Heading size="md">Input Acquisitions</Heading>
@@ -355,23 +325,21 @@ json.dumps({
                       aria-label="Toggle input details"
                     />
                   </Box>
-
                   <Collapse in={expanded}>
                     <Box p={3} bg="gray.50">
-                      {/* If there's a fields array */}
                       {Array.isArray(inp.details.fields) && inp.details.fields.length > 0 && (
                         <Box mb={2}>
                           <Text fontWeight="bold">Fields:</Text>
                           {inp.details.fields.map((fld: any, idx: number) => (
                             <Text key={idx}>
                               {fld.field}: {fld.value}
-                              {fld.tolerance !== undefined ? ` (tolerance: ${fld.tolerance})` : ''}
+                              {fld.tolerance !== undefined
+                                ? ` (tolerance: ${fld.tolerance})`
+                                : ''}
                             </Text>
                           ))}
                         </Box>
                       )}
-
-                      {/* If there's a series array -> multi-column table */}
                       {Array.isArray(inp.details.series) && inp.details.series.length > 0 && (
                         renderSeriesTable(inp.details.series)
                       )}

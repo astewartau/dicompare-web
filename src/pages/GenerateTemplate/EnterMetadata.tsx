@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Heading,
@@ -10,49 +10,59 @@ import {
   Textarea,
   FormHelperText,
 } from '@chakra-ui/react';
+import Tagify from '@yaireo/tagify';
+import '@yaireo/tagify/dist/tagify.css';
 
 interface EnterMetadataProps {
-  setNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   setMetadata: (data: { name: string; description: string; authors: string[] }) => void;
+  setIsNextDisabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-const EnterMetadata: React.FC<EnterMetadataProps> = ({ setNextEnabled, setMetadata }) => {
+const EnterMetadata: React.FC<EnterMetadataProps> = ({ setMetadata, setIsNextDisabled }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [authors, setAuthors] = useState('');
+  const [authors, setAuthors] = useState<string[]>([]);
+  const authorsInputRef = useRef<HTMLInputElement>(null);
 
-  // Enable "Next" when name is non-empty
   useEffect(() => {
-    setNextEnabled(name.trim().length > 0);
-  }, [name, setNextEnabled]);
+    let tagify: Tagify;
+    if (authorsInputRef.current) {
+      tagify = new Tagify(authorsInputRef.current, {
+        delimiters: ",", // use comma as a delimiter to create new tags
+      });
+      tagify.on('change', () => {
+        const tags = tagify.value.map((tag: any) => tag.value);
+        setAuthors(tags);
+      });
+    }
+    return () => {
+      tagify && tagify.destroy();
+    };
+  }, []);
 
-  // Update the parent metadata state when any field changes.
   useEffect(() => {
     setMetadata({
       name,
       description,
-      // Split comma-separated authors into an array (trimming extra spaces)
-      authors: authors.split(',').map(a => a.trim()).filter(a => a.length > 0),
+      authors,
     });
-  }, [name, description, authors, setMetadata]);
+    const isValid = name.trim() !== '' && authors.length > 0;
+    setIsNextDisabled(!isValid);
+  }, [name, description, authors, setMetadata, setIsNextDisabled]);
 
   return (
     <Box width="100%">
       <VStack align="start" spacing={6}>
-        <Heading size="xl" color="teal.600">
-          Enter Metadata
-        </Heading>
         <Text fontSize="md" color="gray.700">
-          Let’s start by creating a template. Please provide a name, description, and authors for the
-          template. This will help identify and describe the purpose of the template.
+          Provide a name, description, and authors for the template.
         </Text>
       </VStack>
 
       <VStack as="form" spacing={6} marginTop={8}>
         <FormControl id="template-name" isRequired>
-          <Text fontSize="3xl" fontWeight="bold">
+          <FormLabel fontSize="3xl" fontWeight="bold">
             Template Name
-          </Text>
+          </FormLabel>
           <FormHelperText fontSize="lg">
             Provide a name for your template.
           </FormHelperText>
@@ -68,9 +78,9 @@ const EnterMetadata: React.FC<EnterMetadataProps> = ({ setNextEnabled, setMetada
         </FormControl>
 
         <FormControl id="template-description">
-          <Text fontSize="3xl" fontWeight="bold">
+          <FormLabel fontSize="3xl" fontWeight="bold">
             Template Description
-          </Text>
+          </FormLabel>
           <FormHelperText fontSize="lg">
             Describe the purpose and scope of this template.
           </FormHelperText>
@@ -83,21 +93,20 @@ const EnterMetadata: React.FC<EnterMetadataProps> = ({ setNextEnabled, setMetada
           />
         </FormControl>
 
-        <FormControl id="authors">
-          <Text fontSize="3xl" fontWeight="bold">
+        <FormControl id="authors" isRequired>
+          <FormLabel fontSize="3xl" fontWeight="bold">
             Authors
-          </Text>
+          </FormLabel>
           <FormHelperText fontSize="lg">
-            Specify the authors (comma-separated).
+            Specify the authors. Use comma to create new tags.
           </FormHelperText>
           <Input
-            placeholder="John Doe, Jane Doe"
+            ref={authorsInputRef}
+            placeholder="Enter authors"
             focusBorderColor="teal.500"
             size="lg"
             variant="filled"
             mt={5}
-            value={authors}
-            onChange={(e) => setAuthors(e.target.value)}
           />
         </FormControl>
       </VStack>

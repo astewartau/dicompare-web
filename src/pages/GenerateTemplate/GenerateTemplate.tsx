@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import VerticalStepper from '../../components/Stepper';
 import EnterMetadata from './EnterMetadata';
 import NavigationBar from '../../components/NavigationBar';
@@ -6,44 +6,47 @@ import { Box } from '@chakra-ui/react';
 import EditTemplate from './EditTemplate';
 import Review from './Review';
 
-interface GenerateTemplateProps {
-  runPythonCode: (code: string) => Promise<string>;
-  pyodide: any;
-}
+interface GenerateTemplateProps { }
 
-const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ runPythonCode, pyodide }) => {
-  // State for acquisitions data from the EditTemplate step
+const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ }) => {
   const [acquisitionsData, setAcquisitionsData] = useState<any>(null);
-  // State for metadata from the EnterMetadata step
   const [metadata, setMetadata] = useState<{ name: string; description: string; authors: string[] } | null>(null);
-  // Final JSON that Review will display
   const [templateJson, setTemplateJson] = useState<any>(null);
-  const [nextEnabled, setNextEnabled] = useState(false);
-  const actionOnNext = useRef<(() => void) | null>(null);
+  
+  // Track whether the Next button is disabled
+  const [isNextDisabled, setIsNextDisabled] = useState(false);
 
-  // Steps in the stepper. Note we pass callbacks to update acquisitionsData and metadata.
+  // Steps in the stepper. Each step can receive setIsNextDisabled.
   const steps = [
     {
       title: 'Build schema',
       component: (
         <EditTemplate
-          pyodide={pyodide}
-          setNextEnabled={setNextEnabled}
           setAcquisitionsData={setAcquisitionsData}
-          actionOnNext={actionOnNext}
+          setIsNextDisabled={setIsNextDisabled}
         />
       ),
     },
     {
       title: 'Enter metadata',
       component: (
-        <EnterMetadata setNextEnabled={setNextEnabled} setMetadata={setMetadata} />
+        <EnterMetadata
+          setMetadata={setMetadata}
+          setIsNextDisabled={setIsNextDisabled}
+        />
       ),
     },
-    { title: 'Download schema', component: <Review templateJson={templateJson} /> },
+    {
+      title: 'Download schema',
+      component: (
+        <Review
+          templateJson={templateJson}
+          setIsNextDisabled={setIsNextDisabled}
+        />
+      ),
+    },
   ];
 
-  // When both acquisitionsData and metadata are available, combine them into final JSON.
   useEffect(() => {
     if (acquisitionsData && metadata) {
       const finalJson = {
@@ -63,9 +66,8 @@ const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ runPythonCode, pyod
       </Box>
       <VerticalStepper
         steps={steps}
-        setNextEnabled={setNextEnabled}
-        nextEnabled={nextEnabled}
-        actionOnNext={actionOnNext}
+        isNextDisabled={isNextDisabled}
+        setIsNextDisabled={setIsNextDisabled}
       />
     </>
   );
