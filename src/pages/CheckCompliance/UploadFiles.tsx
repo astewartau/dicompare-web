@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Text, Button, Icon, Spinner, VStack, Progress } from '@chakra-ui/react';
 import { FiUpload } from 'react-icons/fi';
 import { usePyodide } from '../../components/PyodideContext';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 interface UploadFilesProps {
   dicomCount: number | null;

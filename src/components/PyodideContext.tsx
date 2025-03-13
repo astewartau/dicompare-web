@@ -4,16 +4,16 @@ interface PyodideContextType {
   pyodide: any;
   pyodideReady: boolean;
   runPythonCode: (code: string) => Promise<any>;
-  setPythonGlobal: (globalName: string, value: any) => void;
-  writePythonFile: (filePath: string, content: string | Uint8Array) => void;
+  setPythonGlobal: (globalName: string, value: any) => Promise<void>;
+  writePythonFile: (filePath: string, content: string | Uint8Array) => Promise<void>;
 }
 
 const PyodideContext = createContext<PyodideContextType>({
   pyodide: null,
   pyodideReady: false,
   runPythonCode: async () => {},
-  setPythonGlobal: () => {},
-  writePythonFile: () => {},
+  setPythonGlobal: async () => {},
+  writePythonFile: async () => {},
 });
 
 export const usePyodide = () => useContext(PyodideContext);
@@ -24,6 +24,16 @@ export const PyodideProvider: React.FC = ({ children }) => {
   const [pyodideReady, setPyodideReady] = useState(false);
   const loadedRef = useRef(false);
 
+  // Create a deferred promise for Pyodide readiness that resolves with the instance.
+  const pyodideReadyPromiseRef = useRef<Promise<any>>();
+  const pyodideReadyResolveRef = useRef<(py: any) => void>();
+
+  if (!pyodideReadyPromiseRef.current) {
+    pyodideReadyPromiseRef.current = new Promise((resolve) => {
+      pyodideReadyResolveRef.current = resolve;
+    });
+  }
+
   const loadPyodide = async () => {
     if (pyodide || pyodideLoading || loadedRef.current) {
       console.log("Already loading or loaded.");
@@ -33,7 +43,6 @@ export const PyodideProvider: React.FC = ({ children }) => {
     setPyodideLoading(true);
     console.log("Loading Pyodide and dicompare...");
 
-    // Check if the Pyodide script already exists
     if (!document.querySelector('script[src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"]')) {
       await new Promise<void>((resolve, reject) => {
         const script = document.createElement("script");
@@ -69,22 +78,22 @@ export const PyodideProvider: React.FC = ({ children }) => {
       );
       const pyodideInstance = await Promise.race([loadPromise, timeoutPromise]);
       console.log("pyodideInstance returned:", pyodideInstance);
-      if (!pyodideInstance) {
-        console.error("pyodideInstance is null or undefined.");
-      } else {
-        console.log("Type of pyodideInstance.runPythonAsync:", typeof pyodideInstance.runPythonAsync);
-      }
+      console.log("Type of pyodideInstance.runPythonAsync:", typeof pyodideInstance.runPythonAsync);
+
       console.log("Loading micropip...");
       await pyodideInstance.loadPackage("micropip");
       console.log("micropip loaded! Installing dicompare...");
       await pyodideInstance.runPythonAsync(`
         import micropip
-        #await micropip.install("dicompare==0.1.16")
-        await micropip.install("http://localhost:8000/dist/dicompare-0.1.16-py3-none-any.whl")
+        #await micropip.install("dicompare==0.1.17")
+        await micropip.install("http://localhost:8000/dist/dicompare-0.1.17-py3-none-any.whl")
       `);
       console.log("dicompare installed! Setting Pyodide and dicompare...");
       setPyodide(pyodideInstance);
       setPyodideReady(true);
+      if (pyodideReadyResolveRef.current) {
+        pyodideReadyResolveRef.current(pyodideInstance);
+      }
       console.log("Pyodide and dicompare loaded successfully!");
     } catch (error) {
       console.error("Error in loadPyodide:", error);
@@ -93,23 +102,20 @@ export const PyodideProvider: React.FC = ({ children }) => {
     }
   };
 
-  // Only call loadPyodide once on mount
   useEffect(() => {
     loadPyodide();
   }, []);
 
-  const waitForPyodide = async () => {
-    while (!pyodideReady) {
-      console.log("Waiting for Pyodide to be ready...");
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
+  // Wait for Pyodide to load and resolve with the instance.
+  const waitForPyodide = async (): Promise<any> => {
+    return pyodideReadyPromiseRef.current;
   };
 
   const runPythonCode = async (code: string) => {
-    await waitForPyodide();
+    const instance = await waitForPyodide();
     try {
       console.log("Executing Python code...");
-      const result = await pyodide.runPythonAsync(code);
+      const result = await instance.runPythonAsync(code);
       console.log("Python code executed. Result:", result);
       return result;
     } catch (error) {
@@ -119,19 +125,27 @@ export const PyodideProvider: React.FC = ({ children }) => {
   };
 
   const setPythonGlobal = async (globalName: string, value: any) => {
-    await waitForPyodide();
+    const instance = await waitForPyodide();
     console.log(`Setting Python global ${globalName}...`);
-    pyodide.globals.set(globalName, value);
+    instance.globals.set(globalName, value);
   };
 
   const writePythonFile = async (filePath: string, content: string | Uint8Array) => {
-    await waitForPyodide();
+    const instance = await waitForPyodide();
     console.log(`Writing file to Pyodide FS: ${filePath}`);
-    pyodide.FS.writeFile(filePath, content);
+    instance.FS.writeFile(filePath, content);
   };
 
   return (
-    <PyodideContext.Provider value={{ pyodide, pyodideReady, runPythonCode, setPythonGlobal, writePythonFile }}>
+    <PyodideContext.Provider
+      value={{
+        pyodide,
+        pyodideReady,
+        runPythonCode,
+        setPythonGlobal,
+        writePythonFile,
+      }}
+    >
       {children}
     </PyodideContext.Provider>
   );

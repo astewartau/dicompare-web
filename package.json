@@ -38,6 +38,7 @@
     "lucide-react": "^0.363.0",
     "pdfkit": "^0.14.0",
     "react": "^18.2.0",
+    "react-beautiful-dnd": "^13.1.1",
     "react-doc-viewer": "^0.1.13",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",

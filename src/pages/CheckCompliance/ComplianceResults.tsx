@@ -21,22 +21,19 @@ import {
   CheckCircleIcon,
   CopyIcon
 } from "@chakra-ui/icons";
+import { usePyodide } from "../../components/PyodideContext";
 
-import { usePyodide } from '../../components/PyodideContext';
-
-/** The shape of each compliance item in the raw array from Python. */
 interface ComplianceItem {
-  "reference acquisition"?: string; 
-  "input acquisition"?: string;     
-  "series"?: string | null;        
-  "field"?: string;                
-  "expected"?: any;                
-  "value"?: any;                   
-  "message"?: string;              
-  "passed": string;               
+  "reference acquisition"?: string;
+  "input acquisition"?: string;
+  "series"?: string | null;
+  "field"?: string;
+  "expected"?: any;
+  "value"?: any;
+  "message"?: string;
+  "passed": string;
 }
 
-/** Grouped items by "input acquisition". */
 interface AcquisitionGroup {
   inputAcquisitionName: string;
   referenceAcquisitionName: string;
@@ -46,25 +43,19 @@ interface AcquisitionGroup {
 
 type AcquisitionMap = Record<string, AcquisitionGroup>;
 
-interface ComplianceResultsProps {
-}
-
-const ComplianceResults: React.FC<ComplianceResultsProps> = ({
-}) => {
+const ComplianceResults: React.FC = () => {
   const [acquisitionMap, setAcquisitionMap] = useState<AcquisitionMap>({});
   const [expandedAcqs, setExpandedAcqs] = useState<string[]>([]);
   const [rawJson, setRawJson] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const { hasCopied, onCopy } = useClipboard(rawJson);
-  const { runPythonCode } = usePyodide();
+  const { runPythonCode, setPythonGlobal } = usePyodide();
 
   const groupByAcquisition = (items: ComplianceItem[]): AcquisitionMap => {
     const map: AcquisitionMap = {};
-
     items.forEach(item => {
       const inputAcq = item["input acquisition"] || "Unknown Input Acq";
       const refAcq = item["reference acquisition"] || "Unknown Ref Acq";
-
       if (!map[inputAcq]) {
         map[inputAcq] = {
           inputAcquisitionName: inputAcq,
@@ -73,14 +64,12 @@ const ComplianceResults: React.FC<ComplianceResultsProps> = ({
           compliant: []
         };
       }
-
       if (item.passed === "❌") {
         map[inputAcq].errors.push(item);
       } else {
         map[inputAcq].compliant.push(item);
       }
     });
-
     return map;
   };
 
@@ -89,10 +78,16 @@ const ComplianceResults: React.FC<ComplianceResultsProps> = ({
     try {
       const code = `
 import json
+import pyodide
 from dicompare.compliance import check_session_compliance_with_json_reference, check_session_compliance_with_python_module
 
-if isinstance(session_map, str):
+if 'session_map' not in globals():
+    global session_map
+    session_map = {}
+elif isinstance(session_map, str):
     session_map = json.loads(session_map)
+elif isinstance(session_map, pyodide.ffi.JsProxy):
+    session_map = session_map.to_py()
 
 if is_json:
     compliance_summary = check_session_compliance_with_json_reference(
@@ -112,7 +107,6 @@ json.dumps(compliance_summary)
       const pyResult = await runPythonCode(code);
       const prettyJson = JSON.stringify(JSON.parse(pyResult), null, 2);
       setRawJson(prettyJson);
-
       const parsed: ComplianceItem[] = JSON.parse(pyResult);
       const grouped = groupByAcquisition(parsed);
       setAcquisitionMap(grouped);
@@ -148,7 +142,7 @@ json.dumps(compliance_summary)
   if (loading) {
     return (
       <Flex align="center" justify="center" minH="50vh">
-        <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500"/>
+        <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
       </Flex>
     );
   }
@@ -167,6 +161,9 @@ json.dumps(compliance_summary)
 
   return (
     <Box p={4}>
+      <Button colorScheme="teal" onClick={handleAnalyze}>
+        Analyze
+      </Button>
       <Heading size="md" mb={2}>Data Certificate</Heading>
       <HStack mb={4}>
         {statusIcon}
@@ -228,7 +225,6 @@ json.dumps(compliance_summary)
 
             <Collapse in={isOpen} animateOpacity>
               <Box p={3}>
-                {/* Errors Section */}
                 <Box mb={4}>
                   {!errorCount && (
                     <Text fontSize="sm" color="gray.600">
@@ -269,7 +265,6 @@ json.dumps(compliance_summary)
                   ))}
                 </Box>
 
-                {/* Compliant fields Section */}
                 <Box>
                   {!compliantCount && (
                     <Text fontSize="sm" color="gray.600">
@@ -315,7 +310,6 @@ json.dumps(compliance_summary)
         );
       })}
 
-      {/* JSON Debug Section */}
       <Box p={4} borderWidth="1px" borderRadius="md" bg="gray.50" overflow="auto" maxHeight="300px" mt={6}>
         <HStack justify="space-between" mb={2}>
           <Heading as="h3" size="sm">JSON Data</Heading>

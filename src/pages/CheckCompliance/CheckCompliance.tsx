@@ -26,40 +26,6 @@ const CheckCompliance: React.FC<CheckComplianceProps> = ({ }) => {
 
   const steps = [
     {
-      title: 'Introduction',
-      component: (
-        <Introduction
-          // For example, you can leave the introduction always enabling "Next":
-          setIsNextDisabled={setIsNextDisabled}
-        />
-      ),
-    },
-    {
-      title: 'Upload Files',
-      component: (
-        <UploadFiles
-          dicomCount={dicomCount}
-          setDicomCount={setDicomCount}
-          dicomFolder={dicomFolder}
-          setDicomFolder={setDicomFolder}
-          setIsNextDisabled={setIsNextDisabled}
-        />
-      ),
-    },
-    {
-      title: 'Upload or Select Configuration',
-      component: (
-        <UploadConfiguration
-          referenceFile={referenceFile}
-          setReferenceFile={setReferenceFile}
-          option={option}
-          setOption={setOption}
-          existingConfig={existingConfig}
-          setExistingConfig={setExistingConfig}
-        />
-      ),
-    },
-    {
       title: 'Finalize Mapping',
       component: (
         <FinalizeMapping
