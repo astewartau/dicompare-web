@@ -62,7 +62,6 @@ const FinalizeMapping: React.FC = () => {
   const [isDICOMDragActive, setIsDICOMDragActive] = useState(false);
 
   const updateProgress = useCallback((p: number) => {
-    console.log("Updating progress to", p);
     setDICOMProgress(p);
   }, []);
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAlert } from "./Alert";
-import { usePyodide } from './PyodideContext';
+import { usePyodide } from "./PyodideContext";
 import {
   Box,
   Heading,
@@ -12,10 +12,11 @@ import {
   Input,
   Select,
 } from "@chakra-ui/react";
-import Tagify from "@yaireo/tagify"; // Use the imported module directly
+import Tagify from "@yaireo/tagify";
 import "@yaireo/tagify/dist/tagify.css";
 
 type ConstraintType = "value" | "range" | "value+tolerance" | "contains";
+type DataType = "number" | "string" | "list";
 
 interface FieldData {
   constraintType: ConstraintType;
@@ -23,6 +24,7 @@ interface FieldData {
   minValue?: string;
   maxValue?: string;
   tolerance?: string;
+  dataType: DataType;
 }
 
 interface ConstantField {
@@ -59,14 +61,12 @@ interface AutocompleteInputProps {
   onChange: (value: string) => void;
 }
 
-// AutocompleteInput using a native datalist for constant fields
 const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   initialValue,
   validFields,
   onChange,
 }) => {
   const [value, setValue] = useState(initialValue);
-  // Create a unique id for the datalist to prevent collisions.
   const idRef = useRef("valid-fields-" + Math.random().toString(36).substr(2, 9));
 
   return (
@@ -101,6 +101,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   hideBackButton = false,
 }) => {
   const { runPythonCode, setPythonGlobal } = usePyodide();
+  const { displayAlert } = useAlert();
 
   const [stage, setStage] = useState<number>(initialStage);
   const [loading, setLoading] = useState<boolean>(false);
@@ -113,17 +114,27 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   const [acquisitionTitle, setAcquisitionTitle] = useState<string>(acquisition);
   const [acquisitionDescription, setAcquisitionDescription] = useState<string>("");
 
-  // The multi-select field for stage 1 still uses Tagify.
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const tagifyRef = useRef<any>(null);
 
-  const { displayAlert } = useAlert();
+  // Helper to infer the data type
+  const inferDataType = (value: any): DataType => {
+    if (Array.isArray(value)) return "list";
+    if (typeof value === "number") return "number";
+    return "string";
+  };
 
-  // Helper function to transform a FieldData value.
+  // When saving, convert the string back based on type.
   const transformField = (data: FieldData): any => {
-    // Attempt to parse as a number; if valid, return numeric value.
-    const num = parseFloat(data.value);
-    return !isNaN(num) ? num : data.value;
+    switch (data.dataType) {
+      case "number":
+        return parseFloat(data.value);
+      case "list":
+        // Split comma separated string; adjust as needed.
+        return data.value.split(",").map((s) => s.trim());
+      default:
+        return data.value;
+    }
   };
 
   const presetOptions = [
@@ -172,28 +183,24 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   }, [stage, validFields]);
 
   const handleGlobalSave = () => {
-    console.log("Saving acquisition...");
-    const constantFieldsJson = formData.constant.map(field => ({
+    const constantFieldsJson = formData.constant.map((field) => ({
       field: field.name,
       value: transformField(field.data),
     }));
-    const seriesJson = formData.variable.map(row => {
+    const seriesJson = formData.variable.map((row) => {
       const seriesName = row.Series.value;
       const fields = Object.keys(row)
-        .filter(key => key !== "Series")
-        .map(key => ({
+        .filter((key) => key !== "Series")
+        .map((key) => ({
           field: key,
           value: transformField(row[key]),
         }));
       return { name: seriesName, fields };
     });
     const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
-    // Pass the JSON upward
     if (onSaveAcquisition) {
-      console.log("Acquisition saving upwards:", acquisitionJson);
       onSaveAcquisition(acquisition, acquisitionJson);
     }
-    // Exit global edit mode
     setGlobalEdit(false);
   };
 
@@ -206,7 +213,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   const handleNext = async () => {
     setLoading(true);
     try {
-
       setPythonGlobal("current_acquisition", acquisition);
       setPythonGlobal("selected_fields", selectedFields);
       const uniqueRows = await runPythonCode(`
@@ -224,41 +230,48 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
         newConstant.push({
           id: field,
           name: field,
-          data: { constraintType: "value", value: String(constantFields[field]) },
+          data: {
+            constraintType: "value",
+            value: String(constantFields[field]),
+            dataType: inferDataType(constantFields[field]),
+          },
         });
       }
       const newVariable: VariableRow[] = data.map((row: Record<string, any>) => {
         const newRow: VariableRow = {
-          Series: { constraintType: "value", value: String(row["Series"]) },
+          Series: {
+            constraintType: "value",
+            value: String(row["Series"]),
+            dataType: inferDataType(row["Series"]),
+          },
         };
         for (const field of variableFields) {
-          newRow[field] = { constraintType: "value", value: String(row[field] || "") };
+          newRow[field] = {
+            constraintType: "value",
+            value: String(row[field] ?? ""),
+            dataType: inferDataType(row[field]),
+          };
         }
         return newRow;
       });
-
-      // Update state and stage
       setFormData({ constant: newConstant, variable: newVariable });
       setStage(2);
       setGlobalEdit(false);
-
-      // Build the JSON object directly from newConstant and newVariable
-      const constantFieldsJson = newConstant.map(field => ({
+      const constantFieldsJson = newConstant.map((field) => ({
         field: field.name,
         value: transformField(field.data),
       }));
-      const seriesJson = newVariable.map(row => {
+      const seriesJson = newVariable.map((row) => {
         const seriesName = row.Series.value;
         const fields = Object.keys(row)
-          .filter(key => key !== "Series")
-          .map(key => ({
+          .filter((key) => key !== "Series")
+          .map((key) => ({
             field: key,
             value: transformField(row[key]),
           }));
         return { name: seriesName, fields };
       });
       const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
-
       if (onSaveAcquisition) {
         onSaveAcquisition(acquisition, acquisitionJson);
       }
@@ -267,6 +280,22 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const computeConstantFields = (data: any[], selectedFields: string[]) => {
+    let constantFields: Record<string, any> = {};
+    let variableFields: string[] = [];
+    if (data.length > 0) {
+      selectedFields.forEach((field) => {
+        const allSame = data.every((row) => row[field] === data[0][field]);
+        if (allSame) {
+          constantFields[field] = data[0][field];
+        } else {
+          variableFields.push(field);
+        }
+      });
+    }
+    return { constantFields, variableFields };
   };
 
   const updateConstantField = (
@@ -312,7 +341,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       if (newVariable.length === 0) {
         newVariable = [
           {
-            Series: { constraintType: "value", value: "1" },
+            Series: { constraintType: "value", value: "1", dataType: "number" },
             [columnName]: fieldToConvert.data,
           },
         ];
@@ -337,9 +366,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
           return acc;
         }, {} as Record<string, any>);
       const key = JSON.stringify(sorted);
-      if (seen.has(key)) {
-        return false;
-      }
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
@@ -349,26 +376,9 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     }));
   };
 
-  const computeConstantFields = (data: any[], selectedFields: string[]) => {
-    let constantFields: Record<string, any> = {};
-    let variableFields: string[] = [];
-
-    if (data.length > 0) {
-      selectedFields.forEach((field) => {
-        const allSame = data.every((row) => row[field] === data[0][field]);
-        if (allSame) {
-          constantFields[field] = data[0][field];
-        } else {
-          variableFields.push(field);
-        }
-      });
-    }
-    return { constantFields, variableFields };
-  };
-
   const handleMakeConstant = (column: string) => {
     setFormData((prev) => {
-      let earliestValue: FieldData = { constraintType: "value", value: "" };
+      let earliestValue: FieldData = { constraintType: "value", value: "", dataType: "string" };
       if (prev.variable.length > 0 && prev.variable[0][column]) {
         earliestValue = prev.variable[0][column];
       }
@@ -391,7 +401,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     const newField = {
       id: String(Date.now()),
       name: "",
-      data: { constraintType: "value", value: "" },
+      data: { constraintType: "value", value: "", dataType: "string" },
     };
     setFormData((prev) => ({
       ...prev,
@@ -403,11 +413,11 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   const handleAddSeries = () => {
     setFormData((prev) => {
       const nextSeries = prev.variable.length + 1;
-      const newRow: VariableRow = { Series: { constraintType: "value", value: String(nextSeries) } };
+      const newRow: VariableRow = { Series: { constraintType: "value", value: String(nextSeries), dataType: "number" } };
       if (prev.variable.length > 0) {
         Object.keys(prev.variable[0]).forEach((col) => {
           if (col !== "Series") {
-            newRow[col] = { constraintType: "value", value: "" };
+            newRow[col] = { ...prev.variable[0][col] };
           }
         });
       }
@@ -551,7 +561,14 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
         default:
           display = cellData.value;
       }
-      return <Text>{display}</Text>;
+      return (
+        <VStack align="start" spacing={1}>
+          <Text>{display}</Text>
+          <Text fontSize="xs" color="gray.500">
+            {cellData.dataType}
+          </Text>
+        </VStack>
+      );
     }
 
     return (
@@ -571,13 +588,18 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
           </Select>
         )}
         {cellData.constraintType === "value" && (
-          <Input
-            size="xs"
-            value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
-            onBlur={() => onChange({ value: localValue })}
-            width={40}
-          />
+          <>
+            <Input
+              size="xs"
+              value={localValue}
+              onChange={(e) => setLocalValue(e.target.value)}
+              onBlur={() => onChange({ value: localValue })}
+              width={40}
+            />
+            <Text fontSize="xs" color="gray.500">
+              {cellData.dataType}
+            </Text>
+          </>
         )}
         {cellData.constraintType === "range" && (
           <HStack spacing={1}>
@@ -619,13 +641,18 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
           </>
         )}
         {cellData.constraintType === "contains" && (
-          <Input
-            size="xs"
-            value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
-            onBlur={() => onChange({ value: localValue })}
-            width={40}
-          />
+          <>
+            <Input
+              size="xs"
+              value={localValue}
+              onChange={(e) => setLocalValue(e.target.value)}
+              onBlur={() => onChange({ value: localValue })}
+              width={40}
+            />
+            <Text fontSize="xs" color="gray.500">
+              {cellData.dataType}
+            </Text>
+          </>
         )}
       </VStack>
     );
@@ -833,7 +860,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
               )}
               {globalEdit ? (
                 <Button size="sm" onClick={handleGlobalSave} colorScheme="blue" disabled={
-                  Object.values(editingRows).some(v => v) || Object.values(editingConstants).some(v => v)
+                  Object.values(editingRows).some((v) => v) || Object.values(editingConstants).some((v) => v)
                 }>
                   Save
                 </Button>

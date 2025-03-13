@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Heading, Text, Wrap, WrapItem, Button, Icon, Spinner, VStack } from '@chakra-ui/react';
+import { Box, Heading, Text, Wrap, WrapItem, Button, Icon, Spinner, Progress, VStack } from '@chakra-ui/react';
 import { FiPlus } from 'react-icons/fi';
 import CollapsibleCard from '../../components/CollapsibleCard';
 import { useAlert } from '../../components/Alert';
@@ -20,6 +20,7 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
   const [sessionValidFields, setSessionValidFields] = useState<string[]>([]);
   const [cardsEditState, setCardsEditState] = useState<Record<string, boolean>>({});
   const [cardsStageState, setCardsStageState] = useState<Record<string, number>>({});
+  const [dicomProgress, setDICOMProgress] = useState<number>(0);
 
   const { displayAlert } = useAlert();
   const { runPythonCode, setPythonGlobal } = usePyodide();
@@ -48,6 +49,10 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
     setAcquisitionsData(acquisitionsJson);
   }, [acquisitionsJson, setAcquisitionsData]);
 
+  const updateProgress = useCallback((p: number) => {
+    setDICOMProgress(p);
+  }, []);
+
   const processDicomFiles = async (files: File[]): Promise<any[]> => {
     const dicomFiles: Record<string, Uint8Array> = {};
     for (const file of files) {
@@ -58,10 +63,11 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
 
     // Use the helper to set a Python global
     setPythonGlobal("dicom_files", dicomFiles);
+    await setPythonGlobal("update_progress", updateProgress);
 
     const code = `
 import json
-from dicompare.io import load_dicom_session, assign_acquisition_and_run_numbers
+from dicompare.io import async_load_dicom_session, assign_acquisition_and_run_numbers
 import pandas as pd
 
 global session
@@ -71,7 +77,7 @@ except NameError:
     session = None
     existing_session = None
 
-new_session = load_dicom_session(dicom_bytes=dicom_files.to_py())
+new_session = await async_load_dicom_session(dicom_bytes=dicom_files.to_py(), progress_function=update_progress)
 new_session = assign_acquisition_and_run_numbers(new_session)
 if existing_session is not None:
     for acquisition in new_session['Acquisition'].unique():
@@ -235,7 +241,7 @@ json.dumps(acquisition_list)
             `);
           },
         },
-        { option: "Cancel", callback: () => {} }
+        { option: "Cancel", callback: () => { } }
       ]
     );
   };
@@ -264,6 +270,7 @@ json.dumps(acquisition_list)
           <>
             <Spinner size="lg" color="teal.500" />
             <Text mt={2}>Processing DICOM files, please wait...</Text>
+            <Progress value={dicomProgress} size="sm" mt={2} />
           </>
         ) : (
           <>
