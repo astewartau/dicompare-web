@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Heading, Text, Wrap, WrapItem, Button, Icon, Spinner, Progress, VStack } from '@chakra-ui/react';
 import { FiPlus } from 'react-icons/fi';
-import CollapsibleCard from '../../components/CollapsibleCard';
+import CollapsibleCard from '../../components/CollapsibleCard/CollapsibleCard';
 import { useAlert } from '../../components/Alert';
 import { usePyodide } from '../../components/PyodideContext';
 

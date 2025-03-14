@@ -6,3 +6,17 @@
   min-width: 300px;
   max-width: 400px;
 }
+
+/* tagify-overrides.css */
+.tagify__input {
+  height: auto !important;
+  min-height: 32px;
+  overflow: visible !important;
+  white-space: normal !important;
+}
+
+.tagify {
+  height: auto !important;
+  overflow: visible !important;
+  white-space: normal !important;
+}
