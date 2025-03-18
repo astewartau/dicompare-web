@@ -59,7 +59,6 @@ export const EditableCell: React.FC<EditableCellProps> = ({
   const renderInput = () => {
     if (cellData.constraintType === "value") {
       if (cellData.dataType === "list") {
-        const initialTags = cellData.value.split(",").map((s) => s.trim()).filter((s) => s);
         // You could import TagifyInput from Inputs.tsx if needed.
         return (
           <div>

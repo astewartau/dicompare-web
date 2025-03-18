@@ -6,7 +6,6 @@ import {
   Button,
   Collapse,
   IconButton,
-  VStack,
   HStack,
   Badge,
   Code,
