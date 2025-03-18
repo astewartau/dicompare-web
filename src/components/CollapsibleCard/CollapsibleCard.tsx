@@ -28,7 +28,7 @@ import {
   FormData,
   DataType,
 } from "./types";
-import { computeConstantFields, deduplicateRows, getRowUniqueKey } from "./utils";
+import { computeConstantFields, deduplicateRows } from "./utils";
 import Tagify from '@yaireo/tagify';
 import '@yaireo/tagify/dist/tagify.css';
 
@@ -61,13 +61,11 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   hideBackButton = false,
 }) => {
   const { runPythonCode, setPythonGlobal } = usePyodide();
-  const { displayAlert } = useAlert();
 
   const [stage, setStage] = useState<number>(initialStage);
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [formData, setFormData] = useState<FormData>({ constant: [], variable: [] });
-  const [editingConstants, setEditingConstants] = useState<Record<string, boolean>>({});
   const [globalEdit, setGlobalEdit] = useState<boolean>(initialEditMode);
 
   const [acquisitionTitle, setAcquisitionTitle] = useState<string>(acquisition);
@@ -261,36 +259,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     } finally {
       setLoading(false);
     }
-  };
-
-  const updateConstantField = (
-    id: string,
-    updates: Partial<FieldData> & { name?: string }
-  ) => {
-    setFormData((prev) => {
-      const newConst = prev.constant.map((field) =>
-        field.id === id
-          ? { ...field, name: updates.name ?? field.name, data: { ...field.data, ...updates } }
-          : field
-      );
-      return { ...prev, constant: newConst };
-    });
-  };
-
-  const updateVariableField = (
-    rowIndex: number,
-    field: string,
-    updates: Partial<FieldData>
-  ) => {
-    setFormData((prev) => {
-      const newVariable = prev.variable.map((row, idx) => {
-        if (idx === rowIndex) {
-          return { ...row, [field]: { ...row[field], ...updates } };
-        }
-        return row;
-      });
-      return { ...prev, variable: newVariable };
-    });
   };
 
   const handleMakeVariable = (id: string) => {

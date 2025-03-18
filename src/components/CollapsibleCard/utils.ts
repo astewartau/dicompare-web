@@ -1,6 +1,6 @@
 // components/CollapsibleCard/utils.ts
 
-import { VariableRow, FieldData } from "./types";
+import { VariableRow } from "./types";
 
 export const computeConstantFields = (data: any[], selectedFields: string[]) => {
   let constantFields: Record<string, any> = {};

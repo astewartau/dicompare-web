@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
 import VerticalStepper from '../../components/Stepper';
-import Introduction from './Introduction';
-import UploadFiles from './UploadFiles';
-import UploadConfiguration from './UploadConfiguration';
 import ComplianceResults from './ComplianceResults';
 import NavigationBar from '../../components/NavigationBar';
 import FinalizeMapping from './FinalizeMapping';
@@ -12,15 +9,6 @@ interface CheckComplianceProps {
 }
 
 const CheckCompliance: React.FC<CheckComplianceProps> = ({ }) => {
-  // DICOM state
-  const [dicomCount, setDicomCount] = useState<number | null>(null);
-  const [dicomFolder, setDicomFolder] = useState<string | null>(null);
-
-  // Reference file state (JSON or .py)
-  const [referenceFile, setReferenceFile] = useState<{ name: string; content: string } | null>(null);
-  const [option, setOption] = useState<'existing' | 'upload'>('existing');
-  const [existingConfig, setExistingConfig] = useState('');
-
   // Control the Next button across all steps
   const [isNextDisabled, setIsNextDisabled] = useState(false);
 

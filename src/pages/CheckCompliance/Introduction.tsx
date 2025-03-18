@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Box, Heading, Text, VStack, Flex, Icon } from '@chakra-ui/react';
+import { Box, Text, VStack, Flex, Icon } from '@chakra-ui/react';
 import { FiUpload, FiSettings, FiCheckCircle } from 'react-icons/fi';
 
 interface IntroductionProps {

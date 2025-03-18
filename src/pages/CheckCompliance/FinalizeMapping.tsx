@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
-  Heading,
   Text,
   Input,
   Icon,
@@ -10,7 +9,6 @@ import {
   Flex,
   IconButton,
   Collapse,
-  Tooltip,
   Spinner,
   Progress
 } from '@chakra-ui/react';
@@ -49,8 +47,6 @@ const FinalizeMapping: React.FC = () => {
   // --- UI expansion states ---
   const [expandedReferences, setExpandedReferences] = useState<Record<string, boolean>>({});
   const [expandedInputs, setExpandedInputs] = useState<Record<string, boolean>>({});
-  const [allReferencesExpanded, setAllReferencesExpanded] = useState(false);
-  const [allInputsExpanded, setAllInputsExpanded] = useState(false);
 
   // --- Pairing area state ---
   const [pairs, setPairs] = useState<Pair[]>([]);
@@ -435,22 +431,6 @@ json.dumps(input_acquisitions["acquisitions"])
       }
       return newPairs;
     });
-  };
-
-  /**
-   * Converts the pairs into a session_map format and updates the Python environment.
-   */
-  const updateSessionMap = async (newPairs: Pair[]) => {
-    const sessionMap: Record<string, string> = {};
-
-    newPairs.forEach(pair => {
-      if (pair.ref && pair.inp) {
-        sessionMap[pair.inp.name] = pair.ref.name;
-      }
-    });
-
-    console.log("Updated session_map:", sessionMap);
-    await setPythonGlobal("session_map", JSON.stringify(sessionMap));
   };
 
   return (

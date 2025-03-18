@@ -18,7 +18,6 @@ import {
     FormLabel,
     FormErrorMessage,
     Select,
-    VStack,
     HStack,
     Input as ChakraInput,
     Tabs,

@@ -110,7 +110,6 @@ const EditRowModal: React.FC<EditRowModalProps> = ({
                   cellData={localRow[field]}
                   editable={true}
                   onChange={(updates) => handleCellChange(field, updates)}
-                  fieldName={field}
                   showDataType={false}
                 />
               </FormControl>
