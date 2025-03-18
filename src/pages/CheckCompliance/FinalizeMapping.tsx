@@ -19,7 +19,8 @@ import {
   DragDropContext,
   Droppable,
   Draggable,
-  DropResult
+  DropResult,
+  DraggableProvided
 } from 'react-beautiful-dnd';
 
 interface Acquisition {
@@ -131,7 +132,7 @@ json.dumps(ref_session["acquisitions"])
           const parsed = JSON.parse(result);
           const refs = Object.entries(parsed).map(([acqName, obj]) => ({
             name: acqName,
-            details: obj
+            details: obj as Record<string, any>
           }));
           setReferenceOptions(refs);
           console.log(`Schema "${referenceFile.name}" loaded.`);
@@ -179,7 +180,7 @@ json.dumps(input_acquisitions["acquisitions"])
       const parsed = JSON.parse(result);
       const ins = Object.entries(parsed).map(([acqName, acqObj]) => ({
         name: acqName,
-        details: acqObj
+        details: acqObj as Record<string, any>
       }));
       setInputOptions(ins);
       console.log("Input DICOMs loaded.");
@@ -370,7 +371,7 @@ json.dumps(input_acquisitions["acquisitions"])
     const toggle = type === "ref" ? () => toggleReferenceDetails(acq.name) : () => toggleInputDetails(acq.name);
     return (
       <Draggable draggableId={`${type}-${acq.name}-${index}`} index={index} key={`${type}-${acq.name}-${index}`}>
-        {(provided) => (
+        {(provided: DraggableProvided) => (
           <Box
             ref={provided.innerRef}
             {...provided.draggableProps}
@@ -485,7 +486,14 @@ json.dumps(input_acquisitions["acquisitions"])
               mb={4}
             >
               <Text fontSize="sm" mb={2}>Drag and drop DICOM files here, or click to select.</Text>
-              <Input type="file" multiple webkitdirectory="true" display="none" id="dicom-upload" onChange={handleInputDICOMUpload} />
+              <Input
+                type="file"
+                multiple
+                display="none"
+                id="dicom-upload"
+                onChange={handleInputDICOMUpload}
+                ref={(input) => input && input.setAttribute('webkitdirectory', 'true')}
+              />
               <Button as="label" htmlFor="dicom-upload" size="sm" colorScheme="teal" leftIcon={<Icon as={FiUpload} />}>
                 Select DICOMs
               </Button>

@@ -16,7 +16,6 @@ import {
 } from "@chakra-ui/react";
 import { FiPlus } from 'react-icons/fi';
 import { EditIcon, DeleteIcon, RepeatIcon } from "@chakra-ui/icons";
-import { useAlert } from "../Alert";
 import { usePyodide } from "../PyodideContext";
 import { EditableCell } from "./EditableCell";
 import EditConstantModal from "./EditConstantModal";
@@ -148,8 +147,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       tagifyRef.current = new Tagify(inputRef.current, {
         enforceWhitelist: true,
         whitelist: validFields,
-        dropdown: { enabled: 1, maxItems: 10, position: "all" },
-        outerWidth: "100%",
+        dropdown: { enabled: 1, maxItems: 10, position: "all" }
       });
       if (selectedFields.length > 0) {
         tagifyRef.current.addTags(selectedFields);
@@ -711,7 +709,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             formData.constant.find((field) => field.id === editingConstantId) as ConstantField
           }
           onSave={(updatedField) => {
-            handleConstantModalSave(updatedField);
+            handleConstantModalSave(updatedField as ConstantField);
             setConstantModalOpen(false);
             setEditingConstantId(null);
           }}
@@ -726,14 +724,19 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             setEditingSeriesRowIndex(null);
           }}
           seriesRow={formData.variable[editingSeriesRowIndex]}
-          onSave={(updatedRow: VariableRow) => {
-            setFormData((prev) => {
-              const newVariable = [...prev.variable];
-              newVariable[editingSeriesRowIndex] = updatedRow;
-              return { ...prev, variable: newVariable };
-            });
-            setSeriesModalOpen(false);
-            setEditingSeriesRowIndex(null);
+          onSave={(updated: ConstantField | VariableRow) => {
+            if ("Series" in updated) {
+              // Handle VariableRow
+              setFormData((prev) => {
+                const newVariable = [...prev.variable];
+                newVariable[editingSeriesRowIndex] = updated;
+                return { ...prev, variable: newVariable };
+              });
+              setSeriesModalOpen(false);
+              setEditingSeriesRowIndex(null);
+            } else {
+              console.error("Unexpected type: ConstantField is not supported here.");
+            }
           }}
           mode="series"
         />

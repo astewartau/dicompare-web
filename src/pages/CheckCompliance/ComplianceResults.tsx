@@ -49,7 +49,7 @@ const ComplianceResults: React.FC = () => {
   const [rawJson, setRawJson] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const { hasCopied, onCopy } = useClipboard(rawJson);
-  const { runPythonCode, setPythonGlobal } = usePyodide();
+  const { runPythonCode } = usePyodide();
 
   const groupByAcquisition = (items: ComplianceItem[]): AcquisitionMap => {
     const map: AcquisitionMap = {};

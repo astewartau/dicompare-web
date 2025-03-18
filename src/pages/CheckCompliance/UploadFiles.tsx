@@ -207,10 +207,10 @@ json.dumps({"result": True})
             <input
               type="file"
               multiple
-              webkitdirectory="true"
               style={{ display: 'none' }}
               id="dicom-upload"
               onChange={handleFileUpload}
+              ref={(input) => input && input.setAttribute('webkitdirectory', 'true')}
             />
             <Button as="label" htmlFor="dicom-upload" colorScheme="teal" leftIcon={<Icon as={FiUpload} />}>
               Select DICOMs

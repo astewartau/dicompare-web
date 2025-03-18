@@ -41,7 +41,6 @@ const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ }) => {
       component: (
         <Review
           templateJson={templateJson}
-          setIsNextDisabled={setIsNextDisabled}
         />
       ),
     },

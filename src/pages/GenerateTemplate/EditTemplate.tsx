@@ -278,10 +278,10 @@ json.dumps(acquisition_list)
             <input
               type="file"
               multiple
-              webkitdirectory="true"
               style={{ display: 'none' }}
               id="dicom-upload"
               onChange={handleFileUpload}
+              ref={(input) => input && input.setAttribute('webkitdirectory', 'true')}
             />
             <Button as="label" htmlFor="dicom-upload" colorScheme="teal">
               Upload DICOMs

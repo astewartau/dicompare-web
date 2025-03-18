@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Heading, Text, Button } from "@chakra-ui/react";
+import { Box, Text, Button } from "@chakra-ui/react";
 import { saveAs } from "file-saver";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { materialLight } from "react-syntax-highlighter/dist/esm/styles/prism";

@@ -68,7 +68,9 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
         }
     );
     // For series mode.
-    const [localRow, setLocalRow] = useState<VariableRow>(seriesRow || {});
+    const [localRow, setLocalRow] = useState<VariableRow>(
+        seriesRow || { Series: { value: "", constraintType: "value", dataType: "string" } }
+    );
 
     // Error state for constant mode.
     const [errors, setErrors] = useState<{
@@ -189,7 +191,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     const handleConstraintChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setLocalField((prev) => ({
             ...prev,
-            data: { ...prev.data, constraintType: e.target.value },
+            data: { ...prev.data, constraintType: e.target.value as ConstraintType },
         }));
     };
 
@@ -266,7 +268,11 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     ) => {
         setLocalRow((prev) => ({
             ...prev,
-            [fieldKey]: { ...prev[fieldKey], ...newData },
+            [fieldKey]: {
+                ...prev[fieldKey],
+                ...newData,
+                constraintType: newData.constraintType as ConstraintType,
+            },
         }));
     };
 

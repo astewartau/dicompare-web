@@ -14,7 +14,6 @@ export const EditableCell: React.FC<EditableCellProps> = ({
   cellData,
   editable,
   onChange,
-  fieldName,
   showDataType = false,
 }) => {
   const [localValue, setLocalValue] = useState(cellData.value);

@@ -95,7 +95,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
   const handleConstraintChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setLocalField((prev) => ({
       ...prev,
-      data: { ...prev.data, constraintType: e.target.value },
+      data: { ...prev.data, constraintType: e.target.value as ConstraintType },
     }));
   };
 

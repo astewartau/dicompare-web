@@ -18,7 +18,7 @@ const PyodideContext = createContext<PyodideContextType>({
 
 export const usePyodide = () => useContext(PyodideContext);
 
-export const PyodideProvider: React.FC = ({}) => {
+export const PyodideProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [pyodide, setPyodide] = useState<any>(null);
   const [pyodideLoading, setPyodideLoading] = useState(false);
   const [pyodideReady, setPyodideReady] = useState(false);

@@ -17,7 +17,7 @@ import {
 } from "@chakra-ui/react";
 import { EditableCell } from "./EditableCell";
 import { allowedConstraints } from "./EditableCell";
-import { VariableRow, DataType } from "./types";
+import { VariableRow, DataType, ConstraintType } from "./types";
 
 interface EditRowModalProps {
   isOpen: boolean;
@@ -57,12 +57,12 @@ const EditRowModal: React.FC<EditRowModalProps> = ({
     }));
   };
 
-  const handleConstraintChange = (field: string, ct: string) => {
-    setLocalRow((prev) => ({
-      ...prev,
-      [field]: { ...prev[field], constraintType: ct },
-    }));
-  };
+  const handleConstraintChange = (field: string, ct: ConstraintType) => {
+      setLocalRow((prev) => ({
+        ...prev,
+        [field]: { ...prev[field], constraintType: ct },
+      }));
+    };
 
   const handleSave = () => {
     onSave(rowIndex, localRow);
@@ -96,7 +96,7 @@ const EditRowModal: React.FC<EditRowModalProps> = ({
                   </Select>
                   <Select
                     value={localRow[field].constraintType}
-                    onChange={(e) => handleConstraintChange(field, e.target.value)}
+                    onChange={(e) => handleConstraintChange(field, e.target.value as ConstraintType)}
                     size="sm"
                   >
                     {allowedConstraints(localRow[field].dataType).map((ct) => (

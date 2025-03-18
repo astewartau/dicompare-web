@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Box, Heading, Text, Input, VStack, HStack, Badge, Button, Collapse, IconButton, Link } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
 
@@ -47,7 +47,7 @@ const certificates = [
 
 const CertificateList = () => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [expanded, setExpanded] = useState(null);
+    const [expanded, setExpanded] = useState<number | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const certificatesPerPage = 2;
 
