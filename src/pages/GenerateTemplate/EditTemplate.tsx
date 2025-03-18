@@ -41,9 +41,16 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
       setIsNextDisabled(true);
       return;
     }
+    
+    // Check if there is at least one acquisition that has been saved
+    const hasValidAcquisitions = Object.keys(acquisitionsJson).length > 0;
+    
+    // All acquisitions must be in stage 2 (complete) and not being edited
     const allComplete = acquisitionList.every(acq => cardsStageState[acq] === 2 && !cardsEditState[acq]);
-    setIsNextDisabled(!allComplete);
-  }, [acquisitionList, cardsStageState, cardsEditState, setIsNextDisabled]);
+    
+    // Only enable the Next button if there are saved acquisitions AND all are complete
+    setIsNextDisabled(!(hasValidAcquisitions && allComplete));
+  }, [acquisitionList, cardsStageState, cardsEditState, acquisitionsJson, setIsNextDisabled]);
 
   useEffect(() => {
     setAcquisitionsData(acquisitionsJson);
@@ -120,17 +127,49 @@ json.dumps(acquisition_list)
     setIsUploading(true);
     try {
       const dicomAcquisitions = await processDicomFiles(files);
+      
+      if (dicomAcquisitions.length === 0) {
+        displayAlert(
+          "No valid acquisitions were found in the uploaded files.",
+          "Warning",
+          [{ option: "OK", callback: () => {} }],
+          "warning"
+        );
+        return;
+      }
+      
       setAcquisitionList(prev => {
         const newAcqs = dicomAcquisitions.map((acq: any) => acq.Acquisition);
         return Array.from(new Set([...prev, ...newAcqs]));
       });
+      
       const acquisitionsData: Record<string, any> = {};
       dicomAcquisitions.forEach((acq: any) => {
         acquisitionsData[acq.Acquisition] = { fields: [], series: [] };
       });
       setAcquisitionsData(acquisitionsData);
+      
+      // Update acquisitionsJson with the new data
+      setAcquisitionsJson(prev => ({
+        ...prev,
+        ...acquisitionsData
+      }));
+      
+      // Show success message
+      displayAlert(
+        `Successfully uploaded ${dicomAcquisitions.length} acquisition(s).`,
+        "Success",
+        [{ option: "OK", callback: () => {} }],
+        "success"
+      );
     } catch (error) {
       console.error('Error processing DICOM files:', error);
+      displayAlert(
+        "Error processing DICOM files. Please check the console for details.",
+        "Error",
+        [{ option: "OK", callback: () => {} }],
+        "error"
+      );
     } finally {
       setIsUploading(false);
     }
@@ -146,6 +185,14 @@ json.dumps(acquisition_list)
 
   const handleSaveAcquisition = (acq: string, jsonData: any) => {
     setAcquisitionsJson(prev => ({ ...prev, [acq]: jsonData }));
+    
+    // Provide feedback that the acquisition was saved successfully
+    displayAlert(
+      `Acquisition ${acq} has been saved successfully.`,
+      "Success",
+      [{ option: "OK", callback: () => {} }],
+      "success"
+    );
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
