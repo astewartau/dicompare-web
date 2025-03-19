@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Text,
-  Input,
-  Icon,
   Button,
   VStack,
   Flex,
@@ -14,7 +12,6 @@ import {
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
 import { usePyodide } from '../../components/PyodideContext';
-import { FiUpload } from 'react-icons/fi';
 import {
   DragDropContext,
   Droppable,
@@ -33,7 +30,12 @@ interface Pair {
   inp: Acquisition | null;
 }
 
-const FinalizeMapping: React.FC = () => {
+interface FinalizeMappingProps {
+  setIsNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  isActive?: boolean;
+}
+
+const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ setIsNextEnabled, isActive }) => {
   // --- Schema state ---
   const [referenceFile, setReferenceFile] = useState<{ name: string; content: string } | null>(null);
   const [schemaLoading, setSchemaLoading] = useState(false);
@@ -57,6 +59,13 @@ const FinalizeMapping: React.FC = () => {
   // --- Drag state for uploads ---
   const [isSchemaDragActive, setIsSchemaDragActive] = useState(false);
   const [isDICOMDragActive, setIsDICOMDragActive] = useState(false);
+
+  // --- useEffect to enable/disable Next button ---
+  useEffect(() => {
+    if (!isActive) return;
+    const isValid = referenceOptions.length > 0 && inputOptions.length > 0;
+    setIsNextEnabled(isValid);
+  }, [referenceOptions, inputOptions, setIsNextEnabled, isActive]);
 
   const updateProgress = useCallback((p: number) => {
     setDICOMProgress(p);
@@ -436,76 +445,99 @@ json.dumps(input_acquisitions["acquisitions"])
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <Box p={6}>
-        <Flex gap={6} mb={8}>
-          {/* Top row with upload areas */}
+      <Box p={4}>
+        <Text mb={8} color="gray.700">
+          Select a template schema and a DICOM session to verify compliance.
+        </Text>
+        <Flex gap={8} mb={8}>
           <Box flex="1">
+            <Text mb={4} fontWeight="medium" color="teal.600">Schema Template</Text>
             <Box
-              p={3}
+              mb={6}
+              p={4}
               borderWidth="1px"
               borderRadius="md"
-              textAlign="center"
               bg={isSchemaDragActive ? "gray.200" : "gray.50"}
-              onDragOver={handleSchemaDragOver}
+              textAlign="center"
+              onDragEnter={handleSchemaDragOver}
+              onDragOver={(e) => {
+                e.preventDefault();
+              }}
               onDragLeave={handleSchemaDragLeave}
               onDrop={handleSchemaDrop}
-              mb={4}
             >
-              <Text fontSize="sm" mb={2}>Drag and drop a schema file here, or click to select.</Text>
-              <Input type="file" accept=".py,.json" display="none" id="schema-upload" onChange={handleSchemaUpload} />
-              <Button as="label" htmlFor="schema-upload" size="sm" colorScheme="teal" leftIcon={<Icon as={FiUpload} />}>
-                Select schema
-              </Button>
-              {schemaLoading && (
-                <Flex align="center" justify="center" p={4}>
-                  <Spinner size="md" color="blue.500" mr={2} />
-                  <Text>Loading schema...</Text>
-                </Flex>
-              )}
-              {referenceFile && (
-                <Text mt={2} fontSize="sm" color="gray.500">Current schema: {referenceFile.name}</Text>
+              {schemaLoading ? (
+                <>
+                  <Spinner size="lg" color="teal.500" />
+                  <Text mt={2}>Loading schema, please wait...</Text>
+                </>
+              ) : (
+                <>
+                  <Text mb={2}>Drag & drop your schema file or click to select.</Text>
+                  <input
+                    type="file"
+                    accept=".py,.json"
+                    style={{ display: 'none' }}
+                    id="schema-upload"
+                    onChange={handleSchemaUpload}
+                  />
+                  <Button as="label" htmlFor="schema-upload" colorScheme="teal">
+                    Upload Schema
+                  </Button>
+                  {referenceFile && (
+                    <Text mt={4} fontSize="sm" color="gray.600">Loaded: {referenceFile.name}</Text>
+                  )}
+                </>
               )}
             </Box>
           </Box>
           <Box flex="1">
+            <Text mb={4} fontWeight="medium" color="teal.600">DICOM Files</Text>
             <Box
-              p={3}
+              mb={6}
+              p={4}
               borderWidth="1px"
               borderRadius="md"
-              textAlign="center"
               bg={isDICOMDragActive ? "gray.200" : "gray.50"}
-              onDragOver={(e) => {
+              textAlign="center"
+              onDragEnter={(e) => {
                 e.preventDefault();
                 setIsDICOMDragActive(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
               }}
               onDragLeave={(e) => {
                 e.preventDefault();
                 setIsDICOMDragActive(false);
               }}
               onDrop={handleInputDICOMDrop}
-              mb={4}
             >
-              <Text fontSize="sm" mb={2}>Drag and drop DICOM files here, or click to select.</Text>
-              <Input
-                type="file"
-                multiple
-                display="none"
-                id="dicom-upload"
-                onChange={handleInputDICOMUpload}
-                ref={(input) => input && input.setAttribute('webkitdirectory', 'true')}
-              />
-              <Button as="label" htmlFor="dicom-upload" size="sm" colorScheme="teal" leftIcon={<Icon as={FiUpload} />}>
-                Select DICOMs
-              </Button>
               {isDICOMUploading ? (
-                <Box mt={2}>
-                  <Spinner size="md" color="blue.500" mr={2} />
-                  <Text display="inline">Analyzing DICOMs... {dicomProgress}%</Text>
+                <>
+                  <Spinner size="lg" color="teal.500" />
+                  <Text mt={2}>Processing DICOM files, please wait...</Text>
                   <Progress value={dicomProgress} size="sm" mt={2} />
-                </Box>
-              ) : inputDICOMFiles.length > 0 ? (
-                <Text mt={2} fontSize="sm" color="gray.500">{inputDICOMFiles.length} DICOM file(s) loaded.</Text>
-              ) : null}
+                </>
+              ) : (
+                <>
+                  <Text mb={2}>Drag & drop your DICOM files or click to select.</Text>
+                  <input
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    id="dicom-upload"
+                    onChange={handleInputDICOMUpload}
+                    ref={(input) => input && input.setAttribute('webkitdirectory', 'true')}
+                  />
+                  <Button as="label" htmlFor="dicom-upload" colorScheme="teal">
+                    Upload DICOMs
+                  </Button>
+                  {inputDICOMFiles.length > 0 && (
+                    <Text mt={4} fontSize="sm" color="gray.600">{inputDICOMFiles.length} DICOM files loaded.</Text>
+                  )}
+                </>
+              )}
             </Box>
           </Box>
         </Flex>

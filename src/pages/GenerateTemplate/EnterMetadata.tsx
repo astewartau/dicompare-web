@@ -14,10 +14,11 @@ import '@yaireo/tagify/dist/tagify.css';
 
 interface EnterMetadataProps {
   setMetadata: (data: { name: string; description: string; authors: string[] }) => void;
-  setIsNextDisabled: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  isActive?: boolean;
 }
 
-const EnterMetadata: React.FC<EnterMetadataProps> = ({ setMetadata, setIsNextDisabled }) => {
+const EnterMetadata: React.FC<EnterMetadataProps> = ({ setMetadata, setIsNextEnabled, isActive }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [authors, setAuthors] = useState<string[]>([]);
@@ -40,14 +41,15 @@ const EnterMetadata: React.FC<EnterMetadataProps> = ({ setMetadata, setIsNextDis
   }, []);
 
   useEffect(() => {
+    if (!isActive) return;
     setMetadata({
       name,
       description,
       authors,
     });
     const isValid = name.trim() !== '' && authors.length > 0;
-    setIsNextDisabled(!isValid);
-  }, [name, description, authors, setMetadata, setIsNextDisabled]);
+    setIsNextEnabled(isValid);
+  }, [name, description, authors, setMetadata, setIsNextEnabled, isActive]);
 
   return (
     <Box width="100%">

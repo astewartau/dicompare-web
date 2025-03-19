@@ -7,10 +7,11 @@ import { usePyodide } from '../../components/PyodideContext';
 
 interface EditTemplateProps {
   setAcquisitionsData: (data: Record<string, any>) => void;
-  setIsNextDisabled: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  isActive?: boolean;
 }
 
-const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsNextDisabled }) => {
+const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsNextEnabled, isActive }) => {
   const [acquisitionList, setAcquisitionList] = useState<string[]>([]);
   const [acquisitionsJson, setAcquisitionsJson] = useState<Record<string, any>>({});
   const [newAcqCounter, setNewAcqCounter] = useState<number>(1);
@@ -37,13 +38,26 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
   }, []);
 
   useEffect(() => {
+    if (!isActive) return;
+
     if (acquisitionList.length === 0) {
-      setIsNextDisabled(true);
+      setIsNextEnabled(false);
       return;
     }
-    const allComplete = acquisitionList.every(acq => cardsStageState[acq] === 2 && !cardsEditState[acq]);
-    setIsNextDisabled(!allComplete);
-  }, [acquisitionList, cardsStageState, cardsEditState, setIsNextDisabled]);
+
+    const hasValidAcquisitions = Object.keys(acquisitionsJson).length > 0;
+    const allComplete = acquisitionList.every(
+      (acq) => cardsStageState[acq] === 2 && !cardsEditState[acq]
+    );
+    setIsNextEnabled(hasValidAcquisitions && allComplete);
+  }, [
+    isActive,
+    acquisitionList,
+    cardsStageState,
+    cardsEditState,
+    acquisitionsJson,
+    setIsNextEnabled,
+  ]);
 
   useEffect(() => {
     setAcquisitionsData(acquisitionsJson);
@@ -120,17 +134,46 @@ json.dumps(acquisition_list)
     setIsUploading(true);
     try {
       const dicomAcquisitions = await processDicomFiles(files);
+
+      if (dicomAcquisitions.length === 0) {
+        displayAlert(
+          "No valid acquisitions were found in the uploaded files.",
+          "Warning",
+          [{ option: "OK", callback: () => { } }],
+        );
+        return;
+      }
+
       setAcquisitionList(prev => {
         const newAcqs = dicomAcquisitions.map((acq: any) => acq.Acquisition);
         return Array.from(new Set([...prev, ...newAcqs]));
       });
+
       const acquisitionsData: Record<string, any> = {};
       dicomAcquisitions.forEach((acq: any) => {
         acquisitionsData[acq.Acquisition] = { fields: [], series: [] };
       });
       setAcquisitionsData(acquisitionsData);
+
+      // Update acquisitionsJson with the new data
+      setAcquisitionsJson(prev => ({
+        ...prev,
+        ...acquisitionsData
+      }));
+
+      // Show success message
+      displayAlert(
+        `Successfully uploaded ${dicomAcquisitions.length} acquisition(s).`,
+        "Success",
+        [{ option: "OK", callback: () => { } }],
+      );
     } catch (error) {
       console.error('Error processing DICOM files:', error);
+      displayAlert(
+        "Error processing DICOM files. Please check the console for details.",
+        "Error",
+        [{ option: "OK", callback: () => { } }],
+      );
     } finally {
       setIsUploading(false);
     }

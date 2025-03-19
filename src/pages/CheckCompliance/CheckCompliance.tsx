@@ -10,13 +10,14 @@ interface CheckComplianceProps {
 
 const CheckCompliance: React.FC<CheckComplianceProps> = ({ }) => {
   // Control the Next button across all steps
-  const [isNextDisabled, setIsNextDisabled] = useState(false);
+  const [isNextEnabled, setIsNextEnabled] = useState(false);
 
   const steps = [
     {
       title: 'Finalize Mapping',
       component: (
         <FinalizeMapping
+          setIsNextEnabled={setIsNextEnabled}
         />
       ),
     },
@@ -36,8 +37,8 @@ const CheckCompliance: React.FC<CheckComplianceProps> = ({ }) => {
       </Box>
       <VerticalStepper
         steps={steps}
-        isNextDisabled={isNextDisabled}
-        setIsNextDisabled={setIsNextDisabled}
+        isNextEnabled={isNextEnabled}
+        setIsNextEnabled={setIsNextEnabled}
       />
     </>
   );

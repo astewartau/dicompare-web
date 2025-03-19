@@ -14,7 +14,7 @@ import {
   Tooltip,
   IconButton,
 } from "@chakra-ui/react";
-import { FiPlus } from 'react-icons/fi';
+import { FiPlus } from "react-icons/fi";
 import { EditIcon, DeleteIcon, RepeatIcon } from "@chakra-ui/icons";
 import { usePyodide } from "../PyodideContext";
 import { EditableCell } from "./EditableCell";

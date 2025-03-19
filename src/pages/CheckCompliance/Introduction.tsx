@@ -3,15 +3,14 @@ import { Box, Text, VStack, Flex, Icon } from '@chakra-ui/react';
 import { FiUpload, FiSettings, FiCheckCircle } from 'react-icons/fi';
 
 interface IntroductionProps {
-    setIsNextDisabled?: React.Dispatch<React.SetStateAction<boolean>>;
+    setIsNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+    isActive?: boolean;
 }
 
-const Introduction: React.FC<IntroductionProps> = ({ setIsNextDisabled }) => {
+const Introduction: React.FC<IntroductionProps> = ({ setIsNextEnabled, isActive }) => {
     useEffect(() => {
-        if (setIsNextDisabled) {
-            setIsNextDisabled(false);
-        }
-    }, [setIsNextDisabled]);
+        setIsNextEnabled(true);
+    }, [isActive, setIsNextEnabled]);
 
     return (
         <Box p={8}>
