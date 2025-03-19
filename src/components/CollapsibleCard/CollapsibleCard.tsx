@@ -13,11 +13,8 @@ import {
   Select,
   Tooltip,
   IconButton,
-  Badge,
-  Flex,
-  useDisclosure,
 } from "@chakra-ui/react";
-import { FiPlus, FiCheck } from "react-icons/fi";
+import { FiPlus } from "react-icons/fi";
 import { EditIcon, DeleteIcon, RepeatIcon } from "@chakra-ui/icons";
 import { usePyodide } from "../PyodideContext";
 import { EditableCell } from "./EditableCell";
@@ -69,7 +66,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [formData, setFormData] = useState<FormData>({ constant: [], variable: [] });
   const [globalEdit, setGlobalEdit] = useState<boolean>(initialEditMode);
-  const [isSaved, setIsSaved] = useState<boolean>(false);
 
   const [acquisitionTitle, setAcquisitionTitle] = useState<string>(acquisition);
   const [acquisitionDescription, setAcquisitionDescription] = useState<string>("");
@@ -181,7 +177,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
     if (onSaveAcquisition) {
       onSaveAcquisition(acquisition, acquisitionJson);
-      setIsSaved(true);
     }
     setGlobalEdit(false);
   };
@@ -256,7 +251,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
       if (onSaveAcquisition) {
         onSaveAcquisition(acquisition, acquisitionJson);
-        setIsSaved(true);
       }
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -589,18 +583,9 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             </VStack>
           ) : (
             <>
-              <HStack>
-                <Heading as="h4" size="md" color="teal.500">
-                  {acquisitionTitle}
-                </Heading>
-                {isSaved && stage === 2 && !globalEdit && (
-                  <Tooltip label="Acquisition saved successfully">
-                    <Badge colorScheme="green" display="flex" alignItems="center">
-                      <Icon as={FiCheck} mr={1} /> Saved
-                    </Badge>
-                  </Tooltip>
-                )}
-              </HStack>
+              <Heading as="h4" size="md" color="teal.500">
+                {acquisitionTitle}
+              </Heading>
               {acquisitionDescription && (
                 <Text fontSize="sm" color="gray.600">
                   {acquisitionDescription}

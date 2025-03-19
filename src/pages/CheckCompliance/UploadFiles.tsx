@@ -8,7 +8,8 @@ interface UploadFilesProps {
   setDicomCount: React.Dispatch<React.SetStateAction<number | null>>;
   dicomFolder: string | null;
   setDicomFolder: React.Dispatch<React.SetStateAction<string | null>>;
-  setIsNextDisabled?: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  isActive?: boolean;
 }
 
 const UploadFiles: React.FC<UploadFilesProps> = ({
@@ -16,7 +17,8 @@ const UploadFiles: React.FC<UploadFilesProps> = ({
   setDicomCount,
   dicomFolder,
   setDicomFolder,
-  setIsNextDisabled,
+  setIsNextEnabled,
+  isActive,
 }) => {
   const { runPythonCode, setPythonGlobal } = usePyodide();
   const [progress, setProgress] = useState<number>(0);
@@ -27,10 +29,9 @@ const UploadFiles: React.FC<UploadFilesProps> = ({
   const hasAnalyzedRef = useRef(false);
 
   useEffect(() => {
-    if (setIsNextDisabled) {
-      setIsNextDisabled(!isValid);
-    }
-  }, [isValid, setIsNextDisabled]);
+    if (!isActive) return;
+    setIsNextEnabled(isValid);
+  }, [isActive, isValid, setIsNextEnabled]);
 
   useEffect(() => {
     if (files.length > 0 && !isUploading && !hasAnalyzedRef.current) {

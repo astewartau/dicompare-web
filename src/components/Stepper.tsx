@@ -10,30 +10,26 @@ import {
   Step,
   StepIndicator,
   StepStatus,
-  StepIcon,
   StepNumber,
   StepSeparator,
   Text,
-  Tooltip,
-  useToast,
 } from '@chakra-ui/react';
 import { CheckIcon } from '@chakra-ui/icons';
 
 interface VerticalStepperProps {
   steps: { title: string; component: React.ReactNode }[];
-  isNextDisabled: boolean;
-  setIsNextDisabled: React.Dispatch<React.SetStateAction<boolean>>;
+  isNextEnabled: boolean;
+  setIsNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const VerticalStepper: React.FC<VerticalStepperProps> = ({
   steps,
-  isNextDisabled,
-  setIsNextDisabled,
+  isNextEnabled,
+  setIsNextEnabled,
 }) => {
   const [activeStep, setActiveStep] = useState(0);
   // Track which steps have been completed
   const [completedSteps, setCompletedSteps] = useState<boolean[]>(Array(steps.length).fill(false));
-  const toast = useToast();
 
   // Handle step navigation with validation
   const handleStepClick = (index: number) => {
@@ -43,10 +39,10 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({
       return;
     }
     
-    // For next steps, only allow if current step is completed (not disabled)
+    // For next steps, only allow if current step is completed
     if (index > activeStep) {
       // If the current step validation is satisfied
-      if (!isNextDisabled) {
+      if (isNextEnabled) {
         // Mark the current step as completed
         const newCompletedSteps = [...completedSteps];
         newCompletedSteps[activeStep] = true;
@@ -54,16 +50,7 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({
         
         // Navigate to the next step
         setActiveStep(index);
-        setIsNextDisabled(true); // Reset validation for the new step
-      } else {
-        // Show a toast notification that the current step must be completed first
-        toast({
-          title: "Validation required",
-          description: `Please complete the current step before proceeding.`,
-          status: "warning",
-          duration: 3000,
-          isClosable: true,
-        });
+        setIsNextEnabled(false); // Reset validation for the new step
       }
     }
   };
@@ -77,7 +64,7 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({
       
       // Move to the next step
       setActiveStep((prev) => prev + 1);
-      setIsNextDisabled(true);
+      setIsNextEnabled(false);
     }
   };
 
@@ -88,22 +75,31 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({
       
       // If the previous step was already completed, don't disable the Next button
       if (completedSteps[prevStepIndex]) {
-        setIsNextDisabled(false);
+        setIsNextEnabled(true);
       } else {
         // Otherwise, set according to the current state of that step
-        setIsNextDisabled(true);
+        setIsNextEnabled(false);
       }
     }
   };
 
   // Update completedSteps when validation status changes
   useEffect(() => {
-    if (!isNextDisabled) {
+    if (isNextEnabled) {
       const newCompletedSteps = [...completedSteps];
       newCompletedSteps[activeStep] = true;
       setCompletedSteps(newCompletedSteps);
+    } else {
+      // this and all subsequent steps are no longer completed
+      const newCompletedSteps = [...completedSteps];
+      for (let i = activeStep; i < newCompletedSteps.length; i++) {
+        newCompletedSteps[i] = false;
+      }
+      setCompletedSteps(newCompletedSteps);
     }
-  }, [isNextDisabled, activeStep]);
+    
+    
+  }, [isNextEnabled, activeStep]);
 
   return (
     <Flex direction="row" bg="gray.50">
@@ -129,16 +125,12 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({
             >
               <StepIndicator>
                 <StepStatus
-                  complete={<CheckIcon color="green.500" />}
+                  complete={<CheckIcon />}
                   incomplete={<StepNumber />}
                   active={<StepNumber />}
                 />
               </StepIndicator>
               <Box flexShrink={0} maxWidth="180px">
-                <Tooltip 
-                  label={index > activeStep && !completedSteps[activeStep] ? "Complete the current step first" : step.title}
-                  hasArrow
-                >
                   <Text
                     fontSize="sm"
                     whiteSpace="nowrap"
@@ -148,7 +140,6 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({
                   >
                     {step.title}
                   </Text>
-                </Tooltip>
               </Box>
               {index < steps.length - 1 && <StepSeparator />}
             </Step>
@@ -164,7 +155,7 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({
           {steps.map((step, index) => (
             <Box key={index} display={activeStep === index ? 'block' : 'none'} width="100%">
               {React.cloneElement(step.component as React.ReactElement, {
-                setIsNextDisabled,
+                setIsNextEnabled,
                 isActive: activeStep === index,
               })}
             </Box>
@@ -190,7 +181,7 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({
           </Button>
           <Button
             onClick={handleNext}
-            isDisabled={isNextDisabled || activeStep === steps.length - 1}
+            isDisabled={!isNextEnabled || activeStep === steps.length - 1}
             colorScheme="teal"
           >
             {activeStep === steps.length - 1 ? 'Submit' : 'Next'}

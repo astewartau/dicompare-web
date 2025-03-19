@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Text,
-  Input,
   Button,
   VStack,
   Flex,
@@ -31,7 +30,12 @@ interface Pair {
   inp: Acquisition | null;
 }
 
-const FinalizeMapping: React.FC = () => {
+interface FinalizeMappingProps {
+  setIsNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  isActive?: boolean;
+}
+
+const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ setIsNextEnabled, isActive }) => {
   // --- Schema state ---
   const [referenceFile, setReferenceFile] = useState<{ name: string; content: string } | null>(null);
   const [schemaLoading, setSchemaLoading] = useState(false);
@@ -55,6 +59,13 @@ const FinalizeMapping: React.FC = () => {
   // --- Drag state for uploads ---
   const [isSchemaDragActive, setIsSchemaDragActive] = useState(false);
   const [isDICOMDragActive, setIsDICOMDragActive] = useState(false);
+
+  // --- useEffect to enable/disable Next button ---
+  useEffect(() => {
+    if (!isActive) return;
+    const isValid = referenceOptions.length > 0 && inputOptions.length > 0;
+    setIsNextEnabled(isValid);
+  }, [referenceOptions, inputOptions, setIsNextEnabled, isActive]);
 
   const updateProgress = useCallback((p: number) => {
     setDICOMProgress(p);

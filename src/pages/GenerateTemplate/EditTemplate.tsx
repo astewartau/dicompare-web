@@ -7,10 +7,11 @@ import { usePyodide } from '../../components/PyodideContext';
 
 interface EditTemplateProps {
   setAcquisitionsData: (data: Record<string, any>) => void;
-  setIsNextDisabled: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsNextEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  isActive?: boolean;
 }
 
-const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsNextDisabled }) => {
+const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsNextEnabled, isActive }) => {
   const [acquisitionList, setAcquisitionList] = useState<string[]>([]);
   const [acquisitionsJson, setAcquisitionsJson] = useState<Record<string, any>>({});
   const [newAcqCounter, setNewAcqCounter] = useState<number>(1);
@@ -37,20 +38,26 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
   }, []);
 
   useEffect(() => {
+    if (!isActive) return;
+
     if (acquisitionList.length === 0) {
-      setIsNextDisabled(true);
+      setIsNextEnabled(false);
       return;
     }
-    
-    // Check if there is at least one acquisition that has been saved
+
     const hasValidAcquisitions = Object.keys(acquisitionsJson).length > 0;
-    
-    // All acquisitions must be in stage 2 (complete) and not being edited
-    const allComplete = acquisitionList.every(acq => cardsStageState[acq] === 2 && !cardsEditState[acq]);
-    
-    // Only enable the Next button if there are saved acquisitions AND all are complete
-    setIsNextDisabled(!(hasValidAcquisitions && allComplete));
-  }, [acquisitionList, cardsStageState, cardsEditState, acquisitionsJson, setIsNextDisabled]);
+    const allComplete = acquisitionList.every(
+      (acq) => cardsStageState[acq] === 2 && !cardsEditState[acq]
+    );
+    setIsNextEnabled(hasValidAcquisitions && allComplete);
+  }, [
+    isActive,
+    acquisitionList,
+    cardsStageState,
+    cardsEditState,
+    acquisitionsJson,
+    setIsNextEnabled,
+  ]);
 
   useEffect(() => {
     setAcquisitionsData(acquisitionsJson);
@@ -127,48 +134,45 @@ json.dumps(acquisition_list)
     setIsUploading(true);
     try {
       const dicomAcquisitions = await processDicomFiles(files);
-      
+
       if (dicomAcquisitions.length === 0) {
         displayAlert(
           "No valid acquisitions were found in the uploaded files.",
           "Warning",
-          [{ option: "OK", callback: () => {} }],
-          "warning"
+          [{ option: "OK", callback: () => { } }],
         );
         return;
       }
-      
+
       setAcquisitionList(prev => {
         const newAcqs = dicomAcquisitions.map((acq: any) => acq.Acquisition);
         return Array.from(new Set([...prev, ...newAcqs]));
       });
-      
+
       const acquisitionsData: Record<string, any> = {};
       dicomAcquisitions.forEach((acq: any) => {
         acquisitionsData[acq.Acquisition] = { fields: [], series: [] };
       });
       setAcquisitionsData(acquisitionsData);
-      
+
       // Update acquisitionsJson with the new data
       setAcquisitionsJson(prev => ({
         ...prev,
         ...acquisitionsData
       }));
-      
+
       // Show success message
       displayAlert(
         `Successfully uploaded ${dicomAcquisitions.length} acquisition(s).`,
         "Success",
-        [{ option: "OK", callback: () => {} }],
-        "success"
+        [{ option: "OK", callback: () => { } }],
       );
     } catch (error) {
       console.error('Error processing DICOM files:', error);
       displayAlert(
         "Error processing DICOM files. Please check the console for details.",
         "Error",
-        [{ option: "OK", callback: () => {} }],
-        "error"
+        [{ option: "OK", callback: () => { } }],
       );
     } finally {
       setIsUploading(false);
@@ -185,14 +189,6 @@ json.dumps(acquisition_list)
 
   const handleSaveAcquisition = (acq: string, jsonData: any) => {
     setAcquisitionsJson(prev => ({ ...prev, [acq]: jsonData }));
-    
-    // Provide feedback that the acquisition was saved successfully
-    displayAlert(
-      `Acquisition ${acq} has been saved successfully.`,
-      "Success",
-      [{ option: "OK", callback: () => {} }],
-      "success"
-    );
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {

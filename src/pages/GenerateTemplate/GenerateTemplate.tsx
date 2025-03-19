@@ -13,17 +13,17 @@ const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ }) => {
   const [metadata, setMetadata] = useState<{ name: string; description: string; authors: string[] } | null>(null);
   const [templateJson, setTemplateJson] = useState<any>(null);
   
-  // Track whether the Next button is disabled
-  const [isNextDisabled, setIsNextDisabled] = useState(false);
+  // Track whether the Next button is enabled
+  const [isNextEnabled, setIsNextEnabled] = useState(false);
 
-  // Steps in the stepper. Each step can receive setIsNextDisabled.
+  // Steps in the stepper. Each step can receive setIsNextEnabled.
   const steps = [
     {
       title: 'Build schema',
       component: (
         <EditTemplate
           setAcquisitionsData={setAcquisitionsData}
-          setIsNextDisabled={setIsNextDisabled}
+          setIsNextEnabled={setIsNextEnabled}
         />
       ),
     },
@@ -32,7 +32,7 @@ const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ }) => {
       component: (
         <EnterMetadata
           setMetadata={setMetadata}
-          setIsNextDisabled={setIsNextDisabled}
+          setIsNextEnabled={setIsNextEnabled}
         />
       ),
     },
@@ -65,8 +65,8 @@ const GenerateTemplate: React.FC<GenerateTemplateProps> = ({ }) => {
       </Box>
       <VerticalStepper
         steps={steps}
-        isNextDisabled={isNextDisabled}
-        setIsNextDisabled={setIsNextDisabled}
+        isNextEnabled={isNextEnabled}
+        setIsNextEnabled={setIsNextEnabled}
       />
     </>
   );
