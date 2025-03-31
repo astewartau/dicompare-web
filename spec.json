@@ -1,0 +1,120 @@
+{
+    "name": "Example Spec",
+    "description": "This is a description of the spec file",
+    "authors": [ "John Doe", "Jane Doe" ],
+    "acquisitions": {
+        "acq-greqsm5echoesiso1mm": {
+            "fields": [
+                {
+                    "field": "MagneticFieldStrength",
+                    "value": 3.0
+                }
+            ],
+            "series": [
+                {
+                    "name": "Series 1",
+                    "fields": [
+                        {
+                            "field": "EchoTime",
+                            "value": 5.84
+                        },
+                        {
+                            "field": "ImageType",
+                            "value": [
+                                "ORIGINAL",
+                                "PRIMARY",
+                                "M",
+                                "ND",
+                                "NORM"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Series 2",
+                    "fields": [
+                        {
+                            "field": "EchoTime",
+                            "value": 5.84
+                        },
+                        {
+                            "field": "ImageType",
+                            "value": [
+                                "ORIGINAL",
+                                "PRIMARY",
+                                "P",
+                                "ND"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Series 3",
+                    "fields": [
+                        {
+                            "field": "EchoTime",
+                            "value": 10.63
+                        },
+                        {
+                            "field": "ImageType",
+                            "value": [
+                                "ORIGINAL",
+                                "PRIMARY",
+                                "M",
+                                "ND",
+                                "NORM"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Series 4",
+                    "fields": [
+                        {
+                            "field": "EchoTime",
+                            "value": 10.63
+                        },
+                        {
+                            "field": "ImageType",
+                            "value": [
+                                "ORIGINAL",
+                                "PRIMARY",
+                                "P",
+                                "ND"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "acq-t1mpragesagp2": {
+            "fields": [],
+            "series": [
+                {
+                    "name": "Series 1",
+                    "fields": [
+                        {
+                            "field": "EchoTime",
+                            "value": 2.96
+                        },
+                        {
+                            "field": "ImageType",
+                            "value": [
+                                "ORIGINAL",
+                                "PRIMARY",
+                                "M",
+                                "NORM",
+                                "DIS3D",
+                                "DIS2D"
+                            ]
+                        },
+                        {
+                            "field": "MagneticFieldStrength",
+                            "value": 3.0
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}
