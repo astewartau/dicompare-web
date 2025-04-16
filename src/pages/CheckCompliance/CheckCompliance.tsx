@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import VerticalStepper from '../../components/Stepper';
-import ComplianceResults from './ComplianceResults';
 import NavigationBar from '../../components/NavigationBar';
 import FinalizeMapping from './FinalizeMapping';
 import { Box } from '@chakra-ui/react';
@@ -20,14 +19,7 @@ const CheckCompliance: React.FC<CheckComplianceProps> = ({ }) => {
           setIsNextEnabled={setIsNextEnabled}
         />
       ),
-    },
-    {
-      title: 'Compliance Results',
-      component: (
-        <ComplianceResults
-        />
-      ),
-    },
+    }
   ];
 
   return (

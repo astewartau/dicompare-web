@@ -59,7 +59,8 @@ const UploadFiles: React.FC<UploadFilesProps> = ({
     // Build a dictionary of DICOM files
     const dicomFiles: Record<string, Uint8Array> = {};
     for (const file of files) {
-      const arrayBuf = await file.slice(0, 8192).arrayBuffer();
+      //const arrayBuf = await file.slice(0, 8192).arrayBuffer();
+      const arrayBuf = await file.arrayBuffer();
       const typedArray = new Uint8Array(arrayBuf);
       const key = file.webkitRelativePath || file.name;
       dicomFiles[key] = typedArray;

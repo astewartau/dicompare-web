@@ -70,7 +70,8 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
   const processDicomFiles = async (files: File[]): Promise<any[]> => {
     const dicomFiles: Record<string, Uint8Array> = {};
     for (const file of files) {
-      const arrayBuf = await file.slice(0, 8192).arrayBuffer();
+      //const arrayBuf = await file.slice(0, 8192).arrayBuffer();
+      const arrayBuf = await file.arrayBuffer();
       const typedArray = new Uint8Array(arrayBuf);
       dicomFiles[file.webkitRelativePath || file.name] = typedArray;
     }
