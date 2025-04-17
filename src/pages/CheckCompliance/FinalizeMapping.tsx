@@ -44,7 +44,6 @@ interface FinalizeMappingProps {
 interface FieldCompliance {
   status: 'ok' | 'error' | 'warning';
   message?: string;
-  // For series-level compliance records.
   matched?: string | string[] | null;
 }
 
@@ -83,17 +82,17 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ setIsNextEnabled, isA
   // Enable Next button when there is at least one reference and one input.
   useEffect(() => {
     if (!isActive) return;
-    const isValid = referenceOptions.length > 0 && inputOptions.length > 0;
-    setIsNextEnabled(isValid);
+    const ok = referenceOptions.length > 0 && inputOptions.length > 0;
+    setIsNextEnabled(ok);
   }, [referenceOptions, inputOptions, setIsNextEnabled, isActive]);
 
   const updateProgress = useCallback((p: number) => {
     setDICOMProgress(p);
   }, []);
 
-  // --- 1. Schema Upload Handlers ---
+  // 1. Schema Upload Handlers
   const handleSchemaUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files.length > 0) {
+    if (event.target.files?.length) {
       const file = event.target.files[0];
       const text = await file.text();
       setReferenceFile({ name: file.name, content: text });
@@ -113,85 +112,108 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ setIsNextEnabled, isA
   const handleSchemaDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsSchemaDragActive(false);
-    const dtItems = e.dataTransfer.items;
-    if (dtItems && dtItems.length > 0) {
-      const fileItem = dtItems[0];
-      if (fileItem.kind === 'file') {
-        const file = fileItem.getAsFile();
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            const content = ev.target?.result;
-            if (typeof content === 'string') {
-              setReferenceFile({ name: file.name, content });
-            }
-          };
-          reader.readAsText(file);
-        }
+    const item = e.dataTransfer.items[0];
+    if (item.kind === 'file') {
+      const file = item.getAsFile();
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const content = ev.target?.result;
+          if (typeof content === 'string') {
+            setReferenceFile({ name: file.name, content });
+          }
+        };
+        reader.readAsText(file);
       }
     }
   };
 
-  // Effect to load schema acquisitions.
+  // 1a. Load schema acquisitions (JSON or Python)
   useEffect(() => {
-    if (referenceFile) {
-      const loadSchemaAcquisitions = async () => {
-        setSchemaLoading(true);
-        try {
-          await writePythonFile(referenceFile.name, referenceFile.content);
-          const isJson = referenceFile.name.endsWith('.json');
-          await setPythonGlobal('ref_config_name', referenceFile.name);
-          await setPythonGlobal('is_json', isJson);
-          const code = `
+    if (!referenceFile) return;
+
+    const loadSchemaAcquisitions = async () => {
+      setSchemaLoading(true);
+      try {
+        await writePythonFile(referenceFile.name, referenceFile.content);
+
+        const isJson = referenceFile.name.endsWith('.json');
+        const isPy   = referenceFile.name.endsWith('.py');
+
+        await setPythonGlobal('ref_config_name', referenceFile.name);
+        await setPythonGlobal('is_json', isJson);
+        await setPythonGlobal('is_py',   isPy);
+
+        const code = `
 import sys, json
 sys.path.append('.')
-global ref_session, reference_fields
+global ref_session, reference_fields, ref_models
 ref_session = None
-reference_fields = None
+reference_fields = []
 from dicompare.io import load_json_session, load_python_session
+
 if is_json:
     reference_fields, ref_session = load_json_session(json_ref=ref_config_name)
-else:
+
+elif is_py:
     ref_models = load_python_session(module_path=ref_config_name)
-    if ref_models is not None:
-        ref_session = {"acquisitions": {k: {} for k in ref_models.keys()}}
-json.dumps(ref_session["acquisitions"])
-          `.trim();
-          const result = await runPythonCode(code);
-          const parsed = JSON.parse(result);
-          const refs = Object.entries(parsed).map(([acqName, obj]) => ({
-            name: acqName,
-            details: obj as Record<string, any>
-          }));
-          setReferenceOptions(refs);
-          console.log(`Schema "${referenceFile.name}" loaded.`);
-        } catch (error) {
-          console.error("Error loading schema acquisitions:", error);
-        } finally {
-          setSchemaLoading(false);
+    print([list(ref_models[acq].reference_fields) for acq in ref_models.keys()])
+    ref_session = {
+      "acquisitions": {
+        acq: {
+          "fields": [
+            { "field": field, "value": None }
+            for field in list(ref_models[acq].reference_fields)
+          ],
+          "series": []
         }
-      };
-      loadSchemaAcquisitions();
+        for acq in ref_models.keys()
+      }
     }
+
+else:
+    raise RuntimeError(f"Unsupported schema type: {ref_config_name}")
+
+json.dumps(ref_session["acquisitions"])
+        `.trim();
+
+        const result = await runPythonCode(code);
+        const parsed = JSON.parse(result);
+        const refs = Object.entries(parsed).map(([acqName, details]) => ({
+          name: acqName,
+          details: details as Record<string, any>
+        }));
+        setReferenceOptions(refs);
+      } catch (e) {
+        console.error('Error loading schema:', e);
+      } finally {
+        setSchemaLoading(false);
+      }
+    };
+
+    loadSchemaAcquisitions();
   }, [referenceFile, runPythonCode, setPythonGlobal, writePythonFile]);
 
-  // --- 2. Input DICOM Handlers ---
+  // 2. Input DICOM Handlers
   const analyzeDICOMFiles = async (files: File[]) => {
     setIsDICOMUploading(true);
     try {
-      const dicomFiles: Record<string, Uint8Array> = {};
+      const dicomBytes: Record<string, Uint8Array> = {};
       for (const file of files) {
-        const arrayBuf = await file.arrayBuffer();
-        const typedArray = new Uint8Array(arrayBuf);
+        const buf = await file.arrayBuffer();
+        const arr = new Uint8Array(buf);
         const key = file.webkitRelativePath || file.name;
-        dicomFiles[key] = typedArray;
+        dicomBytes[key] = arr;
       }
-      await setPythonGlobal("dicom_files", dicomFiles);
-      await setPythonGlobal("update_progress", updateProgress);
+
+      await setPythonGlobal('dicom_files', dicomBytes);
+      await setPythonGlobal('update_progress', updateProgress);
+
       const code = `
 import sys, json, asyncio
 from dicompare.cli.gen_session import create_json_reference
 from dicompare import async_load_dicom_session, assign_acquisition_and_run_numbers
+
 acquisition_fields = ["ProtocolName"]
 global in_session
 if "reference_fields" not in globals():
@@ -199,12 +221,15 @@ if "reference_fields" not in globals():
 in_session = await async_load_dicom_session(dicom_bytes=dicom_files.to_py(), progress_function=update_progress)
 in_session = assign_acquisition_and_run_numbers(in_session)
 in_session.sort_values(by=["Acquisition"] + reference_fields, inplace=True)
+
 missing_fields = [field for field in reference_fields if field not in in_session.columns]
 if missing_fields:
     raise ValueError(f"Input session is missing required reference fields: {missing_fields}")
+
 input_acquisitions = create_json_reference(in_session, reference_fields)
 json.dumps(input_acquisitions["acquisitions"])
-          `.trim();
+      `.trim();
+
       const result = await runPythonCode(code);
       const parsed = JSON.parse(result);
       const ins = Object.entries(parsed).map(([acqName, acqObj]) => ({
@@ -212,7 +237,6 @@ json.dumps(input_acquisitions["acquisitions"])
         details: acqObj as Record<string, any>
       }));
       setInputOptions(ins);
-      console.log("Input DICOMs loaded.");
     } catch (error) {
       console.error("Error loading input acquisitions:", error);
     } finally {
@@ -220,9 +244,9 @@ json.dumps(input_acquisitions["acquisitions"])
     }
   };
 
-  const handleInputDICOMUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      const files = Array.from(event.target.files);
+  const handleInputDICOMUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
       setInputDICOMFiles(files);
       await analyzeDICOMFiles(files);
     }
@@ -231,59 +255,52 @@ json.dumps(input_acquisitions["acquisitions"])
   const handleInputDICOMDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDICOMDragActive(true);
-    const dtItems = e.dataTransfer.items;
-    const files: File[] = [];
 
-    const traverseFileTree = (item: any, path: string): Promise<void> => {
-      return new Promise((resolve) => {
-        if (item.isFile) {
-          item.file((file: File) => {
-            let newFile: File;
-            if (!file.webkitRelativePath) {
-              newFile = new File([file], file.name, { type: file.type, lastModified: file.lastModified });
-              Object.defineProperty(newFile, "webkitRelativePath", {
-                value: path + file.name,
-                writable: false,
-                enumerable: true,
-                configurable: true
-              });
-            } else {
-              newFile = file;
-            }
+    const items = e.dataTransfer.items;
+    const files: File[] = [];
+    const traverse = (entry: any, path = ''): Promise<void> => {
+      return new Promise(resolve => {
+        if (entry.isFile) {
+          entry.file((f: File) => {
+            const newFile = f.webkitRelativePath
+              ? f
+              : new File([f], f.name, { type: f.type, lastModified: f.lastModified });
+            Object.defineProperty(newFile, 'webkitRelativePath', {
+              value: path + f.name,
+              writable: false,
+            });
             files.push(newFile);
             resolve();
           });
-        } else if (item.isDirectory) {
-          const dirReader = item.createReader();
-          dirReader.readEntries((entries: any) => {
-            Promise.all(
-              entries.map((entry: any) => traverseFileTree(entry, path + item.name + "/"))
-            ).then(() => resolve());
+        } else if (entry.isDirectory) {
+          const reader = entry.createReader();
+          reader.readEntries(entries => {
+            Promise.all(entries.map(en => traverse(en, path + entry.name + '/')))
+              .then(() => resolve());
           });
         }
       });
     };
 
-    const promises: Promise<void>[] = [];
-    for (let i = 0; i < dtItems.length; i++) {
-      const entry = dtItems[i].webkitGetAsEntry();
-      if (entry) promises.push(traverseFileTree(entry, ""));
+    const promises = [];
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry();
+      if (entry) promises.push(traverse(entry));
     }
+    await Promise.all(promises);
 
-    Promise.all(promises).then(async () => {
-      if (files.length > 0) {
-        setInputDICOMFiles(files);
-        setIsDICOMDragActive(false);
-        await analyzeDICOMFiles(files);
-      }
-    });
+    if (files.length) {
+      setInputDICOMFiles(files);
+      setIsDICOMDragActive(false);
+      await analyzeDICOMFiles(files);
+    }
   };
 
-  // --- 3. Update Pairing Area ---
+  // 3. Build pairing
   useEffect(() => {
-    const numRows = Math.max(referenceOptions.length, inputOptions.length);
+    const count = Math.max(referenceOptions.length, inputOptions.length);
     const newPairs: Pair[] = [];
-    for (let i = 0; i < numRows; i++) {
+    for (let i = 0; i < count; i++) {
       newPairs.push({
         ref: referenceOptions[i] || null,
         inp: inputOptions[i] || null
@@ -292,98 +309,84 @@ json.dumps(input_acquisitions["acquisitions"])
     setPairs(newPairs);
   }, [referenceOptions, inputOptions]);
 
+  // 4. Update session_map in Python
   useEffect(() => {
-    // Build the session map so that the key is the reference acquisition name and the value is the input.
     const sessionMap: Record<string, string> = {};
-    pairs.forEach((pair) => {
-      if (pair.ref && pair.inp) {
-        sessionMap[pair.ref.name] = pair.inp.name;
-      }
+    pairs.forEach(p => {
+      if (p.ref && p.inp) sessionMap[p.ref.name] = p.inp.name;
     });
-    const updateSessionMap = async () => {
-      try {
-        await setPythonGlobal("session_map", JSON.stringify(sessionMap));
-        console.log("Updated session_map:", sessionMap);
-      } catch (error) {
-        console.error("Failed to update session_map:", error);
-      }
-    };
-    updateSessionMap();
+    setPythonGlobal('session_map', JSON.stringify(sessionMap)).catch(console.error);
   }, [pairs, setPythonGlobal]);
 
-  // --- 4. Compliance Analysis ---
+  // 5. Analyze compliance
   const analyzeCompliance = async () => {
     try {
       const code = `
-import json
-import pyodide
-from dicompare.compliance import check_session_compliance_with_json_reference, check_session_compliance_with_python_module
+import json, pyodide
+from dicompare.compliance import (
+  check_session_compliance_with_json_reference,
+  check_session_compliance_with_python_module
+)
 
-if 'session_map' not in globals():
-    global session_map
-    session_map = {}
-elif isinstance(session_map, str):
-    session_map = json.loads(session_map)
+if isinstance(session_map, str):
+  session_map = json.loads(session_map)
 elif isinstance(session_map, pyodide.ffi.JsProxy):
-    session_map = session_map.to_py()
+  session_map = session_map.to_py()
 
 if is_json:
-    compliance_summary = check_session_compliance_with_json_reference(
-        in_session=in_session, ref_session=ref_session, session_map=session_map
-    )
+  compliance = check_session_compliance_with_json_reference(
+    in_session=in_session,
+    ref_session=ref_session,
+    session_map=session_map
+  )
 else:
-    acquisition_map = {
-        k if isinstance(k, str) else k.split("::")[0]: v
-        for k, v in session_map.items()
-    }
-    compliance_summary = check_session_compliance_with_python_module(
-        in_session=in_session, ref_models=ref_models, session_map=acquisition_map
-    )
-json.dumps(compliance_summary)
+  compliance = check_session_compliance_with_python_module(
+    in_session=in_session,
+    ref_models=ref_models,
+    session_map=session_map
+  )
+json.dumps(compliance)
       `.trim();
+
       const pyResult = await runPythonCode(code);
-      // Save raw JSON for download.
       setComplianceReport(pyResult);
-      const results: Array<any> = JSON.parse(pyResult);
-      // Build mapping for both acquisition-level and series-level results.
-      // For series-level, we expect a record with a "series" key.
-      const map: Record<string, FieldCompliance> = {};
+
+      const results: any[] = JSON.parse(pyResult);
+      const cmap: Record<string, FieldCompliance> = {};
       const overall: Record<string, { status: 'ok' | 'error'; message: string }> = {};
+
       results.forEach(item => {
-        const refAcq = item["reference acquisition"];
-        if (refAcq) {
-          if (!overall[refAcq]) {
-            overall[refAcq] = { status: 'ok', message: 'Passed.' };
-          }
+        const refA = item['reference acquisition'];
+        if (refA) {
+          if (!overall[refA]) overall[refA] = { status: 'ok', message: 'Passed.' };
           if (!item.passed) {
-            overall[refAcq] = { status: 'error', message: item.message || "Issue found." };
+            overall[refA] = { status: 'error', message: item.message || '' };
           }
         }
         if (item.series) {
-          map["reference series:" + item.series] = {
+          cmap['reference series:' + item.series] = {
             status: item.passed ? 'ok' : 'error',
             message: item.message,
-            matched: item["input series"] || null
+            matched: item['input series'] || null
           };
         } else if (item.field) {
-          map[item.field] = {
+          cmap[item.field] = {
             status: item.passed ? 'ok' : 'error',
-            message: item.message,
+            message: item.message
           };
         }
       });
-      setComplianceMap(map);
+
+      setComplianceMap(cmap);
       setOverallCompliance(overall);
-    } catch (error) {
-      console.error("Compliance analysis error:", error);
+    } catch (e) {
+      console.error('Compliance error:', e);
     }
   };
 
-  // Trigger compliance analysis when pairings update.
+  // trigger compliance whenever pairs change
   useEffect(() => {
-    if (pairs.length > 0) {
-      analyzeCompliance();
-    }
+    if (pairs.length) analyzeCompliance();
   }, [pairs]);
 
   // --- 6. Render Draggable, Expandable Card ---
@@ -632,12 +635,13 @@ json.dumps(compliance_summary)
         <Text mb={4} color="gray.700">
           Select a template schema and a DICOM session to verify compliance.
         </Text>
-        {/* Download button appears as soon as we have a report */}
+
         {complianceReport && (
           <Button colorScheme="teal" mb={4} onClick={handleDownloadReport}>
             Download Compliance Report
           </Button>
         )}
+
         <Flex gap={8} mb={8}>
           <Box flex="1">
             <Text mb={4} fontWeight="medium" color="teal.600">Schema Template</Text>
@@ -649,7 +653,7 @@ json.dumps(compliance_summary)
               bg={isSchemaDragActive ? "gray.200" : "gray.50"}
               textAlign="center"
               onDragEnter={handleSchemaDragOver}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={e => e.preventDefault()}
               onDragLeave={handleSchemaDragLeave}
               onDrop={handleSchemaDrop}
             >
@@ -672,12 +676,15 @@ json.dumps(compliance_summary)
                     Upload Schema
                   </Button>
                   {referenceFile && (
-                    <Text mt={4} fontSize="sm" color="gray.600">Loaded: {referenceFile.name}</Text>
+                    <Text mt={4} fontSize="sm" color="gray.600">
+                      Loaded: {referenceFile.name}
+                    </Text>
                   )}
                 </>
               )}
             </Box>
           </Box>
+
           <Box flex="1">
             <Text mb={4} fontWeight="medium" color="teal.600">DICOM Files</Text>
             <Box
@@ -687,15 +694,9 @@ json.dumps(compliance_summary)
               borderRadius="md"
               bg={isDICOMDragActive ? "gray.200" : "gray.50"}
               textAlign="center"
-              onDragEnter={(e) => {
-                e.preventDefault();
-                setIsDICOMDragActive(true);
-              }}
-              onDragOver={(e) => e.preventDefault()}
-              onDragLeave={(e) => {
-                e.preventDefault();
-                setIsDICOMDragActive(false);
-              }}
+              onDragEnter={e => { e.preventDefault(); setIsDICOMDragActive(true); }}
+              onDragOver={e => e.preventDefault()}
+              onDragLeave={e => { e.preventDefault(); setIsDICOMDragActive(false); }}
               onDrop={handleInputDICOMDrop}
             >
               {isDICOMUploading ? (
@@ -713,7 +714,7 @@ json.dumps(compliance_summary)
                     style={{ display: 'none' }}
                     id="dicom-upload"
                     onChange={handleInputDICOMUpload}
-                    ref={(input) => input && input.setAttribute('webkitdirectory', 'true')}
+                    ref={input => input?.setAttribute('webkitdirectory', 'true')}
                   />
                   <Button as="label" htmlFor="dicom-upload" colorScheme="teal">
                     Upload DICOMs
@@ -728,37 +729,32 @@ json.dumps(compliance_summary)
             </Box>
           </Box>
         </Flex>
-        {/* Pairing Area */}
+
         <Box>
           <VStack spacing={2} align="stretch">
-            {pairs.map((pair, index) => (
-              <Flex key={index} gap={2}>
-                <Droppable droppableId={`pair-ref-${index}`} type="ref">
-                  {(provided) => (
+            {pairs.map((pair, idx) => (
+              <Flex key={idx} gap={2}>
+                <Droppable droppableId={`pair-ref-${idx}`} type="ref">
+                  {provided => (
                     <Box ref={provided.innerRef} {...provided.droppableProps} flex="1" minH="50px">
-                      {pair.ref ? (
-                        renderCard(pair.ref, "ref", index)
-                      ) : (
-                        <Text textAlign="center" color="gray.500" fontSize="sm">
-                          No Reference
-                        </Text>
-                      )}
+                      {pair.ref
+                        ? renderCard(pair.ref, "ref", idx)
+                        : <Text textAlign="center" color="gray.500" fontSize="sm">No Reference</Text>
+                      }
                       {provided.placeholder}
                     </Box>
                   )}
                 </Droppable>
-                <Droppable droppableId={`pair-inp-${index}`} type="inp">
-                  {(provided) => (
+
+                <Droppable droppableId={`pair-inp-${idx}`} type="inp">
+                  {provided => (
                     <Box ref={provided.innerRef} {...provided.droppableProps} flex="1" minH="50px">
-                      {pair.inp ? (
-                        renderCard(pair.inp, "inp", index)
-                      ) : (
-                        <Box minH="50px" display="flex" alignItems="center" justifyContent="center">
-                          <Text textAlign="center" color="gray.500" fontSize="sm">
-                            No Input
-                          </Text>
-                        </Box>
-                      )}
+                      {pair.inp
+                        ? renderCard(pair.inp, "inp", idx)
+                        : <Box minH="50px" display="flex" alignItems="center" justifyContent="center">
+                            <Text textAlign="center" color="gray.500" fontSize="sm">No Input</Text>
+                          </Box>
+                      }
                       {provided.placeholder}
                     </Box>
                   )}
