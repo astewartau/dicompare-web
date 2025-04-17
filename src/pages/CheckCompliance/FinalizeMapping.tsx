@@ -15,8 +15,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CheckCircleIcon,
-  WarningIcon,
-  CloseIcon
+  WarningIcon
 } from '@chakra-ui/icons';
 import { usePyodide } from '../../components/PyodideContext';
 import {
