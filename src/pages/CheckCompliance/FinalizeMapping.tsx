@@ -52,6 +52,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ setIsNextEnabled, isA
   const [referenceFile, setReferenceFile] = useState<{ name: string; content: string } | null>(null);
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [referenceOptions, setReferenceOptions] = useState<Acquisition[]>([]);
+  const [referenceFields, setReferenceFields] = useState<string[]>([]);
 
   // State for DICOM input and input options.
   const [inputDICOMFiles, setInputDICOMFiles] = useState<File[]>([]);
@@ -89,24 +90,15 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ setIsNextEnabled, isA
     setDICOMProgress(p);
   }, []);
 
-  // --- Schema Upload Handlers ---
+  // --- Schema Upload handlers ---
   const handleSchemaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     const file = e.target.files[0];
     const content = await file.text();
     setReferenceFile({ name: file.name, content });
   };
-
-  const handleSchemaDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsSchemaDragActive(true);
-  };
-
-  const handleSchemaDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsSchemaDragActive(false);
-  };
-
+  const handleSchemaDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsSchemaDragActive(true); };
+  const handleSchemaDragLeave = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsSchemaDragActive(false); };
   const handleSchemaDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsSchemaDragActive(false);
@@ -122,21 +114,23 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ setIsNextEnabled, isA
     reader.readAsText(file);
   };
 
-  // --- Load Schema Acquisitions (JSON or .py) ---
+  // --- Load Schema (JSON or Python) ---
   useEffect(() => {
     if (!referenceFile) return;
-
     const loadSchema = async () => {
       setSchemaLoading(true);
       try {
+        // write the file into Pyodide FS
         await writePythonFile(referenceFile.name, referenceFile.content);
 
+        // flags for snippet
         const isJson = referenceFile.name.endsWith('.json');
-        const isPy   = referenceFile.name.endsWith('.py');
+        const isPy = referenceFile.name.endsWith('.py');
         await setPythonGlobal('ref_config_name', referenceFile.name);
         await setPythonGlobal('is_json', isJson);
-        await setPythonGlobal('is_py',   isPy);
+        await setPythonGlobal('is_py', isPy);
 
+        // snippet: load_json_session sets reference_fields; Python path builds union
         const code = `
 import sys, json
 sys.path.append('.')
@@ -151,7 +145,11 @@ if is_json:
 
 elif is_py:
     ref_models = load_python_session(module_path=ref_config_name)
-    # build a simple rules-only view
+    # union all model.reference_fields
+    reference_fields = sorted({ f
+        for model in ref_models.values()
+        for f in model.reference_fields
+    })
     ref_session = {
       "acquisitions": {
         acq_name: {
@@ -169,60 +167,73 @@ elif is_py:
     }
 
 else:
-    raise RuntimeError(f"Unsupported schema: {referenceFile.name}")
+    raise RuntimeError(f"Unsupported schema: {ref_config_name}")
 
-json.dumps(ref_session["acquisitions"])
+json.dumps({
+  "acquisitions": ref_session["acquisitions"],
+  "reference_fields": reference_fields
+})
         `.trim();
 
-        const result = await runPythonCode(code);
-        const parsed = JSON.parse(result);
-        const refs = Object.entries(parsed).map(([name, details]) => ({ name, details }));
-        setReferenceOptions(refs);
+        const out = await runPythonCode(code);
+        const parsed = JSON.parse(out);
+        // set both the acquisitions list and the Python global
+        const { acquisitions, reference_fields: rf } = parsed;
+        // expose to next steps
+        setReferenceOptions(Object.entries(acquisitions).map(([name, details]) => ({ name, details })));
+        setReferenceFields(rf);
+        // also re‐set in Pyodide so that analyzeDICOM sees it
+        await setPythonGlobal('reference_fields', rf);
       } catch (err) {
         console.error('Error loading schema:', err);
       } finally {
         setSchemaLoading(false);
       }
     };
-
     loadSchema();
   }, [referenceFile, runPythonCode, setPythonGlobal, writePythonFile]);
 
-  // --- Input DICOM Handlers & Analysis (unchanged) ---
+  // --- DICOM Handler / analysis ---
   const analyzeDICOMFiles = async (files: File[]) => {
     setIsDICOMUploading(true);
     try {
-      const dicomBytes: Record<string, Uint8Array> = {};
+      const dicomFiles: Record<string, Uint8Array> = {};
       for (const file of files) {
         const buf = await file.arrayBuffer();
-        dicomBytes[file.webkitRelativePath || file.name] = new Uint8Array(buf);
+        dicomFiles[file.webkitRelativePath || file.name] = new Uint8Array(buf);
       }
-      await setPythonGlobal('dicom_files', dicomBytes);
+      await setPythonGlobal('dicom_files', dicomFiles);
       await setPythonGlobal('update_progress', updateProgress);
+      // ensure Python sees our chosen reference_fields
+      await setPythonGlobal('reference_fields', referenceFields.length ? referenceFields : ['ProtocolName']);
 
       const code = `
 import sys, json, asyncio
+import pyodide
 from dicompare.cli.gen_session import create_json_reference
 from dicompare import async_load_dicom_session, assign_acquisition_and_run_numbers
 
-acquisition_fields = ["ProtocolName"]
+if isinstance(reference_fields, pyodide.ffi.JsProxy):
+    reference_fields = reference_fields.to_py()
+
+global in_session
 in_session = await async_load_dicom_session(dicom_bytes=dicom_files.to_py(), progress_function=update_progress)
-in_session = assign_acquisition_and_run_numbers(in_session)
-in_session.sort_values(by=["Acquisition"] + acquisition_fields, inplace=True)
-
-missing = [f for f in acquisition_fields if f not in in_session.columns]
+missing = [f for f in reference_fields if f not in in_session.columns]
 if missing:
-    raise ValueError(f"Missing ref fields: {missing}")
+    raise ValueError(f"Input session is missing required reference fields: {missing}")
 
-input_acq = create_json_reference(in_session, acquisition_fields)
-json.dumps(input_acq["acquisitions"])
+in_session = assign_acquisition_and_run_numbers(in_session)
+in_session.sort_values(by=['Acquisition'] + reference_fields, inplace=True)
+
+input_acquisitions = create_json_reference(in_session, reference_fields)
+json.dumps(input_acquisitions['acquisitions'])
       `.trim();
 
-      const res = await runPythonCode(code);
-      const parsed = JSON.parse(res);
+      const out = await runPythonCode(code);
+      const parsed = JSON.parse(out);
       setInputOptions(Object.entries(parsed).map(([name, details]) => ({ name, details })));
-    } catch (err) {
-      console.error('Error loading DICOM session:', err);
+    } catch (error) {
+      console.error('Error loading input acquisitions:', error);
     } finally {
       setIsDICOMUploading(false);
     }
@@ -276,25 +287,24 @@ json.dumps(input_acq["acquisitions"])
     }
   };
 
-  // --- Pairing logic ---
+  // --- Pairing & compliance (unchanged) ---
   useEffect(() => {
-    const count = Math.max(referenceOptions.length, inputOptions.length);
-    setPairs(Array.from({ length: count }, (_, i) => ({
+    const n = Math.max(referenceOptions.length, inputOptions.length);
+    setPairs(Array.from({ length: n }, (_, i) => ({
       ref: referenceOptions[i] || null,
       inp: inputOptions[i] || null
     })));
   }, [referenceOptions, inputOptions]);
 
-  // --- Sync session_map to Python ---
   useEffect(() => {
-    const mapping: Record<string, string> = {};
+    const map: Record<string, string> = {};
     pairs.forEach(p => {
-      if (p.ref && p.inp) mapping[p.ref.name] = p.inp.name;
+      if (p.ref && p.inp) map[p.ref.name] = p.inp.name;
     });
-    setPythonGlobal('session_map', JSON.stringify(mapping)).catch(console.error);
+    setPythonGlobal('session_map', JSON.stringify(map)).catch(console.error);
   }, [pairs, setPythonGlobal]);
 
-  // --- Compliance analysis ---
+  // --- Compliance analysis (attach rule_name for .py) ---
   const analyzeCompliance = async () => {
     try {
       const code = `
@@ -322,6 +332,14 @@ else:
     ref_models=ref_models,
     session_map=sm
   )
+  # attach rule_name so React can key by it
+  for rec in summary:
+    ref_acq = rec.get("reference acquisition")
+    for funcs in ref_models[ref_acq]._field_validators.values():
+      for func in funcs:
+        if ", ".join(func._field_names) == rec.get("field"):
+          rec["rule_name"] = func._rule_name
+          break
 
 json.dumps(summary)
       `.trim();
@@ -330,24 +348,32 @@ json.dumps(summary)
       setComplianceReport(raw);
       const results: any[] = JSON.parse(raw);
 
+      // build base field map
       const cmap: Record<string, FieldCompliance> = {};
       const overall: Record<string, { status: 'ok' | 'error'; message: string }> = {};
-
       results.forEach(item => {
         const refA = item['reference acquisition'];
         if (refA) {
           overall[refA] ||= { status: 'ok', message: 'Passed.' };
           if (!item.passed) overall[refA] = { status: 'error', message: item.message || '' };
         }
-        if (item.field) {
-          cmap[item.field] = {
+        const key = item.rule_name || item.field;
+        cmap[key] = { status: item.passed ? 'ok' : 'error', message: item.message };
+      });
+
+      // add series‑specific entries under a unique key
+      const seriesMap: Record<string, FieldCompliance> = {};
+      results.forEach(item => {
+        if (item.series) {
+          const seriesKey = `${item['reference acquisition']}|${item.series}|${item.field}`;
+          seriesMap[seriesKey] = {
             status: item.passed ? 'ok' : 'error',
             message: item.message
           };
         }
       });
 
-      setComplianceMap(cmap);
+      setComplianceMap({ ...cmap, ...seriesMap });
       setOverallCompliance(overall);
     } catch (err) {
       console.error('Compliance error:', err);
@@ -358,7 +384,7 @@ json.dumps(summary)
     if (pairs.length) analyzeCompliance();
   }, [pairs]);
 
-  // --- Render helpers ---
+  // --- Renderers ---
   const renderRulesTable = (rules: Array<{ name: string; message: string }>) => (
     <Box width="100%" mb={4}>
       <Text fontWeight="medium" mb={2}>Validation Rules</Text>
@@ -392,9 +418,9 @@ json.dumps(summary)
   );
 
   const renderCard = (acq: Acquisition, type: 'ref' | 'inp', idx: number) => {
-    const expanded = type === 'ref'
+    const expanded = (type === 'ref'
       ? expandedReferences[acq.name]
-      : expandedInputs[acq.name];
+      : expandedInputs[acq.name]) || false;
     const toggle = () => {
       if (type === 'ref') {
         setExpandedReferences(prev => ({ ...prev, [acq.name]: !prev[acq.name] }));
@@ -404,13 +430,14 @@ json.dumps(summary)
     };
 
     const overallIcon = type === 'ref' && overallCompliance[acq.name]
-      ? overallCompliance[acq.name].status === 'ok'
-        ? <Tooltip label="Fully compliant"><CheckCircleIcon ml={2} color="green.500"/></Tooltip>
-        : <Tooltip label={overallCompliance[acq.name].message}><WarningIcon ml={2} color="red.500"/></Tooltip>
+      ? (overallCompliance[acq.name].status === 'ok'
+        ? <Tooltip label="Fully compliant"><CheckCircleIcon ml={2} color="green.500" /></Tooltip>
+        : <Tooltip label={overallCompliance[acq.name].message}><WarningIcon ml={2} color="red.500" /></Tooltip>
+      )
       : null;
 
     return (
-      <Draggable draggableId={`${type}-${acq.name}-${idx}`} index={idx} key={acq.name + idx}>
+      <Draggable draggableId={`${type}-${acq.name}-${idx}`} index={idx} key={`${type}-${acq.name}-${idx}`}>
         {(provided: DraggableProvided) => (
           <Box
             ref={provided.innerRef}
@@ -445,7 +472,7 @@ json.dumps(summary)
                   : (
                     <>
                       {acq.details.fields && renderFieldsTable(acq.details.fields, type)}
-                      {acq.details.series && renderSeriesTable(acq.details.series, type)}
+                      {acq.details.series && renderSeriesTable(acq.details.series, type, acq.name)}
                     </>
                   )
                 }
@@ -457,149 +484,146 @@ json.dumps(summary)
     );
   };
 
-    // --- 7. Render Fields Table with Compliance Icons ---
-    const renderFieldsTable = (
-      fields: Array<{ field: string; value?: any; tolerance?: number }>,
-      cardType: 'ref' | 'inp'
-    ) => (
-      <Box width="100%" mb={2}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+
+  // --- 7. Render Fields Table with Compliance Icons ---
+  const renderFieldsTable = (
+    fields: Array<{ field: string; value?: any; tolerance?: number }>,
+    cardType: 'ref' | 'inp'
+  ) => (
+    <Box width="100%" mb={2}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ borderBottom: '1px solid #ccc', padding: '4px', textAlign: 'left' }}>Field</th>
+            <th style={{ borderBottom: '1px solid #ccc', padding: '4px', textAlign: 'right' }}>Value</th>
+            {cardType === 'ref' && (
+              <th style={{ borderBottom: '1px solid #ccc', padding: '4px' }}>Compliance</th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {fields.map((fld, idx) => {
+            const compliance = complianceMap[fld.field];
+            let icon = null;
+            if (cardType === 'ref' && compliance) {
+              icon = compliance.status === 'ok' ? (
+                <Tooltip label="OK">
+                  <CheckCircleIcon color="green.500" />
+                </Tooltip>
+              ) : (
+                <Tooltip label={compliance.message || "Issue found"}>
+                  <WarningIcon color="red.500" />
+                </Tooltip>
+              );
+            }
+            return (
+              <tr key={idx}>
+                <td style={{ borderBottom: '1px solid #eee', padding: '4px' }}>{fld.field}</td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'right' }}>
+                  {fld.value}{fld.tolerance !== undefined ? ` (tol: ${fld.tolerance})` : ''}
+                </td>
+                {cardType === 'ref' && (
+                  <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'center' }}>
+                    {icon}
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Box>
+  );
+
+  // --- 8. Render Series Table with Compliance Icons ---
+  // --- 8. Render Series Table with Compliance Icons ---
+  const renderSeriesTable = (
+    seriesArr: Array<{
+      name: string;
+      fields: Array<{ field: string; value?: any; tolerance?: number; contains?: any }>;
+    }>,
+    cardType: 'ref' | 'inp',
+    acqName: string
+  ) => {
+    if (!seriesArr.length) return null;
+
+    // gather all field names
+    const allFieldNames = Array.from(
+      seriesArr.reduce((set, s) => {
+        s.fields.forEach(f => set.add(f.field));
+        return set;
+      }, new Set<string>())
+    );
+
+    return (
+      <Box>
+        <Box as="table" width="100%" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ borderBottom: '1px solid #ccc', padding: '4px', textAlign: 'left' }}>Field</th>
-              <th style={{ borderBottom: '1px solid #ccc', padding: '4px', textAlign: 'right' }}>Value</th>
+              <th style={{ padding: '4px' }}>Series</th>
+              {allFieldNames.map(fn => (
+                <th key={fn} style={{ padding: '4px' }}>{fn}</th>
+              ))}
               {cardType === 'ref' && (
-                <th style={{ borderBottom: '1px solid #ccc', padding: '4px' }}>Compliance</th>
+                <th style={{ padding: '4px', textAlign: 'center' }}>Compliance</th>
               )}
             </tr>
           </thead>
           <tbody>
-            {fields.map((fld, idx) => {
-              const compliance = complianceMap[fld.field];
-              let icon = null;
-              if (cardType === 'ref' && compliance) {
-                icon = compliance.status === 'ok' ? (
-                  <Tooltip label="OK">
-                    <CheckCircleIcon color="green.500" />
-                  </Tooltip>
-                ) : (
-                  <Tooltip label={compliance.message || "Issue found"}>
-                    <WarningIcon color="red.500" />
-                  </Tooltip>
-                );
-              }
+            {seriesArr.map((s, idx) => {
+              const composite = s.fields.map(f => f.field).join(', ');
+              const seriesKey = `${acqName}|${s.name}|${composite}`;
+              const comp = complianceMap[seriesKey];
+
               return (
                 <tr key={idx}>
-                  <td style={{ borderBottom: '1px solid #eee', padding: '4px' }}>{fld.field}</td>
-                  <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'right' }}>
-                    {fld.value}{fld.tolerance !== undefined ? ` (tol: ${fld.tolerance})` : ''}
-                  </td>
+                  <td style={{ padding: '4px' }}>{s.name}</td>
+                  {allFieldNames.map(fn => {
+                    const fld = s.fields.find(f => f.field === fn);
+                    const val = fld?.value ?? fld?.contains ?? '';
+                    const tol = fld?.tolerance != null ? ` (tol: ${fld.tolerance})` : '';
+                    return (
+                      <td key={fn} style={{ padding: '4px', textAlign: 'right' }}>
+                        {String(val) + tol}
+                      </td>
+                    );
+                  })}
                   {cardType === 'ref' && (
-                    <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'center' }}>
-                      {icon}
+                    <td style={{ padding: '4px', textAlign: 'center' }}>
+                      {comp ? (
+                        comp.status === 'ok' ? (
+                          <Tooltip label="OK">
+                            <CheckCircleIcon color="green.500" />
+                          </Tooltip>
+                        ) : (
+                          <Tooltip label={comp.message}>
+                            <WarningIcon color="red.500" />
+                          </Tooltip>
+                        )
+                      ) : null}
                     </td>
                   )}
                 </tr>
               );
             })}
           </tbody>
-        </table>
+        </Box>
       </Box>
     );
-  
-    // --- 8. Render Series Table with Compliance Icons ---
-    const renderSeriesTable = (
-      seriesArr: Array<{
-        name: string;
-        fields: Array<{ field: string; value?: any; tolerance?: number; contains?: any }>;
-      }>,
-      cardType: 'ref' | 'inp'
-    ) => {
-      if (!Array.isArray(seriesArr) || seriesArr.length === 0) return null;
-  
-      // Collect all field names across series.
-      const allFieldNames = new Set<string>();
-      seriesArr.forEach(s => s.fields.forEach(f => allFieldNames.add(f.field)));
-      const fieldArray = Array.from(allFieldNames);
-  
-      return (
-        <Box>
-          <Box as="table" width="100%" style={{ borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ borderBottom: '1px solid #ccc', padding: '4px' }}>Series</th>
-                {fieldArray.map(fieldName => (
-                  <th key={fieldName} style={{ borderBottom: '1px solid #ccc', padding: '4px' }}>
-                    {fieldName}
-                  </th>
-                ))}
-                {cardType === 'ref' && (
-                  <th style={{ borderBottom: '1px solid #ccc', padding: '4px', textAlign: 'center' }}>
-                    Compliance
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {seriesArr.map((s, idx) => {
-                // Use the schema series name directly.
-                const key = "reference series:" + s.name;
-                const seriesComp = complianceMap[key];
-                return (
-                  <tr key={idx}>
-                    <td style={{ borderBottom: '1px solid #eee', padding: '4px' }}>{s.name}</td>
-                    {fieldArray.map(fieldName => {
-                      const fieldObj = s.fields.find(f => f.field === fieldName);
-                      const val = fieldObj?.value ?? fieldObj?.contains ?? '';
-                      const tol =
-                        fieldObj?.tolerance !== undefined ? ` (tol: ${fieldObj.tolerance})` : '';
-                      return (
-                        <td
-                          key={fieldName}
-                          style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'right' }}
-                        >
-                          {String(val) + tol}
-                        </td>
-                      );
-                    })}
-                    {cardType === 'ref' && (
-                      <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'center' }}>
-                        {seriesComp ? (
-                          seriesComp.status === 'ok' ? (
-                            <Tooltip label="OK">
-                              <CheckCircleIcon color="green.500" />
-                            </Tooltip>
-                          ) : (
-                            <Tooltip label={seriesComp.message || "Issue found"}>
-                              <WarningIcon color="red.500" />
-                            </Tooltip>
-                          )
-                        ) : (
-                          <Tooltip label="Series missing">
-                            <WarningIcon color="red.500" />
-                          </Tooltip>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Box>
-        </Box>
-      );
-    };
+  };
+
 
   const handleDragEnd = (result: DropResult) => {
     const { source, destination } = result;
     if (!destination) return;
-    const s = source.droppableId.split('-'), d = destination.droppableId.split('-');
-    const si = +s[2], di = +d[2];
+    const [_, srcType, srcIdx] = source.droppableId.split('-');
+    const [__, dstType, dstIdx] = destination.droppableId.split('-');
+    const si = +srcIdx, di = +dstIdx;
     setPairs(prev => {
       const next = [...prev];
-      if (s[1] === 'ref' && d[1] === 'ref') {
+      if (srcType === 'ref' && dstType === 'ref') {
         [next[si].ref, next[di].ref] = [next[di].ref, next[si].ref];
-      } else if (s[1] === 'inp' && d[1] === 'inp') {
+      } else if (srcType === 'inp' && dstType === 'inp') {
         [next[si].inp, next[di].inp] = [next[di].inp, next[si].inp];
       }
       return next;
