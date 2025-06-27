@@ -1,102 +1,72 @@
 // SchemaUploader.tsx
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Box,
-  Text,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
   Button,
-  Spinner
+  Spinner,
+  Text,
+  Box
 } from '@chakra-ui/react';
 import { SchemaFile } from './types';
+import SchemaLibrary from './SchemaLibrary';
 
 interface SchemaUploaderProps {
-  onSchemaLoad: (file: SchemaFile) => void;
+  isOpen: boolean;
+  onClose: () => void;
+  onSchemaLoad: (file: SchemaFile, acquisitionName?: string) => void;
   isLoading: boolean;
-  loadedFile: SchemaFile | null;
+  schemaLibrary: SchemaFile[];
+  onAddToLibrary: (schema: SchemaFile) => void;
+  onRemoveFromLibrary: (schemaName: string) => void;
 }
 
 const SchemaUploader: React.FC<SchemaUploaderProps> = ({ 
+  isOpen,
+  onClose,
   onSchemaLoad, 
   isLoading, 
-  loadedFile 
+  schemaLibrary,
+  onAddToLibrary,
+  onRemoveFromLibrary
 }) => {
-  const [isDragActive, setIsDragActive] = useState(false);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.length) return;
-    const file = e.target.files[0];
-    const content = await file.text();
-    onSchemaLoad({ name: file.name, content });
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => { 
-    e.preventDefault(); 
-    setIsDragActive(true); 
-  };
-  
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => { 
-    e.preventDefault(); 
-    setIsDragActive(false); 
-  };
-  
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragActive(false);
-    const item = e.dataTransfer.items[0];
-    if (item.kind !== 'file') return;
-    const file = item.getAsFile();
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const txt = ev.target?.result;
-      if (typeof txt === 'string') onSchemaLoad({ name: file.name, content: txt });
-    };
-    reader.readAsText(file);
+  const handleSelectSchema = (schema: SchemaFile, acquisitionName?: string) => {
+    onSchemaLoad(schema, acquisitionName);
   };
 
   return (
-    <Box>
-      <Text mb={4} fontWeight="medium" color="teal.600">
-        Schema Template
-      </Text>
-      <Box
-        p={4}
-        mb={6}
-        borderWidth="1px"
-        borderRadius="md"
-        bg={isDragActive ? 'gray.200' : 'gray.50'}
-        textAlign="center"
-        onDragEnter={handleDragOver}
-        onDragOver={e => e.preventDefault()}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {isLoading ? (
-          <>
-            <Spinner size="lg" color="teal.500" />
-            <Text mt={2}>Loading schema…</Text>
-          </>
-        ) : (
-          <>
-            <Text mb={2}>Drag & drop .json or .py schema here</Text>
-            <input
-              type="file"
-              accept=".json,.py"
-              style={{ display: 'none' }}
-              id="schema-upload"
-              onChange={handleUpload}
+    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader>Select Schema</ModalHeader>
+        <ModalCloseButton />
+        <ModalBody>
+          {isLoading ? (
+            <Box textAlign="center" py={8}>
+              <Spinner size="xl" color="teal.500" />
+              <Text mt={4}>Loading schema...</Text>
+            </Box>
+          ) : (
+            <SchemaLibrary 
+              schemas={schemaLibrary}
+              onSelectSchema={handleSelectSchema}
+              onAddSchema={onAddToLibrary}
+              onDeleteSchema={onRemoveFromLibrary}
             />
-            <Button as="label" htmlFor="schema-upload" colorScheme="teal">
-              Upload Schema
-            </Button>
-            {loadedFile && (
-              <Text mt={2} fontSize="sm" color="gray.600">
-                Loaded: {loadedFile.name}
-              </Text>
-            )}
-          </>
-        )}
-      </Box>
-    </Box>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button colorScheme="gray" onClick={onClose}>
+            Cancel
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };
 

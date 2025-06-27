@@ -1,4 +1,4 @@
-// common/RulesTable.tsx
+// RulesTable.tsx
 import React from 'react';
 import {
   Box,
@@ -14,9 +14,17 @@ import { FieldCompliance } from './types';
 interface RulesTableProps {
   rules: Array<{ rule_name?: string; name?: string; message: string }>;
   complianceMap: Record<string, FieldCompliance>;
+  referenceId?: string; // Add this prop
 }
 
-const RulesTable: React.FC<RulesTableProps> = ({ rules, complianceMap }) => {
+const RulesTable: React.FC<RulesTableProps> = ({ rules, complianceMap, referenceId }) => {
+  // Function to get compliance status with ID support
+  const getComplianceStatus = (ruleName: string) => {
+    // Include the reference ID in the key if available
+    const key = referenceId ? `${ruleName}#${referenceId}` : ruleName;
+    return complianceMap[key] || { status: 'warning', message: '' };
+  };
+
   return (
     <Box width="100%" mb={4}>
       <Text fontWeight="medium" mb={2}>Validation Rules</Text>
@@ -31,7 +39,7 @@ const RulesTable: React.FC<RulesTableProps> = ({ rules, complianceMap }) => {
         <tbody>
           {rules.map((rule) => {
             const ruleName = rule.rule_name || rule.name || '';
-            const comp = complianceMap[ruleName] || { status: 'warning', message: '' };
+            const comp = getComplianceStatus(ruleName);
             const icon = comp.status === 'ok'
               ? <CheckCircleIcon color="green.500" />
               : <WarningIcon color="red.500" />;

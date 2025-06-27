@@ -1,8 +1,10 @@
 // types.ts
 export interface Acquisition {
+    id?: string; // Add unique ID
     name: string;
-    details: Record<string, any>;
-}
+    details: any;
+    source: string;
+  }
 
 export interface Pair {
     ref: Acquisition | null;
@@ -24,3 +26,14 @@ export interface SchemaFile {
     name: string;
     content: string;
 }
+// Add to types.ts
+export interface SchemaUploaderProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSchemaLoad: (file: SchemaFile) => void;
+    isLoading: boolean;
+    schemaLibrary: SchemaFile[];
+    onAddToLibrary: (schema: SchemaFile) => void;
+    onRemoveFromLibrary: (schemaName: string) => void;
+  }
+  

@@ -1,4 +1,4 @@
-// common/SeriesTable.tsx
+// SeriesTable.tsx
 import React from 'react';
 import {
   Box,
@@ -18,13 +18,15 @@ interface SeriesTableProps {
   cardType: 'ref' | 'inp';
   acqName: string;
   complianceMap: Record<string, FieldCompliance>;
+  referenceId?: string; // Add this prop
 }
 
 const SeriesTable: React.FC<SeriesTableProps> = ({ 
   seriesArr, 
   cardType, 
   acqName, 
-  complianceMap 
+  complianceMap,
+  referenceId
 }) => {
   if (!seriesArr.length) return null;
 
@@ -35,6 +37,16 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
       return set;
     }, new Set<string>())
   );
+
+  // Function to get compliance status with ID support
+  const getComplianceStatus = (seriesName: string, fieldName: string) => {
+    if (cardType !== 'ref') return null;
+    // Include the reference ID in the key if available
+    const key = referenceId 
+      ? `${acqName}#${referenceId}|${seriesName}|${fieldName}` 
+      : `${acqName}|${seriesName}|${fieldName}`;
+    return complianceMap[key];
+  };
 
   return (
     <Box>
@@ -53,8 +65,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
         <tbody>
           {seriesArr.map((s, idx) => {
             const composite = s.fields.map(f => f.field).join(', ');
-            const seriesKey = `${acqName}|${s.name}|${composite}`;
-            const comp = complianceMap[seriesKey];
+            // Get compliance for this series using the helper function
+            const comp = getComplianceStatus(s.name, composite);
 
             return (
               <tr key={idx}>

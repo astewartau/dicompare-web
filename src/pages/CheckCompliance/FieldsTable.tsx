@@ -1,4 +1,4 @@
-// common/FieldsTable.tsx
+// FieldsTable.tsx
 import React from 'react';
 import {
   Box,
@@ -8,15 +8,36 @@ import {
   CheckCircleIcon,
   WarningIcon
 } from '@chakra-ui/icons';
-import { FieldCompliance } from '../FinalizeMapping/types';
+import { FieldCompliance } from './types';
 
 interface FieldsTableProps {
   fields: Array<{ field: string; value?: any; tolerance?: number }>;
   cardType: 'ref' | 'inp';
   complianceMap: Record<string, FieldCompliance>;
+  referenceId?: string; // Add this prop
 }
 
-const FieldsTable: React.FC<FieldsTableProps> = ({ fields, cardType, complianceMap }) => {
+const FieldsTable: React.FC<FieldsTableProps> = ({ fields, cardType, complianceMap, referenceId }) => {
+  // Function to get compliance status with ID support
+  const getComplianceStatus = (fieldName: string) => {
+    if (cardType !== 'ref') return null;
+    // Include the reference ID in the key if available
+    const key = referenceId ? `${fieldName}#${referenceId}` : fieldName;
+    return complianceMap[key];
+  };
+
+  // Function to format field values, especially arrays/lists
+  const formatValue = (value: any) => {
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    if (typeof value === 'object' && value !== null && typeof value.join === 'function') {
+      // Handle array-like objects that have a join method
+      return Array.from(value).join(', ');
+    }
+    return String(value);
+  };
+
   return (
     <Box width="100%" mb={2}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -31,7 +52,7 @@ const FieldsTable: React.FC<FieldsTableProps> = ({ fields, cardType, complianceM
         </thead>
         <tbody>
           {fields.map((fld, idx) => {
-            const compliance = complianceMap[fld.field];
+            const compliance = getComplianceStatus(fld.field);
             let icon = null;
             if (cardType === 'ref' && compliance) {
               icon = compliance.status === 'ok' ? (
@@ -48,7 +69,7 @@ const FieldsTable: React.FC<FieldsTableProps> = ({ fields, cardType, complianceM
               <tr key={idx}>
                 <td style={{ borderBottom: '1px solid #eee', padding: '4px' }}>{fld.field}</td>
                 <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'right' }}>
-                  {fld.value}{fld.tolerance !== undefined ? ` (tol: ${fld.tolerance})` : ''}
+                  {formatValue(fld.value)}{fld.tolerance !== undefined ? ` (tol: ${fld.tolerance})` : ''}
                 </td>
                 {cardType === 'ref' && (
                   <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'center' }}>

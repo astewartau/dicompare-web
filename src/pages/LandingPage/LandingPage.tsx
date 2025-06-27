@@ -18,35 +18,35 @@ const LandingPage = () => {
             {/* Introductory Section */}
             <Flex
                 direction={{ base: 'column', md: 'row' }}
-                padding="4rem 2rem"
+                padding="2.5rem 2rem"
                 bgGradient="linear(to-r, teal.500, teal.300)"
                 color="white"
+                align="center"
             >
                 <Box flex="2">
-                    <VStack align="start" spacing={6} marginRight={20}>
-                        <Text fontSize="6xl" as="b">
+                    <VStack align="start" spacing={4} marginRight={20}>
+                        <Text fontSize="5xl" as="b">
                             Empowering imaging research with privacy-first data validation
                         </Text>
                         <Text fontSize="lg" mr={20}>
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut
-                            labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco
-                            laboris nisi ut aliquip ex ea commodo consequat. DICOMpare is your trusted partner in
-                            achieving high-quality, compliant medical imaging workflows.
+                            DICOMpare streamlines medical imaging research by providing tools to generate standardized DICOM templates and validate data compliance. Our privacy-first approach ensures your sensitive medical data never leaves your environment while maintaining the highest standards for data quality and protocol adherence across multi-site studies.
                         </Text>
-                        e
                     </VStack>
                 </Box>
-                <Box flex="1">
-                    <Image src="../assets/ct-scan.png" alt="MRI Visualization" borderRadius="md" boxShadow="lg" />
+                <Box flex="0.8">
+                    <Image 
+                        src="../assets/ct-scan.png" 
+                        alt="MRI Visualization" 
+                        borderRadius="md" 
+                        boxShadow="lg"
+                        maxW="300px"
+                        w="100%"
+                    />
                 </Box>
             </Flex>
 
             {/* Main Content */}
             <Flex direction="column" align="center" justify="center" padding="4rem 2rem" bg="gray.100">
-                <Heading as="h2" size="lg" marginBottom="2rem" textAlign="center" color="teal.600">
-                    Select to Begin
-                </Heading>
-
                 <HStack spacing={8}>
                     {/* Option 1: Generate Template */}
                     <VStack

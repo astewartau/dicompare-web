@@ -20,15 +20,12 @@ import {
     Select,
     HStack,
     Input as ChakraInput,
-    Tabs,
-    TabList,
-    TabPanels,
-    Tab,
-    TabPanel,
+    Box,
 } from "@chakra-ui/react";
 import Tagify from "@yaireo/tagify";
 import "@yaireo/tagify/dist/tagify.css";
 import { ConstantField, DataType, ConstraintType, VariableRow } from "./types";
+import AutocompleteInput from './AutocompleteInput';
 
 export const allowedConstraints = (dataType: DataType): ConstraintType[] => {
     return dataType === "number"
@@ -47,6 +44,7 @@ interface EditConstantModalProps {
     // onSave returns the updated constant field (in constant mode)
     // or updated variable row (in series mode)
     onSave: (updated: ConstantField | VariableRow) => void;
+    validFields?: string[]; // Add this
 }
 
 const EditConstantModal: React.FC<EditConstantModalProps> = ({
@@ -56,6 +54,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     mode = "constant",
     constantField,
     seriesRow,
+    validFields = [], // Add this with default
 }) => {
     const isSeries = mode === "series";
 
@@ -260,182 +259,26 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
         return Object.keys(newErrors).length === 0;
     };
 
-    // --- Series mode handlers ---
-    // In series mode each field is directly a FieldData.
-    const updateSeriesField = (
-        fieldKey: string,
-        newData: Partial<{ constraintType: string; value?: string; minValue?: string; maxValue?: string; tolerance?: string; dataType: DataType }>
-    ) => {
-        setLocalRow((prev) => ({
-            ...prev,
-            [fieldKey]: {
-                ...prev[fieldKey],
-                ...newData,
-                constraintType: newData.constraintType as ConstraintType,
-            },
-        }));
-    };
-
-    // For fields with list datatype in series mode, set up Tagify.
-    const setTagifySeriesRef = (fieldKey: string, currentValue: string) => (el: HTMLInputElement | null) => {
-        if (!el) return;
-        if (!tagifySeriesRefs.current[fieldKey]) {
-            tagifySeriesRefs.current[fieldKey] = new Tagify(el, { duplicates: true });
-            if (tagifySeriesRefs.current[fieldKey].DOM.scope) {
-                tagifySeriesRefs.current[fieldKey].DOM.scope.style.width = "100%";
-            }
-            const initialTags = currentValue
-                ? currentValue.split(",").map((t) => t.trim()).filter(Boolean)
-                : [];
-            tagifySeriesRefs.current[fieldKey].addTags(initialTags);
-            tagifySeriesRefs.current[fieldKey].on("change", () => {
-                const tags =
-                    tagifySeriesRefs.current[fieldKey]?.value.map((tag) => tag.value) || [];
-                updateSeriesField(fieldKey, { value: tags.join(", ") });
+    // Add this useEffect to cleanup Tagify instances when the modal closes
+    useEffect(() => {
+        return () => {
+            // Cleanup all Tagify instances when component unmounts
+            Object.values(tagifySeriesRefs.current).forEach(tagify => {
+                tagify?.destroy();
             });
-        }
-    };
+            tagifySeriesRefs.current = {};
+        };
+    }, []);
 
-    const renderSeriesFieldEditor = (fieldKey: string, field: any) => {
-        // field is of type FieldData.
-        const currentData = field || { constraintType: "value", value: "", dataType: "string" };
-        const isNumber = currentData.dataType === "number";
-        switch (currentData.constraintType) {
-            case "value":
-                if (currentData.dataType === "list") {
-                    return (
-                        <FormControl isInvalid={!!errorsRow[fieldKey]?.value}>
-                            <FormLabel>Value</FormLabel>
-                            <input
-                                ref={setTagifySeriesRef(fieldKey, currentData.value)}
-                                placeholder="Enter comma separated values"
-                                style={{
-                                    width: "100%",
-                                    padding: "0.5rem",
-                                    fontSize: "0.875rem",
-                                    borderRadius: "0.375rem",
-                                    border: "1px solid #E2E8F0",
-                                }}
-                            />
-                            {errorsRow[fieldKey]?.value && (
-                                <FormErrorMessage>{errorsRow[fieldKey].value}</FormErrorMessage>
-                            )}
-                        </FormControl>
-                    );
-                }
-                return (
-                    <FormControl isInvalid={!!errorsRow[fieldKey]?.value}>
-                        <FormLabel>Value</FormLabel>
-                        <ChakraInput
-                            size="sm"
-                            type={isNumber ? "number" : "text"}
-                            value={currentData.value}
-                            placeholder="Enter value"
-                            onChange={(e) =>
-                                updateSeriesField(fieldKey, { value: e.target.value })
-                            }
-                            onKeyDown={isNumber ? handleNumericKeyDown : undefined}
-                            onPaste={isNumber ? handleNumericPaste : undefined}
-                        />
-                        {errorsRow[fieldKey]?.value && (
-                            <FormErrorMessage>{errorsRow[fieldKey].value}</FormErrorMessage>
-                        )}
-                    </FormControl>
-                );
-            case "range":
-                return (
-                    <HStack spacing={2}>
-                        <FormControl isInvalid={!!errorsRow[fieldKey]?.minValue}>
-                            <ChakraInput
-                                size="sm"
-                                type={isNumber ? "number" : "text"}
-                                value={currentData.minValue || ""}
-                                placeholder="Min"
-                                onChange={(e) =>
-                                    updateSeriesField(fieldKey, { minValue: e.target.value })
-                                }
-                                onKeyDown={isNumber ? handleNumericKeyDown : undefined}
-                                onPaste={isNumber ? handleNumericPaste : undefined}
-                            />
-                            {errorsRow[fieldKey]?.minValue && (
-                                <FormErrorMessage>{errorsRow[fieldKey].minValue}</FormErrorMessage>
-                            )}
-                        </FormControl>
-                        <FormControl isInvalid={!!errorsRow[fieldKey]?.maxValue}>
-                            <ChakraInput
-                                size="sm"
-                                type={isNumber ? "number" : "text"}
-                                value={currentData.maxValue || ""}
-                                placeholder="Max"
-                                onChange={(e) =>
-                                    updateSeriesField(fieldKey, { maxValue: e.target.value })
-                                }
-                                onKeyDown={isNumber ? handleNumericKeyDown : undefined}
-                                onPaste={isNumber ? handleNumericPaste : undefined}
-                            />
-                            {errorsRow[fieldKey]?.maxValue && (
-                                <FormErrorMessage>{errorsRow[fieldKey].maxValue}</FormErrorMessage>
-                            )}
-                        </FormControl>
-                    </HStack>
-                );
-            case "value+tolerance":
-                return (
-                    <HStack spacing={2}>
-                        <FormControl isInvalid={!!errorsRow[fieldKey]?.value}>
-                            <ChakraInput
-                                size="sm"
-                                type={isNumber ? "number" : "text"}
-                                value={currentData.value}
-                                placeholder="Enter value"
-                                onChange={(e) =>
-                                    updateSeriesField(fieldKey, { value: e.target.value })
-                                }
-                                onKeyDown={isNumber ? handleNumericKeyDown : undefined}
-                                onPaste={isNumber ? handleNumericPaste : undefined}
-                            />
-                            {errorsRow[fieldKey]?.value && (
-                                <FormErrorMessage>{errorsRow[fieldKey].value}</FormErrorMessage>
-                            )}
-                        </FormControl>
-                        <FormControl isInvalid={!!errorsRow[fieldKey]?.tolerance}>
-                            <ChakraInput
-                                size="sm"
-                                type={isNumber ? "number" : "text"}
-                                value={currentData.tolerance || ""}
-                                placeholder="Tolerance"
-                                onChange={(e) =>
-                                    updateSeriesField(fieldKey, { tolerance: e.target.value })
-                                }
-                                onKeyDown={isNumber ? handleNumericKeyDown : undefined}
-                                onPaste={isNumber ? handleNumericPaste : undefined}
-                            />
-                            {errorsRow[fieldKey]?.tolerance && (
-                                <FormErrorMessage>{errorsRow[fieldKey].tolerance}</FormErrorMessage>
-                            )}
-                        </FormControl>
-                    </HStack>
-                );
-            case "contains":
-                return (
-                    <FormControl isInvalid={!!errorsRow[fieldKey]?.value}>
-                        <ChakraInput
-                            size="sm"
-                            value={currentData.value}
-                            placeholder="Enter substring"
-                            onChange={(e) =>
-                                updateSeriesField(fieldKey, { value: e.target.value })
-                            }
-                        />
-                        {errorsRow[fieldKey]?.value && (
-                            <FormErrorMessage>{errorsRow[fieldKey].value}</FormErrorMessage>
-                        )}
-                    </FormControl>
-                );
-            default:
-                return null;
+    // Also cleanup when modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            Object.values(tagifySeriesRefs.current).forEach(tagify => {
+                tagify?.destroy();
+            });
+            tagifySeriesRefs.current = {};
         }
-    };
+    }, [isOpen]);
 
     // Helper: validate all series fields except "Series".
     const validateSeries = (): boolean => {
@@ -623,11 +466,17 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
             <>
                 <FormControl isInvalid={!!errors.fieldName}>
                     <FormLabel>Field Name</FormLabel>
-                    <ChakraInput
-                        size="sm"
+                    <AutocompleteInput
                         value={localField.name}
-                        onChange={handleNameChange}
-                        placeholder="Field name"
+                        onChange={(value) => {
+                            setLocalField((prev) => ({ ...prev, name: value }));
+                            if (value.trim()) {
+                                setErrors((prev) => ({ ...prev, fieldName: undefined }));
+                            }
+                        }}
+                        placeholder="Enter field name"
+                        validFields={validFields}
+                        size="sm"
                     />
                     {errors.fieldName && <FormErrorMessage>{errors.fieldName}</FormErrorMessage>}
                 </FormControl>
@@ -663,8 +512,11 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
 
     // Render series mode form.
     // The Series Name appears above the tabs.
+    // Replace the entire renderSeriesForm function with this simpler version:
     const renderSeriesForm = () => {
         const seriesName = localRow["Series"]?.value || "";
+        const fieldKeys = Object.keys(localRow).filter((key) => key !== "Series");
+
         return (
             <>
                 <FormControl mb={4} isInvalid={!!errorsRow["Series"]?.value}>
@@ -684,44 +536,185 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                         <FormErrorMessage>{errorsRow["Series"].value}</FormErrorMessage>
                     )}
                 </FormControl>
-                <Tabs variant="enclosed">
-                    <TabList>
-                        {Object.keys(localRow)
-                            .filter((key) => key !== "Series")
-                            .map((key) => (
-                                <Tab key={key}>{key}</Tab>
-                            ))}
-                    </TabList>
-                    <TabPanels>
-                        {Object.keys(localRow)
-                            .filter((key) => key !== "Series")
-                            .map((key) => {
-                                const field = localRow[key];
-                                const currentData = field || { constraintType: "value", value: "", dataType: "string" };
-                                return (
-                                    <TabPanel key={key}>
-                                        <FormControl mb={4}>
-                                            <FormLabel>Constraint</FormLabel>
-                                            <Select
-                                                size="sm"
-                                                value={currentData.constraintType}
-                                                onChange={(e) =>
-                                                    updateSeriesField(key, { constraintType: e.target.value })
-                                                }
-                                            >
-                                                {allowedConstraints(currentData.dataType).map((ct) => (
-                                                    <option key={ct} value={ct}>
-                                                        {ct}
-                                                    </option>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-                                        {renderSeriesFieldEditor(key, currentData)}
-                                    </TabPanel>
-                                );
-                            })}
-                    </TabPanels>
-                </Tabs>
+
+                {fieldKeys.map((fieldKey) => {
+                    const field = localRow[fieldKey];
+                    const currentData = field || { constraintType: "value", value: "", dataType: "string" };
+                    const isNumber = currentData.dataType === "number";
+                    const fieldErrors = errorsRow[fieldKey];
+
+                    return (
+                        <Box key={fieldKey} mb={6} p={4} borderWidth="1px" borderRadius="md">
+                            <FormLabel fontWeight="bold" mb={3}>{fieldKey}</FormLabel>
+
+                            <FormControl mb={4}>
+                                <FormLabel>Constraint</FormLabel>
+                                <Select
+                                    size="sm"
+                                    value={currentData.constraintType}
+                                    onChange={(e) => {
+                                        const newConstraint = e.target.value as ConstraintType;
+                                        setLocalRow((prev) => ({
+                                            ...prev,
+                                            [fieldKey]: {
+                                                ...prev[fieldKey],
+                                                constraintType: newConstraint,
+                                            },
+                                        }));
+                                    }}
+                                >
+                                    {allowedConstraints(currentData.dataType).map((ct) => (
+                                        <option key={ct} value={ct}>
+                                            {ct}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            {/* Value inputs based on constraint type */}
+                            {currentData.constraintType === "value" && (
+                                <FormControl isInvalid={!!fieldErrors?.value}>
+                                    <FormLabel>Value</FormLabel>
+                                    <ChakraInput
+                                        size="sm"
+                                        type={isNumber ? "number" : "text"}
+                                        value={currentData.value || ""}
+                                        placeholder="Enter value"
+                                        onChange={(e) => {
+                                            setLocalRow((prev) => ({
+                                                ...prev,
+                                                [fieldKey]: {
+                                                    ...prev[fieldKey],
+                                                    value: e.target.value,
+                                                },
+                                            }));
+                                        }}
+                                    />
+                                    {fieldErrors?.value && (
+                                        <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>
+                                    )}
+                                </FormControl>
+                            )}
+
+                            {currentData.constraintType === "range" && (
+                                <HStack spacing={2}>
+                                    <FormControl isInvalid={!!fieldErrors?.minValue}>
+                                        <FormLabel>Min Value</FormLabel>
+                                        <ChakraInput
+                                            size="sm"
+                                            type={isNumber ? "number" : "text"}
+                                            value={currentData.minValue || ""}
+                                            placeholder="Min"
+                                            onChange={(e) => {
+                                                setLocalRow((prev) => ({
+                                                    ...prev,
+                                                    [fieldKey]: {
+                                                        ...prev[fieldKey],
+                                                        minValue: e.target.value,
+                                                    },
+                                                }));
+                                            }}
+                                        />
+                                        {fieldErrors?.minValue && (
+                                            <FormErrorMessage>{fieldErrors.minValue}</FormErrorMessage>
+                                        )}
+                                    </FormControl>
+                                    <FormControl isInvalid={!!fieldErrors?.maxValue}>
+                                        <FormLabel>Max Value</FormLabel>
+                                        <ChakraInput
+                                            size="sm"
+                                            type={isNumber ? "number" : "text"}
+                                            value={currentData.maxValue || ""}
+                                            placeholder="Max"
+                                            onChange={(e) => {
+                                                setLocalRow((prev) => ({
+                                                    ...prev,
+                                                    [fieldKey]: {
+                                                        ...prev[fieldKey],
+                                                        maxValue: e.target.value,
+                                                    },
+                                                }));
+                                            }}
+                                        />
+                                        {fieldErrors?.maxValue && (
+                                            <FormErrorMessage>{fieldErrors.maxValue}</FormErrorMessage>
+                                        )}
+                                    </FormControl>
+                                </HStack>
+                            )}
+
+                            {currentData.constraintType === "value+tolerance" && (
+                                <HStack spacing={2}>
+                                    <FormControl isInvalid={!!fieldErrors?.value}>
+                                        <FormLabel>Value</FormLabel>
+                                        <ChakraInput
+                                            size="sm"
+                                            type={isNumber ? "number" : "text"}
+                                            value={currentData.value || ""}
+                                            placeholder="Enter value"
+                                            onChange={(e) => {
+                                                setLocalRow((prev) => ({
+                                                    ...prev,
+                                                    [fieldKey]: {
+                                                        ...prev[fieldKey],
+                                                        value: e.target.value,
+                                                    },
+                                                }));
+                                            }}
+                                        />
+                                        {fieldErrors?.value && (
+                                            <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>
+                                        )}
+                                    </FormControl>
+                                    <FormControl isInvalid={!!fieldErrors?.tolerance}>
+                                        <FormLabel>Tolerance</FormLabel>
+                                        <ChakraInput
+                                            size="sm"
+                                            type={isNumber ? "number" : "text"}
+                                            value={currentData.tolerance || ""}
+                                            placeholder="Tolerance"
+                                            onChange={(e) => {
+                                                setLocalRow((prev) => ({
+                                                    ...prev,
+                                                    [fieldKey]: {
+                                                        ...prev[fieldKey],
+                                                        tolerance: e.target.value,
+                                                    },
+                                                }));
+                                            }}
+                                        />
+                                        {fieldErrors?.tolerance && (
+                                            <FormErrorMessage>{fieldErrors.tolerance}</FormErrorMessage>
+                                        )}
+                                    </FormControl>
+                                </HStack>
+                            )}
+
+                            {currentData.constraintType === "contains" && (
+                                <FormControl isInvalid={!!fieldErrors?.value}>
+                                    <FormLabel>Contains</FormLabel>
+                                    <ChakraInput
+                                        size="sm"
+                                        value={currentData.value || ""}
+                                        placeholder="Enter substring"
+                                        onChange={(e) => {
+                                            setLocalRow((prev) => ({
+                                                ...prev,
+                                                [fieldKey]: {
+                                                    ...prev[fieldKey],
+                                                    value: e.target.value,
+                                                },
+                                            }));
+                                        }}
+                                    />
+                                    {fieldErrors?.value && (
+                                        <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>
+                                    )}
+                                </FormControl>
+                            )}
+                        </Box>
+                    );
+                })}
             </>
         );
     };

@@ -1,26 +1,29 @@
 // index.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, Flex } from '@chakra-ui/react';
-import { DragDropContext, DropResult } from '@hello-pangea/dnd';
+import { Box, Text, Flex, useDisclosure } from '@chakra-ui/react';
 import { usePyodide } from '../../components/PyodideContext';
 
 import SchemaUploader from './SchemaUploader';
 import DicomUploader from './DicomUploader';
 import PairingArea from './PairingArea';
-import { 
-  loadSchema, 
-  analyzeDicomFiles, 
-  processExistingSession, 
-  analyzeCompliance 
+import DicomViewer from './DicomViewer';
+import {
+  loadSchema,
+  analyzeDicomFiles,
+  processExistingSession,
+  analyzeCompliance,
+  removeSchema,
+  removeDicomSeries,
+  reprocessSpecificAcquisition
 } from './pyodideService';
 import { Acquisition, Pair, FieldCompliance, SchemaFile, FinalizeMappingProps } from './types';
 
-const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ 
-  onValidationChange, 
-  onReportReady 
+const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
+  onValidationChange,
+  onReportReady
 }) => {
   // Schema state
-  const [referenceFile, setReferenceFile] = useState<SchemaFile | null>(null);
+  const [referenceFiles, setReferenceFiles] = useState<SchemaFile[]>([]);
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [referenceOptions, setReferenceOptions] = useState<Acquisition[]>([]);
   const [referenceFields, setReferenceFields] = useState<string[]>([]);
@@ -40,8 +43,25 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
   const [complianceMap, setComplianceMap] = useState<Record<string, FieldCompliance>>({});
   const [overallCompliance, setOverallCompliance] = useState<Record<string, { status: 'ok' | 'error'; message: string }>>({});
 
-  const pyodide = usePyodide();
+  // Schema library state
+  const [schemaLibrary, setSchemaLibrary] = useState<SchemaFile[]>(() => {
+    // Try to load from localStorage
+    const savedLibrary = localStorage.getItem('schemaLibrary');
+    return savedLibrary ? JSON.parse(savedLibrary) : [];
+  });
+
+  // Current index for schema selection
+  const [currentPairIndex, setCurrentPairIndex] = useState<number | null>(null);
+
+  // Modal control
+  const { isOpen, onOpen, onClose } = useDisclosure();
   
+  // DICOM viewer state
+  const [dicomViewerOpen, setDicomViewerOpen] = useState(false);
+  const [selectedAcquisitionForViewing, setSelectedAcquisitionForViewing] = useState<string>('');
+
+  const pyodide = usePyodide();
+
   // Refs to track previous values
   const prevPairsRef = useRef<string>('');
   const onReportReadyRef = useRef(onReportReady);
@@ -51,6 +71,11 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
   useEffect(() => {
     onReportReadyRef.current = onReportReady;
   }, [onReportReady]);
+
+  // Save schema library to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('schemaLibrary', JSON.stringify(schemaLibrary));
+  }, [schemaLibrary]);
 
   // Progress callback
   const updateProgress = useCallback((p: number) => {
@@ -63,29 +88,90 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
     onValidationChange(valid);
   }, [referenceOptions, inputOptions, onValidationChange]);
 
+  const generateUniqueId = () => {
+    return `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
   // Schema loading handler
-  const handleSchemaLoad = async (file: SchemaFile) => {
-    setReferenceFile(file);
+  const handleSchemaLoad = async (file: SchemaFile, acquisitionName?: string) => {
     setSchemaLoading(true);
     try {
-      const result = await loadSchema(pyodide, file);
-      const { acquisitions, reference_fields: rf } = result;
-      setReferenceOptions(Object.entries(acquisitions).map(([name, details]) => ({ name, details })));
-      setReferenceFields(rf);
+      // Generate a unique ID for this schema instance
+      const instanceId = generateUniqueId();
+      
+      // Add to reference files
+      setReferenceFiles(prev => [...prev, file]);
+  
+      const result = await loadSchema(pyodide, file, acquisitionName, instanceId);
+      const { acquisitions, reference_fields: rf, instance_id } = result;
+  
+      // Convert acquisitions to array and append to existing options
+      const newAcquisitions = Object.entries(acquisitions).map(([name, details]) => ({
+        id: instance_id, // Use the instance ID from the result
+        name,
+        details: {
+          ...details,
+          // Store reference fields for Python schemas to use in field extraction
+          referenceFields: rf
+        },
+        source: file.name
+      }));
+  
+      // If we're adding to a specific pair index
+      if (currentPairIndex !== null) {
+        // Add the selected acquisition to the current pair
+        // Since we filtered by acquisitionName in loadSchema, newAcquisitions should contain only the selected one
+        if (newAcquisitions.length > 0) {
+          setPairs(prev => {
+            const updated = [...prev];
+            if (updated[currentPairIndex]) {
+              updated[currentPairIndex].ref = newAcquisitions[0];
+            }
+            return updated;
+          });
+        }
+      }
+  
+      // Add the new acquisitions to the reference options
+      setReferenceOptions(prev => [...prev, ...newAcquisitions]);
+  
+      // Merge reference fields
+      setReferenceFields(prev => {
+        const merged = new Set([...prev, ...rf]);
+        return Array.from(merged);
+      });
     } catch (err) {
       console.error('Error loading schema:', err);
     } finally {
       setSchemaLoading(false);
+      setCurrentPairIndex(null);
+      onClose();
     }
   };
+  
 
   // DICOM loading handler
   const handleDicomLoad = async (files: File[]) => {
-    setInputDICOMFiles(files);
     setIsDICOMUploading(true);
     try {
+      // Append new files to existing ones
+      const newFiles = [...inputDICOMFiles, ...files];
+      setInputDICOMFiles(newFiles);
+
       const result = await analyzeDicomFiles(pyodide, files, referenceFields, updateProgress);
-      setInputOptions(Object.entries(result).map(([name, details]) => ({ name, details })));
+
+      // Convert to array and append to existing options
+      const newAcquisitions = Object.entries(result).map(([name, details]) => ({
+        name,
+        details,
+        // Use first file name as source identifier
+        source: files[0]?.name || 'unknown'
+      }));
+
+      setInputOptions(prev => [...prev, ...newAcquisitions]);
+
+      // Create initial pairs with just input options
+      setPairs(newAcquisitions.map(inp => ({ inp, ref: null })));
     } catch (err) {
       console.error('Error analyzing DICOM files:', err);
     } finally {
@@ -99,7 +185,12 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
       const process = async () => {
         try {
           const result = await processExistingSession(pyodide, referenceFields);
-          setInputOptions(Object.entries(result).map(([name, details]) => ({ name, details })));
+          // We don't replace here, as we're just reprocessing with updated fields
+          setInputOptions(Object.entries(result).map(([name, details]) => ({
+            name,
+            details,
+            source: inputDICOMFiles[0]?.name || 'unknown'
+          })));
         } catch (err) {
           console.error('Error processing existing session:', err);
         }
@@ -108,14 +199,91 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
     }
   }, [referenceFields, inputDICOMFiles.length, pyodide]);
 
-  // Update pairs when options change
+  // Re-process input acquisitions when pairs change to show only schema-relevant fields
   useEffect(() => {
-    const n = Math.max(referenceOptions.length, inputOptions.length);
-    setPairs(Array.from({ length: n }, (_, i) => ({
-      ref: referenceOptions[i] || null,
-      inp: inputOptions[i] || null
-    })));
-  }, [referenceOptions, inputOptions]);
+    if (inputDICOMFiles.length === 0) return;
+
+    const updateInputFields = async () => {
+      try {
+        // Group pairs by input acquisition and get all reference fields for each
+        const inputToRefFields: Record<string, string[]> = {};
+        
+        pairs.forEach(pair => {
+          if (pair.inp && pair.ref) {
+            const inputName = pair.inp.name;
+            
+            // Extract reference fields from the paired reference schema
+            let refFields: string[] = [];
+            
+            // For Python schemas, use the stored referenceFields
+            if (pair.ref.details.referenceFields) {
+              refFields = [...pair.ref.details.referenceFields];
+            }
+            // For JSON schemas, extract from fields and series
+            else {
+              if (pair.ref.details.fields) {
+                refFields = pair.ref.details.fields.map((f: any) => f.field);
+              }
+              if (pair.ref.details.series) {
+                pair.ref.details.series.forEach((series: any) => {
+                  if (series.fields) {
+                    series.fields.forEach((f: any) => {
+                      if (!refFields.includes(f.field)) {
+                        refFields.push(f.field);
+                      }
+                    });
+                  }
+                });
+              }
+            }
+            
+            inputToRefFields[inputName] = refFields;
+          }
+        });
+
+        // Re-process each input acquisition with its specific reference fields
+        const updatedInputOptions = await Promise.all(
+          inputOptions.map(async (inputOption) => {
+            const specificFields = inputToRefFields[inputOption.name];
+            if (specificFields && specificFields.length > 0) {
+              // Re-process this acquisition with specific fields
+              const result = await reprocessSpecificAcquisition(pyodide, inputOption.name, specificFields);
+              if (result[inputOption.name]) {
+                return {
+                  ...inputOption,
+                  details: result[inputOption.name]
+                };
+              }
+            }
+            return inputOption;
+          })
+        );
+
+        setInputOptions(updatedInputOptions);
+
+        // Update pairs to reference the updated input acquisitions
+        setPairs(prev => {
+          return prev.map(pair => {
+            if (pair.inp) {
+              const updatedAcq = updatedInputOptions.find(acq => acq.name === pair.inp!.name);
+              if (updatedAcq) {
+                return { ...pair, inp: updatedAcq };
+              }
+            }
+            return pair;
+          });
+        });
+      } catch (err) {
+        console.error('Error updating input fields:', err);
+      }
+    };
+
+    // Only update if we have paired acquisitions
+    const hasPairs = pairs.some(p => p.ref && p.inp);
+    if (hasPairs) {
+      updateInputFields();
+    }
+  }, [pairs, pyodide, inputDICOMFiles.length]);
 
   // Analyze compliance when pairs change
   useEffect(() => {
@@ -124,58 +292,72 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
       clearTimeout(complianceTimeoutRef.current);
       complianceTimeoutRef.current = null;
     }
-    
+
     // Create a string representation of the pairs for comparison
     const pairsString = JSON.stringify(
       pairs.map(p => ({
-        ref: p.ref?.name,
+        ref: p.ref ? { id: p.ref.id, name: p.ref.name } : null,
         inp: p.inp?.name
       }))
     );
 
-    
     // Only run if pairs have changed and we have valid pairs
     const hasValidPairs = pairs.some(p => p.ref && p.inp);
 
     if ((pairsString !== prevPairsRef.current) && hasValidPairs) {
       prevPairsRef.current = pairsString;
-      
+
       complianceTimeoutRef.current = setTimeout(async () => {
         try {
           const results = await analyzeCompliance(pyodide, pairs);
-          
+
           // Use the ref to ensure we have the latest callback
           onReportReadyRef.current(results);
-  
+
           // Process compliance results
           const cmap: Record<string, FieldCompliance> = {};
           const overall: Record<string, { status: 'ok' | 'error'; message: string }> = {};
-          
+
           results.forEach(item => {
             const refA = item['reference acquisition'];
+            const refId = item['reference id'];
+
+            // Create a unique key using the ID if available
+            const refKey = refId ? `${refA}#${refId}` : refA;
+
             if (refA) {
-              overall[refA] ||= { status: 'ok', message: 'Passed.' };
-              if (!item.passed) overall[refA] = { status: 'error', message: item.message || '' };
+              overall[refKey] ||= { status: 'ok', message: 'Passed.' };
+              if (!item.passed) overall[refKey] = { status: 'error', message: item.message || '' };
             }
+
             const key = item.rule_name || item.field;
-            cmap[key] = {
+            // Include the reference ID in the key to make it unique per instance
+            const uniqueKey = refId ? `${key}#${refId}` : key;
+
+            cmap[uniqueKey] = {
               status: item.passed ? 'ok' : 'error',
               message: item.message && item.message !== "None" ? item.message : (item.passed ? "OK" : `Failed: ${item.expected}`)
             };
           });
-  
+
           // Add series-specific entries
           const seriesMap: Record<string, FieldCompliance> = {};
           results.forEach(item => {
             if (item.series) {
-              const seriesKey = `${item['reference acquisition']}|${item.series}|${item.field}`;
+              const refA = item['reference acquisition'];
+              const refId = item['reference id'];
+              // Include the reference ID in the key to make it unique per instance
+              const seriesKey = refId
+                ? `${refA}#${refId}|${item.series}|${item.field}`
+                : `${refA}|${item.series}|${item.field}`;
+
               seriesMap[seriesKey] = {
                 status: item.passed ? 'ok' : 'error',
                 message: item.message
               };
             }
           });
-  
+
           setComplianceMap({ ...cmap, ...seriesMap });
           setOverallCompliance(overall);
         } catch (err) {
@@ -183,31 +365,13 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
         }
       }, 300);
     }
-    
+
     return () => {
       if (complianceTimeoutRef.current) {
         clearTimeout(complianceTimeoutRef.current);
       }
     };
   }, [pairs, pyodide]);
-
-  // Handle drag end
-  const handleDragEnd = (result: DropResult) => {
-    const { source, destination } = result;
-    if (!destination) return;
-    const [_, srcType, srcIdx] = source.droppableId.split('-');
-    const [__, dstType, dstIdx] = destination.droppableId.split('-');
-    const si = +srcIdx, di = +dstIdx;
-    setPairs(prev => {
-      const next = [...prev];
-      if (srcType === 'ref' && dstType === 'ref') {
-        [next[si].ref, next[di].ref] = [next[di].ref, next[si].ref];
-      } else if (srcType === 'inp' && dstType === 'inp') {
-        [next[si].inp, next[di].inp] = [next[di].inp, next[si].inp];
-      }
-      return next;
-    });
-  };
 
   // Toggle expansion handlers
   const toggleReferenceExpansion = (name: string) => {
@@ -218,42 +382,137 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
     setExpandedInputs(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
+  // Delete handlers
+  const handleDeleteReference = async (id: string) => {
+    // Find the acquisition to delete
+    const acqToDelete = referenceOptions.find(acq => acq.id === id);
+    if (!acqToDelete) return;
+  
+    try {
+      // Remove from Python - pass the ID
+      await removeSchema(pyodide, acqToDelete.name, acqToDelete.source, id);
+  
+      // Remove from state - only remove the specific instance with this ID
+      setReferenceOptions(prev => prev.filter(acq => acq.id !== id));
+  
+      // Update pairs
+      setPairs(prev => {
+        return prev.map(pair => {
+          if (pair.ref?.id === id) {
+            return { ...pair, ref: null };
+          }
+          return pair;
+        });
+      });
+    } catch (err) {
+      console.error('Error deleting reference:', err);
+    }
+  };
+
+  const handleDeleteInput = async (name: string) => {
+    // Find the acquisition to delete
+    const acqToDelete = inputOptions.find(acq => acq.name === name);
+    if (!acqToDelete) return;
+
+    try {
+      // Remove from Python
+      await removeDicomSeries(pyodide, name);
+
+      // Remove from state
+      setInputOptions(prev => prev.filter(acq => acq.name !== name));
+
+      // Update pairs
+      setPairs(prev => prev.filter(pair => pair.inp?.name !== name));
+    } catch (err) {
+      console.error('Error deleting input:', err);
+    }
+  };
+
+  // Add schema to library
+  const handleAddToLibrary = (schema: SchemaFile) => {
+    setSchemaLibrary(prev => {
+      // Check if schema with same name already exists
+      const existingIndex = prev.findIndex(s => s.name === schema.name);
+      if (existingIndex >= 0) {
+        // Replace existing schema
+        const updated = [...prev];
+        updated[existingIndex] = schema;
+        return updated;
+      }
+      // Add new schema
+      return [...prev, schema];
+    });
+  };
+
+  // Remove schema from library
+  const handleRemoveFromLibrary = (schemaName: string) => {
+    setSchemaLibrary(prev => prev.filter(s => s.name !== schemaName));
+  };
+
+  // Handle adding schema to a specific pair
+  const handleAddSchema = (index: number) => {
+    setCurrentPairIndex(index);
+    onOpen();
+  };
+
+  // Handle selecting a schema from the library
+  const handleSelectSchema = (schema: SchemaFile, acquisitionName?: string) => {
+    handleSchemaLoad(schema, acquisitionName);
+  };
+
+  // Handle DICOM visualization
+  const handleVisualizeDicom = (acquisitionName: string) => {
+    setSelectedAcquisitionForViewing(acquisitionName);
+    setDicomViewerOpen(true);
+  };
+
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <Box p={4}>
-        <Text mb={4} color="gray.700">
-          Select a template schema and a DICOM session to verify compliance.
-        </Text>
+    <Box p={4}>
+      <Text mb={4} color="gray.700">
+        Upload DICOM files first, then select a schema template for each series to verify compliance.
+      </Text>
 
-        <Flex gap={8} mb={8}>
-          <Box flex="1">
-            <DicomUploader
-              onDicomLoad={handleDicomLoad}
-              isLoading={isDICOMUploading}
-              progress={dicomProgress}
-              fileCount={inputDICOMFiles.length}
-            />
-          </Box>
-          <Box flex="1">
-            <SchemaUploader
-              onSchemaLoad={handleSchemaLoad}
-              isLoading={schemaLoading}
-              loadedFile={referenceFile}
-            />
-          </Box>
-        </Flex>
-
-        <PairingArea
-          pairs={pairs}
-          expandedReferences={expandedReferences}
-          expandedInputs={expandedInputs}
-          complianceMap={complianceMap}
-          overallCompliance={overallCompliance}
-          onToggleReference={toggleReferenceExpansion}
-          onToggleInput={toggleInputExpansion}
+      <Box mb={8}>
+        <DicomUploader
+          onDicomLoad={handleDicomLoad}
+          isLoading={isDICOMUploading}
+          progress={dicomProgress}
+          fileCount={inputDICOMFiles.length}
         />
       </Box>
-    </DragDropContext>
+
+      <PairingArea
+        pairs={pairs}
+        expandedReferences={expandedReferences}
+        expandedInputs={expandedInputs}
+        complianceMap={complianceMap}
+        overallCompliance={overallCompliance}
+        onToggleReference={toggleReferenceExpansion}
+        onToggleInput={toggleInputExpansion}
+        onDeleteReference={handleDeleteReference}
+        onDeleteInput={handleDeleteInput}
+        onAddSchema={handleAddSchema}
+        onVisualizeDicom={handleVisualizeDicom}
+      />
+
+      {/* Schema Library Modal */}
+      <SchemaUploader
+        isOpen={isOpen}
+        onClose={onClose}
+        onSchemaLoad={handleSelectSchema}
+        isLoading={schemaLoading}
+        schemaLibrary={schemaLibrary}
+        onAddToLibrary={handleAddToLibrary}
+        onRemoveFromLibrary={handleRemoveFromLibrary}
+      />
+
+      {/* DICOM Viewer Modal */}
+      <DicomViewer
+        isOpen={dicomViewerOpen}
+        onClose={() => setDicomViewerOpen(false)}
+        acquisitionName={selectedAcquisitionForViewing}
+      />
+    </Box>
   );
 };
 

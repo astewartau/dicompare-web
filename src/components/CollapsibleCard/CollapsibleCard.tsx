@@ -1,4 +1,3 @@
-// components/CollapsibleCard/CollapsibleCard.tsx
 import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
@@ -51,6 +50,7 @@ const presetOptions = [
 const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   acquisition,
   validFields,
+  allValidFields = [], // Add this with default
   onDeleteAcquisition,
   onSaveAcquisition,
   onGlobalEditChange,
@@ -58,14 +58,22 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   initialEditMode = false,
   initialStage = 1,
   hideBackButton = false,
+  isDicomGenerated = false,
+  initialFormData,
 }) => {
   const { runPythonCode, setPythonGlobal } = usePyodide();
 
-  const [stage, setStage] = useState<number>(initialStage);
+  const [stage, setStage] = useState<number>(
+    isDicomGenerated ? 2 : initialStage
+  );
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
-  const [formData, setFormData] = useState<FormData>({ constant: [], variable: [] });
-  const [globalEdit, setGlobalEdit] = useState<boolean>(initialEditMode);
+  const [formData, setFormData] = useState<FormData>(
+    initialFormData || { constant: [], variable: [] }
+  );
+  const [globalEdit, setGlobalEdit] = useState<boolean>(
+    isDicomGenerated ? false : initialEditMode
+  );
 
   const [acquisitionTitle, setAcquisitionTitle] = useState<string>(acquisition);
   const [acquisitionDescription, setAcquisitionDescription] = useState<string>("");
@@ -158,6 +166,30 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       });
     }
   }, [stage, validFields, selectedFields]);
+
+  // Save the acquisition data when form data changes (for DICOM-generated cards)
+  useEffect(() => {
+    if (isDicomGenerated && stage === 2 && !globalEdit) {
+      const constantFieldsJson = formData.constant.map((field) => ({
+        field: field.name,
+        value: transformField(field.data),
+      }));
+      const seriesJson = formData.variable.map((row) => {
+        const seriesName = row.Series.value;
+        const fields = Object.keys(row)
+          .filter((key) => key !== "Series")
+          .map((key) => ({
+            field: key,
+            value: transformField(row[key]),
+          }));
+        return { name: seriesName, fields };
+      });
+      const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
+      if (onSaveAcquisition) {
+        onSaveAcquisition(acquisition, acquisitionJson);
+      }
+    }
+  }, [formData, isDicomGenerated, stage, globalEdit, acquisition, onSaveAcquisition]);
 
   const handleGlobalSave = () => {
     const constantFieldsJson = formData.constant.map((field) => ({
@@ -328,7 +360,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     });
     setSeriesModalOpen(true);
   };
-
 
   const handleDeleteConstantField = (id: string) => {
     setFormData((prev) => ({
@@ -577,7 +608,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
                 size="sm"
                 value={acquisitionDescription}
                 onChange={(e) => setAcquisitionDescription(e.target.value)}
-                placeholder="Enter acquisition description (optional)"
+                placeholder="Enter acquisition description"
                 width="100%"
               />
             </VStack>
@@ -612,7 +643,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             </>
           ) : (
             <>
-              {!hideBackButton && !globalEdit && (
+              {!hideBackButton && !globalEdit && !isDicomGenerated && (
                 <Button size="sm" onClick={() => setStage(1)} colorScheme="teal">
                   Back
                 </Button>
@@ -714,6 +745,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             setEditingConstantId(null);
           }}
           mode="constant"
+          validFields={allValidFields} // Add this
         />
       )}
       {seriesModalOpen && editingSeriesRowIndex !== null && (
@@ -726,7 +758,6 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
           seriesRow={formData.variable[editingSeriesRowIndex]}
           onSave={(updated: ConstantField | VariableRow) => {
             if ("Series" in updated) {
-              // Handle VariableRow
               setFormData((prev) => {
                 const newVariable = [...prev.variable];
                 newVariable[editingSeriesRowIndex] = updated;
@@ -739,6 +770,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             }
           }}
           mode="series"
+          validFields={allValidFields} // Add this
         />
       )}
     </Box>

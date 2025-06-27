@@ -26,6 +26,51 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
   const { displayAlert } = useAlert();
   const { runPythonCode, setPythonGlobal } = usePyodide();
 
+  // Helper functions
+  const inferDataType = (value: any): "string" | "number" | "list" => {
+    if (Array.isArray(value)) return "list";
+    if (typeof value === "number") return "number";
+    return "string";
+  };
+
+  const computeConstantFields = (data: any[], selectedFields: string[]) => {
+    const constantFields: Record<string, any> = {};
+    const variableFields: string[] = [];
+
+    const deepEqual = (a: any, b: any): boolean => {
+      if (a === b) return true;
+      if (Array.isArray(a) && Array.isArray(b)) {
+        if (a.length !== b.length) return false;
+        return a.every((val, index) => deepEqual(val, b[index]));
+      }
+      if (typeof a === 'object' && typeof b === 'object' && a !== null && b !== null) {
+        const keysA = Object.keys(a);
+        const keysB = Object.keys(b);
+        if (keysA.length !== keysB.length) return false;
+        return keysA.every(key => deepEqual(a[key], b[key]));
+      }
+      return false;
+    };
+
+    selectedFields.forEach(field => {
+      const values = data.map(row => row[field]).filter(val => val !== undefined && val !== null);
+
+      if (values.length === 0) return;
+
+      // Check if all values are the same using deep comparison
+      const firstValue = values[0];
+      const allSame = values.every(val => deepEqual(val, firstValue));
+
+      if (allSame) {
+        constantFields[field] = firstValue;
+      } else {
+        variableFields.push(field);
+      }
+    });
+
+    return { constantFields, variableFields };
+  };
+
   useEffect(() => {
     fetch("https://raw.githubusercontent.com/astewartau/dcm-check/refs/heads/main/valid_fields.json")
       .then(response => response.json())
@@ -70,20 +115,134 @@ const EditTemplate: React.FC<EditTemplateProps> = ({ setAcquisitionsData, setIsN
   const processDicomFiles = async (files: File[]): Promise<any[]> => {
     const dicomFiles: Record<string, Uint8Array> = {};
     for (const file of files) {
-      //const arrayBuf = await file.slice(0, 8192).arrayBuffer();
       const arrayBuf = await file.arrayBuffer();
       const typedArray = new Uint8Array(arrayBuf);
       dicomFiles[file.webkitRelativePath || file.name] = typedArray;
     }
 
+    // Define the default fields for DICOM acquisitions
+    // MISSING - ImagesInAcquisition
+    const defaultDicomFields = [
+      // Core Identifiers
+      "SeriesDescription",
+      "SequenceName",
+      "SequenceVariant",
+      "ScanningSequence",
+      "ImageType",
+
+      "Manufacturer",
+      "ManufacturerModelName",
+      "SoftwareVersion",
+    
+      // Geometry
+      "MRAcquisitionType",
+      "SliceThickness",
+      //"SpacingBetweenSlices",
+      "PixelSpacing",
+      "Rows",
+      "Columns",
+      "Slices",
+      "AcquisitionMatrix",
+      "ReconstructionDiameter",
+    
+      // Timing / Contrast
+      "RepetitionTime",
+      "EchoTime",
+      "InversionTime",
+      "FlipAngle",
+      "EchoTrainLength",
+      "GradientEchoTrainLength",
+      "NumberOfTemporalPositions",
+      "TemporalResolution",
+      "SliceTiming",
+    
+      // Diffusion-specific
+      "DiffusionBValue",
+      "DiffusionGradientDirectionSequence",
+    
+      // Parallel Imaging / Multiband
+      "ParallelAcquisitionTechnique",
+      "ParallelReductionFactorInPlane",
+      "PartialFourier",
+      "SliceAccelerationFactor",
+      //"MultibandFactor",
+    
+      // Bandwidth / Readout
+      "PixelBandwidth",
+      "BandwidthPerPixelPhaseEncode",
+      //"EffectiveEchoSpacing",
+    
+      // Phase encoding
+      "InPlanePhaseEncodingDirection",
+      "PhaseEncodingDirectionPositive",
+      "NumberOfPhaseEncodingSteps",
+    
+      // Scanner hardware
+      "MagneticFieldStrength",
+      "ImagingFrequency",
+      "ImagedNucleus",
+      "TransmitCoilName",
+      "ReceiveCoilName",
+      "SAR",
+      "NumberOfAverages",
+    
+      // Coverage / FOV %
+      "PercentSampling",
+      "PercentPhaseFieldOfView",
+    
+      // Scan options
+      "ScanOptions",
+      "AngioFlag",
+    
+      // Triggering / gating (mostly fMRI / cardiac)
+      "TriggerTime",
+      "TriggerSourceOrType",
+      "BeatRejectionFlag",
+      "LowRRValue",
+      "HighRRValue",
+    
+      // Advanced / niche
+      "SpoilingRFPhaseAngle",
+      "PerfusionTechnique",
+      "SpectrallySelectedExcitation",
+      "SaturationRecovery",
+      "SpectrallySelectedSuppression",
+      "TimeOfFlightContrast",
+      "SteadyStatePulseSequence",
+      "PartialFourierDirection",
+    ];
+
     // Use the helper to set a Python global
     setPythonGlobal("dicom_files", dicomFiles);
     await setPythonGlobal("update_progress", updateProgress);
+    setPythonGlobal("selected_fields", defaultDicomFields);
 
     const code = `
 import json
-from dicompare.io import async_load_dicom_session, assign_acquisition_and_run_numbers
+import numpy as np
 import pandas as pd
+from dicompare.io import async_load_dicom_session, assign_acquisition_and_run_numbers
+
+def clean_for_json(obj):
+    """Recursively clean an object to make it JSON serializable"""
+    if isinstance(obj, dict):
+        return {k: clean_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_for_json(item) for item in obj]
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif pd.isna(obj) or obj is None:
+        return None
+    elif isinstance(obj, (np.integer, np.floating)):
+        if np.isnan(obj) or np.isinf(obj):
+            return None
+        return obj.item()
+    elif isinstance(obj, float):
+        if np.isnan(obj) or np.isinf(obj):
+            return None
+        return obj
+    else:
+        return obj
 
 global session
 try:
@@ -94,6 +253,7 @@ except NameError:
 
 new_session = await async_load_dicom_session(dicom_bytes=dicom_files.to_py(), progress_function=update_progress)
 new_session = assign_acquisition_and_run_numbers(new_session)
+
 if existing_session is not None:
     for acquisition in new_session['Acquisition'].unique():
         if acquisition in existing_session['Acquisition'].unique():
@@ -104,18 +264,44 @@ if existing_session is not None:
 else:
     session = new_session
 
-acquisition_list = [
-    {
+# Process each acquisition with the default fields
+acquisition_results = []
+for acquisition in session['Acquisition'].unique():
+    acquisition_data = session[session['Acquisition'] == acquisition]
+    
+    # Get available fields that exist in both selected_fields and the data
+    available_fields = [field for field in selected_fields if field in acquisition_data.columns]
+
+    print(f"Available fields for acquisition {acquisition}: {available_fields}")
+    
+    if available_fields:
+        # Get unique combinations for this acquisition
+        df = acquisition_data[available_fields].drop_duplicates()
+        df = df.sort_values(by=available_fields)
+        unique_rows = df.to_dict(orient='records')
+        print("UNIQUE ROWS:", unique_rows)
+        
+        # Add series numbering and clean the data
+        for i in range(len(unique_rows)):
+            unique_rows[i]['Series'] = i + 1
+            unique_rows[i] = clean_for_json(unique_rows[i])
+    else:
+        unique_rows = []
+    
+    acquisition_results.append({
         'Acquisition': str(acquisition),
         'ProtocolName': str(acquisition_data['ProtocolName'].unique()[0]),
         'SeriesDescription': str(acquisition_data['SeriesDescription'].unique()),
-        'TotalFiles': f"{len(acquisition_data)} files"
-    }
-    for acquisition in session['Acquisition'].unique()
-    for acquisition_data in [session[session['Acquisition'] == acquisition]]
-]
-json.dumps(acquisition_list)
-    `;
+        'TotalFiles': f"{len(acquisition_data)} files",
+        'ProcessedData': unique_rows,
+        'SelectedFields': available_fields
+    })
+
+# Clean the entire result before JSON serialization
+clean_results = clean_for_json(acquisition_results)
+json.dumps(clean_results)
+  `;
+
     const result = await runPythonCode(code);
     const acquisitions = JSON.parse(result);
 
@@ -150,13 +336,45 @@ json.dumps(acquisition_list)
         return Array.from(new Set([...prev, ...newAcqs]));
       });
 
+      // Process the data for each acquisition and set initial form data
       const acquisitionsData: Record<string, any> = {};
       dicomAcquisitions.forEach((acq: any) => {
-        acquisitionsData[acq.Acquisition] = { fields: [], series: [] };
-      });
-      setAcquisitionsData(acquisitionsData);
+        if (acq.ProcessedData && acq.ProcessedData.length > 0) {
+          // Process the data to create constant and variable fields
+          const { constantFields, variableFields } = computeConstantFields(
+            acq.ProcessedData,
+            acq.SelectedFields
+          );
 
-      // Update acquisitionsJson with the new data
+          const constantFieldsJson = Object.keys(constantFields).map((field) => ({
+            field: field,
+            value: constantFields[field],
+          }));
+
+          const seriesJson = acq.ProcessedData.map((row: any) => {
+            const seriesName = row.Series;
+            const fields = variableFields.map((field) => ({
+              field: field,
+              value: row[field] ?? "",
+            }));
+            return { name: seriesName, fields };
+          });
+
+          acquisitionsData[acq.Acquisition] = {
+            fields: constantFieldsJson,
+            series: seriesJson,
+            isDicomGenerated: true // Flag to indicate this came from DICOM
+          };
+        } else {
+          acquisitionsData[acq.Acquisition] = {
+            fields: [],
+            series: [],
+            isDicomGenerated: true
+          };
+        }
+      });
+
+      setAcquisitionsData(acquisitionsData);
       setAcquisitionsJson(prev => ({
         ...prev,
         ...acquisitionsData
@@ -347,6 +565,36 @@ json.dumps(acquisition_list)
               onSaveAcquisition={handleSaveAcquisition}
               onGlobalEditChange={handleGlobalEditChange}
               onStageChange={handleStageChange}
+              isDicomGenerated={acquisitionsJson[acq]?.isDicomGenerated || false}
+              allValidFields={[...new Set([...manualValidFields, ...sessionValidFields])]}
+              initialFormData={acquisitionsJson[acq] ? {
+                constant: acquisitionsJson[acq].fields?.map((field: any) => ({
+                  id: field.field,
+                  name: field.field,
+                  data: {
+                    constraintType: "value",
+                    value: String(field.value),
+                    dataType: inferDataType(field.value)
+                  }
+                })) || [],
+                variable: acquisitionsJson[acq].series?.map((series: any) => {
+                  const row: any = {
+                    Series: {
+                      constraintType: "value",
+                      value: String(series.name),
+                      dataType: "string"
+                    }
+                  };
+                  series.fields?.forEach((field: any) => {
+                    row[field.field] = {
+                      constraintType: "value",
+                      value: String(field.value),
+                      dataType: inferDataType(field.value)
+                    };
+                  });
+                  return row;
+                }) || []
+              } : undefined}
             />
           </WrapItem>
         ))}

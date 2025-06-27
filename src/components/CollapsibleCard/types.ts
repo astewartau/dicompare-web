@@ -28,16 +28,20 @@ export interface FormData {
   variable: VariableRow[];
 }
 
+// In CollapsibleCard/types.ts, add to CollapsibleCardProps:
 export interface CollapsibleCardProps {
   acquisition: string;
   validFields: string[];
-  onDeleteAcquisition?: (acquisition: string) => void;
-  onSaveAcquisition?: (acquisition: string, acquisitionJson: any) => void;
+  allValidFields?: string[]; // Add this new prop
+  onDeleteAcquisition?: (acq: string) => void;
+  onSaveAcquisition?: (acq: string, jsonData: any) => void;
   onGlobalEditChange?: (acq: string, isEditing: boolean) => void;
   onStageChange?: (acq: string, stage: number) => void;
   initialEditMode?: boolean;
   initialStage?: number;
   hideBackButton?: boolean;
+  isDicomGenerated?: boolean;  // New prop
+  initialFormData?: FormData;  // New prop
 }
 
 export interface AutocompleteInputProps {
