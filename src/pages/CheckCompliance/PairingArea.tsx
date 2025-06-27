@@ -52,7 +52,7 @@ const PairingArea: React.FC<PairingAreaProps> = ({
   onAddSchema,
   onVisualizeDicom
 }) => {
-  const renderCard = (acq: Acquisition, type: 'ref' | 'inp', idx: number) => {
+  const renderCard = (acq: Acquisition, type: 'ref' | 'inp', _idx: number) => {
     const expanded = (type === 'ref'
       ? expandedReferences[acq.id || acq.name]
       : expandedInputs[acq.name]) || false;

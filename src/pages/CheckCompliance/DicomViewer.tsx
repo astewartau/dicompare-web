@@ -198,7 +198,7 @@ for series_key, series_data in unique_series:
             "height": int(center_slice.shape[0]),
             "min": series_min,
             "max": series_max,
-            "slice_count": 1,
+            "sliceCount": 1,
             "total_slices": len(series_data_sorted)
         })
         
@@ -336,7 +336,7 @@ json.dumps(result)
                   {imageData.series[currentSeries]?.width} × {imageData.series[currentSeries]?.height}
                 </Badge>
                 <Badge colorScheme="green">
-                  Slice {currentSlice + 1} of {imageData.series[currentSeries]?.slice_count || 1}
+                  Slice {currentSlice + 1} of {imageData.series[currentSeries]?.sliceCount || 1}
                 </Badge>
                 <Badge colorScheme="purple">
                   Range: {Math.round(imageData.series[currentSeries]?.min || 0)} - {Math.round(imageData.series[currentSeries]?.max || 0)}
@@ -363,7 +363,7 @@ json.dumps(result)
                 />
               </Box>
               
-              {(imageData.series[currentSeries]?.slice_count || 1) > 1 && (
+              {(imageData.series[currentSeries]?.sliceCount || 1) > 1 && (
                 <Box width="100%">
                   <Text fontSize="sm" mb={2} textAlign="center">
                     Slice Navigator
@@ -371,7 +371,7 @@ json.dumps(result)
                   <Slider
                     value={currentSlice}
                     min={0}
-                    max={(imageData.series[currentSeries]?.slice_count || 1) - 1}
+                    max={(imageData.series[currentSeries]?.sliceCount || 1) - 1}
                     step={1}
                     onChange={setCurrentSlice}
                   >

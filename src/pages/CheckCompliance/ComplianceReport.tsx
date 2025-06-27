@@ -7,9 +7,7 @@ import {
   Collapse,
   Button,
   Badge,
-  Divider,
-  Flex,
-  Icon
+  Flex
 } from '@chakra-ui/react';
 import {
   ChevronDownIcon,
@@ -137,7 +135,7 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
         width="100%"
         justifyContent="space-between"
         onClick={() => setIsExpanded(!isExpanded)}
-        leftIcon={getStatusIcon(overallStatus?.status || 'error')}
+        leftIcon={getStatusIcon(overallStatus?.status || 'error') || undefined}
         rightIcon={isExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
         py={2}
         px={3}
@@ -162,7 +160,7 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
       <Collapse in={isExpanded}>
         <Box p={3} bg="gray.25" maxH="300px" overflowY="auto">
           <VStack spacing={2} align="stretch">
-            {complianceResults.map((result, index) => (
+            {complianceResults.map((result) => (
               <Box
                 key={result.key}
                 p={2}

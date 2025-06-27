@@ -1,6 +1,6 @@
 // index.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, Flex, useDisclosure } from '@chakra-ui/react';
+import { Box, Text, useDisclosure } from '@chakra-ui/react';
 import { usePyodide } from '../../components/PyodideContext';
 
 import SchemaUploader from './SchemaUploader';
@@ -24,7 +24,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
   onReportReady
 }) => {
   // Schema state
-  const [referenceFiles, setReferenceFiles] = useState<SchemaFile[]>([]);
+  const [, setReferenceFiles] = useState<SchemaFile[]>([]);
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [referenceOptions, setReferenceOptions] = useState<Acquisition[]>([]);
   const [referenceFields, setReferenceFields] = useState<string[]>([]);
@@ -66,7 +66,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
   // Refs to track previous values
   const prevPairsRef = useRef<string>('');
   const onReportReadyRef = useRef(onReportReady);
-  const complianceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const complianceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Update ref when onReportReady changes
   useEffect(() => {
@@ -111,7 +111,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
         id: instance_id, // Use the instance ID from the result
         name,
         details: {
-          ...details,
+          ...(details as any),
           // Store reference fields for Python schemas to use in field extraction
           referenceFields: rf
         },
@@ -138,7 +138,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
   
       // Merge reference fields
       setReferenceFields(prev => {
-        const merged = new Set([...prev, ...rf]);
+        const merged = new Set([...prev, ...(rf || [])]);
         return Array.from(merged);
       });
     } catch (err) {
@@ -319,7 +319,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
           const cmap: Record<string, FieldCompliance> = {};
           const overall: Record<string, { status: 'ok' | 'error'; message: string }> = {};
 
-          results.forEach(item => {
+          results.forEach((item: any) => {
             const refA = item['reference acquisition'];
             const refId = item['reference id'];
 
@@ -343,7 +343,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
 
           // Add series-specific entries
           const seriesMap: Record<string, FieldCompliance> = {};
-          results.forEach(item => {
+          results.forEach((item: any) => {
             if (item.series) {
               const refA = item['reference acquisition'];
               const refId = item['reference id'];

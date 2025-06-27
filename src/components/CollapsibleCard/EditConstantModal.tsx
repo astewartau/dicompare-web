@@ -167,12 +167,6 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     }, [seriesRow, isSeries]);
 
     // --- Constant mode handlers ---
-    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setLocalField((prev) => ({ ...prev, name: e.target.value }));
-        if (e.target.value.trim()) {
-            setErrors((prev) => ({ ...prev, fieldName: undefined }));
-        }
-    };
 
     const handleDataTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const dt = e.target.value as DataType;
