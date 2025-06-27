@@ -423,10 +423,12 @@ export const analyzeCompliance = async (
   pairs.forEach(p => {
     if (p.ref && p.inp) {
       const instanceId = p.ref.id;
-      if (!pairsByInstance[instanceId]) {
+      if (instanceId && !pairsByInstance[instanceId]) {
         pairsByInstance[instanceId] = [];
       }
-      pairsByInstance[instanceId].push(p);
+      if (instanceId) {
+        pairsByInstance[instanceId].push(p);
+      }
     }
   });
   

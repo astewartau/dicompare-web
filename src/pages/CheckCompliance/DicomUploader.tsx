@@ -54,8 +54,8 @@ const DicomUploader: React.FC<DicomUploaderProps> = ({
           });
         } else if (entry.isDirectory) {
           const reader = entry.createReader();
-          reader.readEntries(entries =>
-            Promise.all(entries.map(en => traverse(en, path + entry.name + '/'))).then(resolve)
+          reader.readEntries((entries: any[]) =>
+            Promise.all(entries.map((en: any) => traverse(en, path + entry.name + '/'))).then(() => resolve())
           );
         }
       });
