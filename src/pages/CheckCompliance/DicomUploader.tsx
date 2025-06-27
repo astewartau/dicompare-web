@@ -5,11 +5,13 @@ import {
   Text,
   Button,
   Spinner,
-  Progress
+  Progress,
+  HStack
 } from '@chakra-ui/react';
 
 interface DicomUploaderProps {
   onDicomLoad: (files: File[]) => void;
+  onExampleLoad?: () => void;
   isLoading: boolean;
   progress: number;
   fileCount: number;
@@ -17,6 +19,7 @@ interface DicomUploaderProps {
 
 const DicomUploader: React.FC<DicomUploaderProps> = ({ 
   onDicomLoad, 
+  onExampleLoad,
   isLoading, 
   progress,
   fileCount
@@ -103,9 +106,16 @@ const DicomUploader: React.FC<DicomUploaderProps> = ({
               onChange={handleUpload}
               ref={el => el?.setAttribute('webkitdirectory', 'true')}
             />
-            <Button as="label" htmlFor="dicom-upload" colorScheme="teal">
-              Upload DICOMs
-            </Button>
+            <HStack spacing={4} justify="center">
+              <Button as="label" htmlFor="dicom-upload" colorScheme="teal">
+                Load DICOMs
+              </Button>
+              {onExampleLoad && (
+                <Button onClick={onExampleLoad} colorScheme="blue" variant="outline">
+                  Load example DICOMs
+                </Button>
+              )}
+            </HStack>
             {fileCount > 0 && (
               <Text mt={2} fontSize="sm" color="gray.600">
                 {fileCount} files

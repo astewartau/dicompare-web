@@ -14,7 +14,8 @@ import {
   analyzeCompliance,
   removeSchema,
   removeDicomSeries,
-  reprocessSpecificAcquisition
+  reprocessSpecificAcquisition,
+  loadExampleDicoms
 } from './pyodideService';
 import { Acquisition, Pair, FieldCompliance, SchemaFile, FinalizeMappingProps } from './types';
 
@@ -466,15 +467,51 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
     setDicomViewerOpen(true);
   };
 
+  // Handle loading example DICOMs
+  const handleLoadExampleDicoms = async () => {
+    setIsDICOMUploading(true);
+    try {
+      // Fetch the example DICOMs JSON file
+      const response = await fetch('/example-dicoms.json');
+      if (!response.ok) {
+        throw new Error('Failed to fetch example DICOMs');
+      }
+      
+      const exampleAcquisitions = await response.json();
+      
+      // Load the example acquisitions into pyodide
+      const result = await loadExampleDicoms(pyodide, exampleAcquisitions);
+      
+      // Convert to array format expected by the UI
+      const newAcquisitions = Object.entries(result).map(([name, details]) => ({
+        name,
+        details,
+        source: 'Example DICOMs'
+      }));
+      
+      // Clear any existing input options and files
+      setInputDICOMFiles([]);
+      setInputOptions(newAcquisitions);
+      
+      // Create initial pairs with just input options
+      setPairs(newAcquisitions.map(inp => ({ inp, ref: null })));
+    } catch (err) {
+      console.error('Error loading example DICOMs:', err);
+    } finally {
+      setIsDICOMUploading(false);
+    }
+  };
+
   return (
     <Box p={4}>
       <Text mb={4} color="gray.700">
-        Upload DICOM files first, then select a schema template for each series to verify compliance.
+        Load DICOM files first, then select a schema template for each series to verify compliance.
       </Text>
 
       <Box mb={8}>
         <DicomUploader
           onDicomLoad={handleDicomLoad}
+          onExampleLoad={handleLoadExampleDicoms}
           isLoading={isDICOMUploading}
           progress={dicomProgress}
           fileCount={inputDICOMFiles.length}

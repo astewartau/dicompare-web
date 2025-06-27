@@ -1,5 +1,6 @@
 // pyodideService.ts
 import { usePyodide } from '../../components/PyodideContext';
+import { Pair } from './types';
 
 export const loadSchema = async (
   pyodide: ReturnType<typeof usePyodide>,
@@ -704,4 +705,90 @@ json.dumps(remaining)
   `.trim();
 
   return await runPythonCode(code);
+};
+
+export const loadExampleDicoms = async (
+  pyodide: ReturnType<typeof usePyodide>,
+  acquisitions: Record<string, any>
+) => {
+  const { runPythonCode, setPythonGlobal } = pyodide;
+  
+  await setPythonGlobal('example_acquisitions', acquisitions);
+
+  const code = `
+import json
+import pandas as pd
+import pyodide
+
+# Convert JS proxy to Python
+example_acquisitions = example_acquisitions.to_py() if isinstance(example_acquisitions, pyodide.ffi.JsProxy) else example_acquisitions
+
+# Create a mock session DataFrame that would normally come from DICOM files
+# We need to create rows that represent the structure that assign_acquisition_and_run_numbers expects
+rows = []
+
+for acq_name, acq_data in example_acquisitions.items():
+    # Extract fields from the acquisition data
+    fields = {}
+    
+    # Get field values from the fields list
+    if 'fields' in acq_data:
+        for field_info in acq_data['fields']:
+            field_name = field_info['field']
+            field_value = field_info.get('value')
+            if field_value is not None:
+                # Convert lists to tuples for hashability in pandas
+                if isinstance(field_value, list):
+                    field_value = tuple(field_value)
+                fields[field_name] = field_value
+    
+    # Also get field values from series if available
+    if 'series' in acq_data:
+        for series in acq_data['series']:
+            series_fields = dict(fields)  # Copy base fields
+            
+            # Update with series-specific fields
+            if 'fields' in series:
+                for field_info in series['fields']:
+                    field_name = field_info['field']
+                    field_value = field_info.get('value')
+                    if field_value is not None:
+                        # Convert lists to tuples for hashability in pandas
+                        if isinstance(field_value, list):
+                            field_value = tuple(field_value)
+                        series_fields[field_name] = field_value
+            
+            # Add required fields for the session
+            series_fields['Acquisition'] = acq_name
+            series_fields['SeriesInstanceUID'] = series.get('name', f"{acq_name}_series")
+            
+            # Create a row for this series
+            rows.append(series_fields)
+    
+    # If no series, create at least one row for the acquisition
+    if 'series' not in acq_data or not acq_data['series']:
+        fields['Acquisition'] = acq_name
+        fields['SeriesInstanceUID'] = f"{acq_name}_series"
+        rows.append(fields)
+
+# Create the DataFrame
+global in_session
+in_session = pd.DataFrame(rows)
+
+# Fill in any missing standard columns that might be expected
+standard_columns = ['ProtocolName', 'SeriesDescription', 'Manufacturer']
+for col in standard_columns:
+    if col not in in_session.columns:
+        in_session[col] = ''
+
+# The acquisitions are already labeled, so we don't need to call assign_acquisition_and_run_numbers again
+print(f"Loaded {len(in_session)} example DICOM entries")
+print(f"Acquisitions: {in_session['Acquisition'].unique()}")
+
+# Return the acquisitions in the same format as analyzeDicomFiles would
+json.dumps(example_acquisitions)
+  `.trim();
+
+  const out = await runPythonCode(code);
+  return JSON.parse(out);
 };
