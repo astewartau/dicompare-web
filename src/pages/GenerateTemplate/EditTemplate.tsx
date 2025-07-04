@@ -266,8 +266,21 @@ else:
 
 # Process each acquisition with the default fields
 acquisition_results = []
-for acquisition in session['Acquisition'].unique():
+unique_acquisitions = session['Acquisition'].unique()
+print(f"Found {len(unique_acquisitions)} unique acquisitions: {unique_acquisitions}")
+
+for acquisition in unique_acquisitions:
+    # Skip nan acquisitions
+    if pd.isna(acquisition):
+        print(f"Skipping nan acquisition")
+        continue
+        
     acquisition_data = session[session['Acquisition'] == acquisition]
+    
+    # Skip if no data for this acquisition
+    if acquisition_data.empty:
+        print(f"No data found for acquisition {acquisition}")
+        continue
     
     # Get available fields that exist in both selected_fields and the data
     available_fields = [field for field in selected_fields if field in acquisition_data.columns]
@@ -288,10 +301,14 @@ for acquisition in session['Acquisition'].unique():
     else:
         unique_rows = []
     
+    # Safely get values with fallbacks for empty data
+    protocol_name = acquisition_data['ProtocolName'].unique()
+    series_description = acquisition_data['SeriesDescription'].unique()
+    
     acquisition_results.append({
         'Acquisition': str(acquisition),
-        'ProtocolName': str(acquisition_data['ProtocolName'].unique()[0]),
-        'SeriesDescription': str(acquisition_data['SeriesDescription'].unique()),
+        'ProtocolName': str(protocol_name[0]) if len(protocol_name) > 0 else 'Unknown',
+        'SeriesDescription': str(series_description) if len(series_description) > 0 else 'Unknown',
         'TotalFiles': f"{len(acquisition_data)} files",
         'ProcessedData': unique_rows,
         'SelectedFields': available_fields

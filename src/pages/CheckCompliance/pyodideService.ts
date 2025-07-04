@@ -44,7 +44,7 @@ schema_instances[instance_id] = {
     'is_py': is_py
 }
 
-from dicompare.io import load_json_session, load_python_session
+from dicompare.io import load_json_schema, load_python_schema
 
 reference_fields = []
 ref_session = None
@@ -52,14 +52,14 @@ ref_models = None
 
 if is_json:
     print(f"Loading JSON file: {ref_config_name} (instance {instance_id})")
-    reference_fields, ref_session = load_json_session(json_ref=ref_config_name)
+    reference_fields, ref_session = load_json_schema(json_schema_path=ref_config_name)
     # Store in globals with instance-specific keys
     globals()[instance_fields_key] = reference_fields
     globals()[instance_key] = ref_session
 
 elif is_py:
     print(f"Loading Python module: {ref_config_name} (instance {instance_id})")
-    ref_models = load_python_session(module_path=ref_config_name)
+    ref_models = load_python_schema(module_path=ref_config_name)
     # union all model.reference_fields
     reference_fields = sorted({ f
         for model in ref_models.values()
@@ -225,7 +225,7 @@ import dicompare.io
 import importlib
 importlib.reload(dicompare.io)
 
-from dicompare.cli.gen_session import create_json_reference
+from dicompare.generate_schema import create_json_schema
 from dicompare import async_load_dicom_session, assign_acquisition_and_run_numbers
 
 if isinstance(reference_fields, pyodide.ffi.JsProxy):
@@ -341,7 +341,7 @@ if 'CoilType' in in_session.columns:
   print(f"DEBUG: CoilType values: {in_session['CoilType'].unique()}")
 print(f"DEBUG: reference_fields passed to create_json_reference: {reference_fields}")
 try:
-  input_acquisitions = create_json_reference(in_session, reference_fields)
+  input_acquisitions = create_json_schema(in_session, reference_fields)
   # Clean the data before JSON serialization
   clean_acquisitions = clean_for_json(input_acquisitions['acquisitions'])
 except Exception as e:
@@ -367,7 +367,7 @@ export const processExistingSession = async (
 
   const code = `
 import json
-from dicompare.cli.gen_session import create_json_reference
+from dicompare.generate_schema import create_json_schema
 from dicompare import assign_acquisition_and_run_numbers
 
 # convert the JS proxy to a Python list
@@ -402,7 +402,7 @@ def clean_for_json(obj):
 in_session = assign_acquisition_and_run_numbers(in_session)
 in_session.sort_values(by=['Acquisition'] + reference_fields, inplace=True)
 
-acqs = create_json_reference(in_session, reference_fields)['acquisitions']
+acqs = create_json_schema(in_session, reference_fields)['acquisitions']
 clean_acqs = clean_for_json(acqs)
 json.dumps(clean_acqs)
   `.trim();
@@ -461,7 +461,7 @@ export const analyzeCompliance = async (
   const code = `
 import json, pyodide
 from dicompare.compliance import (
-  check_session_compliance_with_json_reference,
+  check_session_compliance_with_json_schema,
   check_session_compliance_with_python_module
 )
 
@@ -505,19 +505,19 @@ else:
     
     # Process JSON schema compliance
     if instance_session_key in globals() and json_map:
-      instance_ref_session = globals()[instance_session_key]
-      print(f"Checking compliance with JSON reference for instance {instance_id}")
+      instance_schema_session = globals()[instance_session_key]
+      print(f"Checking compliance with JSON schema for instance {instance_id}")
       try:
-        json_results = check_session_compliance_with_json_reference(
+        json_results = check_session_compliance_with_json_schema(
           in_session=in_session,
-          ref_session=instance_ref_session,
+          schema_session=instance_schema_session,
           session_map=json_map_processed
         )
         
         # Add instance ID to the results
         for result in json_results:
-          ref_acq = result.get('reference acquisition')
-          if ref_acq:
+          schema_acq = result.get('schema acquisition')
+          if schema_acq:
             result['reference id'] = instance_id
         
         all_results.extend(json_results)
@@ -528,19 +528,19 @@ else:
     
     # Process Python module compliance
     if instance_models_key in globals() and py_map:
-      instance_ref_models = globals()[instance_models_key]
+      instance_schema_models = globals()[instance_models_key]
       print(f"Checking compliance with Python module for instance {instance_id}")
       try:
         py_results = check_session_compliance_with_python_module(
           in_session=in_session,
-          ref_models=instance_ref_models,
+          schema_models=instance_schema_models,
           session_map=py_map_processed
         )
         
         # Add instance ID to the results
         for result in py_results:
-          ref_acq = result.get('reference acquisition')
-          if ref_acq:
+          schema_acq = result.get('schema acquisition')
+          if schema_acq:
             result['reference id'] = instance_id
         
         all_results.extend(py_results)
@@ -613,7 +613,7 @@ export const reprocessSpecificAcquisition = async (
 
   const code = `
 import json
-from dicompare.cli.gen_session import create_json_reference
+from dicompare.generate_schema import create_json_schema
 
 def clean_for_json(obj):
     """Recursively clean an object to make it JSON serializable"""
@@ -656,7 +656,7 @@ if 'in_session' in globals() and in_session is not None:
             available_fields = [f for f in basic_fields if f in acq_session.columns]
         
         if available_fields:
-            acq_reference = create_json_reference(acq_session, available_fields)
+            acq_reference = create_json_schema(acq_session, available_fields)
             if specific_acq_name in acq_reference['acquisitions']:
                 clean_details = clean_for_json(acq_reference['acquisitions'][specific_acq_name])
                 result = {specific_acq_name: clean_details}
@@ -694,9 +694,9 @@ if 'in_session' in globals() and in_session is not None:
     print(f"Removed {acq_to_remove} from input session")
     
     # Regenerate the input options
-    from dicompare.cli.gen_session import create_json_reference
+    from dicompare.generate_schema import create_json_schema
     if 'reference_fields' in globals() and reference_fields:
-        input_acquisitions = create_json_reference(in_session, reference_fields)
+        input_acquisitions = create_json_schema(in_session, reference_fields)
         remaining = list(input_acquisitions['acquisitions'].keys())
     else:
         remaining = []

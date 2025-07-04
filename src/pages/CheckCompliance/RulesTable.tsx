@@ -48,7 +48,7 @@ const RulesTable: React.FC<RulesTableProps> = ({ rules, complianceMap, reference
                 <td style={{ padding: '4px' }}>{ruleName}</td>
                 <td style={{ padding: '4px' }}>{rule.message}</td>
                 <td style={{ padding: '4px', textAlign: 'center' }}>
-                  <Tooltip label={comp.message && comp.message !== "None" ? comp.message : (comp.status === 'ok' ? "OK" : "Failed")}>{icon}</Tooltip>
+                  <Tooltip label={comp.message || (comp.status === 'ok' ? "OK" : "Failed")}>{icon}</Tooltip>
                 </td>
               </tr>
             );

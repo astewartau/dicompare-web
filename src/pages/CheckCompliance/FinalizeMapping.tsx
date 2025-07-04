@@ -200,6 +200,15 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
     }
   }, [referenceFields, inputDICOMFiles.length, pyodide]);
 
+  // Create a stable string representation of pairs to avoid infinite loops
+  const pairsString = JSON.stringify(
+    pairs.map(pair => ({
+      refName: pair.ref?.name,
+      refId: pair.ref?.id,
+      inpName: pair.inp?.name
+    }))
+  );
+
   // Re-process input acquisitions when pairs change to show only schema-relevant fields
   useEffect(() => {
     if (inputDICOMFiles.length === 0) return;
@@ -242,6 +251,18 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
           }
         });
 
+        // Check if we actually need to reprocess (to avoid unnecessary calls)
+        const needsReprocessing = inputOptions.some(inputOption => {
+          const specificFields = inputToRefFields[inputOption.name];
+          if (!specificFields || specificFields.length === 0) return false;
+          
+          // Check if the fields have changed from what we currently have
+          const currentFields = inputOption.details?.referenceFields || [];
+          return JSON.stringify(currentFields.sort()) !== JSON.stringify(specificFields.sort());
+        });
+
+        if (!needsReprocessing) return;
+
         // Re-process each input acquisition with its specific reference fields
         const updatedInputOptions = await Promise.all(
           inputOptions.map(async (inputOption) => {
@@ -252,7 +273,10 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
               if (result[inputOption.name]) {
                 return {
                   ...inputOption,
-                  details: result[inputOption.name]
+                  details: {
+                    ...result[inputOption.name],
+                    referenceFields: specificFields // Track what fields we used
+                  }
                 };
               }
             }
@@ -284,7 +308,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
     if (hasPairs) {
       updateInputFields();
     }
-  }, [pairs, pyodide, inputDICOMFiles.length]);
+  }, [pairsString, pyodide, inputDICOMFiles.length]); // Use pairsString instead of pairs to prevent infinite loop
 
   // Analyze compliance when pairs change
   useEffect(() => {
@@ -320,24 +344,24 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
           const overall: Record<string, { status: 'ok' | 'error'; message: string }> = {};
 
           results.forEach((item: any) => {
-            const refA = item['reference acquisition'];
-            const refId = item['reference id'];
+            const schemaA = item['schema acquisition'];
+            const schemaId = item['reference id'];
 
             // Create a unique key using the ID if available
-            const refKey = refId ? `${refA}#${refId}` : refA;
+            const schemaKey = schemaId ? `${schemaA}#${schemaId}` : schemaA;
 
-            if (refA) {
-              overall[refKey] ||= { status: 'ok', message: 'Passed.' };
-              if (!item.passed) overall[refKey] = { status: 'error', message: item.message || '' };
+            if (schemaA) {
+              overall[schemaKey] ||= { status: 'ok', message: 'Passed.' };
+              if (!item.passed) overall[schemaKey] = { status: 'error', message: item.message || '' };
             }
 
             const key = item.rule_name || item.field;
-            // Include the reference ID in the key to make it unique per instance
-            const uniqueKey = refId ? `${key}#${refId}` : key;
+            // Include the schema ID in the key to make it unique per instance
+            const uniqueKey = schemaId ? `${key}#${schemaId}` : key;
 
             cmap[uniqueKey] = {
               status: item.passed ? 'ok' : 'error',
-              message: item.message && item.message !== "None" ? item.message : (item.passed ? "OK" : `Failed: ${item.expected}`)
+              message: item.message || (item.passed ? "OK" : `Failed: ${item.expected}`)
             };
           });
 
@@ -345,12 +369,12 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({
           const seriesMap: Record<string, FieldCompliance> = {};
           results.forEach((item: any) => {
             if (item.series) {
-              const refA = item['reference acquisition'];
-              const refId = item['reference id'];
-              // Include the reference ID in the key to make it unique per instance
-              const seriesKey = refId
-                ? `${refA}#${refId}|${item.series}|${item.field}`
-                : `${refA}|${item.series}|${item.field}`;
+              const schemaA = item['schema acquisition'];
+              const schemaId = item['reference id'];
+              // Include the schema ID in the key to make it unique per instance
+              const seriesKey = schemaId
+                ? `${schemaA}#${schemaId}|${item.series}|${item.field}`
+                : `${schemaA}|${item.series}|${item.field}`;
 
               seriesMap[seriesKey] = {
                 status: item.passed ? 'ok' : 'error',
