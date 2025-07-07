@@ -49,8 +49,10 @@ try:
             for f in model.reference_fields
         })
         
-        # Convert Python models to JSON schema format
+        # Store the original Python models and mark as Python schema
         schema_dict = {
+            "type": "python",
+            "python_models": ref_models,  # Store the actual Python model classes
             "acquisitions": {
                 acq_name: {
                     "rules": [
@@ -61,10 +63,19 @@ try:
                         {"name": mv.__name__, "message": mv._rule_message}
                         for mv in getattr(ref_models[acq_name], "_model_validators", [])
                     ]
+                    # Note: Python schemas don't have explicit field/series constraints like JSON schemas
+                    # They use validation rules instead, so we don't include fields/series arrays
                 }
                 for acq_name in ref_models.keys()
             }
         }
+        
+        print(f"Python schema conversion result:")
+        for acq_name, acq_data in schema_dict["acquisitions"].items():
+            rules_count = len(acq_data['rules'])
+            print(f"  Acquisition '{acq_name}': {rules_count} validation rules")
+            if rules_count == 0:
+                print(f"    WARNING: No validation rules found for acquisition '{acq_name}'")
     else:
         raise RuntimeError(f"Unsupported schema type: {ref_config_name}")
     
@@ -505,27 +516,25 @@ try:
             schema_acquisitions = global_compliance_session.get_schema_acquisitions(schema_id)
             schema_data = global_compliance_session.schemas[schema_id]
             print(f"Schema acquisitions: {list(schema_acquisitions)}")
+            
+            # Check if this is a Python schema
+            is_python_schema = schema_data.get('type') == 'python'
+            
+            print(f"Schema type: {schema_data.get('type', 'json')}")
+            print(f"Is Python schema: {is_python_schema}")
+            
             for acq_name in schema_acquisitions:
                 acq_data = schema_data['acquisitions'].get(acq_name, {})
                 print(f"  Acquisition '{acq_name}':")
                 print(f"    Fields: {len(acq_data.get('fields', []))}")
                 print(f"    Series: {len(acq_data.get('series', []))}")
+                print(f"    Rules: {len(acq_data.get('rules', []))}")
                 
-                # Debug: Check if ImageType is in acquisition fields
-                acq_fields = acq_data.get('fields', [])
-                image_type_fields = [f for f in acq_fields if f.get('field') == 'ImageType']
-                if image_type_fields:
-                    print(f"    WARNING: Found {len(image_type_fields)} ImageType constraints in acquisition fields!")
-                    for i, field in enumerate(image_type_fields):
-                        print(f"      ImageType {i}: {field.get('value')}")
-                
-                if acq_data.get('series'):
-                    for i, series in enumerate(acq_data['series']):
-                        series_fields = series.get('fields', [])
-                        print(f"      Series {i}: name='{series.get('name')}', fields={[f['field'] for f in series_fields]}")
-                        for field in series_fields:
-                            if field.get('field') == 'ImageType':
-                                print(f"        ImageType value: {field.get('value')}")
+                if is_python_schema:
+                    print(f"    Python schema with {len(acq_data['rules'])} validation rules")
+                    for rule in acq_data['rules']:
+                        rule_name = rule.get('rule_name') or rule.get('name', 'unnamed')
+                        print(f"      Rule: {rule_name}")
             
             # Debug: Check what session data we have  
             session_df = global_compliance_session.session_df
@@ -538,8 +547,91 @@ try:
             if 'SeriesNumber' in acq_data.columns:
                 print(f"  SeriesNumber values: {acq_data['SeriesNumber'].unique()}")
             
-            # Run compliance check using ComplianceSession
-            compliance_results = global_compliance_session.check_compliance(schema_id, user_mapping)
+            # Handle Python schemas differently
+            if is_python_schema:
+                print("Using Python schema validation...")
+                try:
+                    # Import the Python compliance function
+                    from dicompare.compliance import check_session_compliance_with_python_module
+                    
+                    # Get the Python models from the schema
+                    python_models = schema_data.get('python_models', {})
+                    
+                    if not python_models:
+                        print("ERROR: No Python models found in schema data")
+                        raise ValueError("Python schema missing python_models")
+                    
+                    print(f"Found Python models: {list(python_models.keys())}")
+                    
+                    # Get the session data
+                    session_df = global_compliance_session.session_df
+                    
+                    # Run Python compliance validation
+                    compliance_summary = check_session_compliance_with_python_module(
+                        in_session=session_df,
+                        schema_models=python_models,
+                        session_map=user_mapping,
+                        raise_errors=False
+                    )
+                    
+                    print(f"Python compliance check returned {len(compliance_summary)} results")
+                    
+                    # Convert to the format expected by the UI
+                    compliance_results = {
+                        'summary': {'compliance_rate': 0.0, 'total_rules': len(compliance_summary), 'passed_rules': 0},
+                        'acquisition_details': {},
+                        'raw_results': compliance_summary
+                    }
+                    
+                    # Group results by acquisition
+                    for result in compliance_summary:
+                        schema_acq_name = result.get('schema acquisition', 'unknown')
+                        input_acq_name = result.get('input acquisition', 'unknown')
+                        
+                        if schema_acq_name not in compliance_results['acquisition_details']:
+                            compliance_results['acquisition_details'][schema_acq_name] = {
+                                'input_acquisition': input_acq_name,
+                                'detailed_results': [],
+                                'overall_compliant': True
+                            }
+                        
+                        # Convert to detailed result format
+                        detailed_result = {
+                            'field': result.get('rule_name', result.get('field', 'unknown')),
+                            'rule_name': result.get('rule_name', 'unknown'),
+                            'expected': result.get('expected', ''),
+                            'actual': result.get('value', ''),
+                            'compliant': result.get('passed', False),
+                            'message': result.get('message', ''),
+                            'series': None
+                        }
+                        
+                        compliance_results['acquisition_details'][schema_acq_name]['detailed_results'].append(detailed_result)
+                        
+                        if result.get('passed', False):
+                            compliance_results['summary']['passed_rules'] += 1
+                        else:
+                            compliance_results['acquisition_details'][schema_acq_name]['overall_compliant'] = False
+                    
+                    # Calculate compliance rate
+                    if compliance_results['summary']['total_rules'] > 0:
+                        compliance_results['summary']['compliance_rate'] = (
+                            compliance_results['summary']['passed_rules'] / 
+                            compliance_results['summary']['total_rules'] * 100
+                        )
+                    
+                    print(f"Python validation completed: {compliance_results['summary']['passed_rules']}/{compliance_results['summary']['total_rules']} passed ({compliance_results['summary']['compliance_rate']:.1f}%)")
+                    
+                except Exception as py_error:
+                    import traceback
+                    traceback.print_exc()
+                    print(f"Error in Python schema validation: {py_error}")
+                    # Fall back to regular compliance check
+                    compliance_results = global_compliance_session.check_compliance(schema_id, user_mapping)
+            else:
+                print("Using JSON schema validation...")
+                # Run compliance check using ComplianceSession for JSON schemas
+                compliance_results = global_compliance_session.check_compliance(schema_id, user_mapping)
             
             print(f"Compliance check completed for schema '{schema_id}'")
             print(f"Compliance results type: {type(compliance_results)}")

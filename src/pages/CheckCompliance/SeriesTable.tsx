@@ -7,7 +7,7 @@ import { FieldCompliance } from './types';
 interface SeriesTableProps {
     seriesArr: Array<{
         name: string;
-        fields: Array<{ field: string; value?: any; tolerance?: number; contains?: any }>;
+        fields: Array<{ field: string; value?: any; tolerance?: number; contains?: any; minValue?: any; maxValue?: any }>;
     }>;
     cardType: 'ref' | 'inp';
     acqName: string;
@@ -17,6 +17,34 @@ interface SeriesTableProps {
 
 const SeriesTable: React.FC<SeriesTableProps> = ({ seriesArr, cardType, acqName, complianceMap, schemaId }) => {
     if (!seriesArr.length) return null;
+
+    // Helper function to format constraint display
+    const formatConstraintDisplay = (field: { field: string; value?: any; tolerance?: number; contains?: any; minValue?: any; maxValue?: any }) => {
+        // Check for contains constraint
+        if (field.contains !== undefined) {
+            return `Contains: "${field.contains}"`;
+        }
+        
+        // Check for range constraint
+        if (field.minValue !== undefined && field.maxValue !== undefined) {
+            return `Range: ${field.minValue} - ${field.maxValue}`;
+        }
+        
+        // Check for value with tolerance
+        if (field.value !== undefined && field.tolerance !== undefined) {
+            return `${Array.isArray(field.value) ? field.value.join(', ') : field.value} ± ${field.tolerance}`;
+        }
+        
+        // Regular value constraint
+        if (field.value !== undefined) {
+            if (Array.isArray(field.value)) {
+                return field.value.join(', ');
+            }
+            return String(field.value);
+        }
+        
+        return '';
+    };
 
     // Gather all field names
     const allFieldNames = Array.from(
@@ -69,11 +97,9 @@ const SeriesTable: React.FC<SeriesTableProps> = ({ seriesArr, cardType, acqName,
                                 <td style={{ padding: '4px' }}>{s.name}</td>
                                 {allFieldNames.map((fn) => {
                                     const fld = s.fields.find((f) => f.field === fn);
-                                    const val = fld?.value ?? fld?.contains ?? '';
-                                    const tol = fld?.tolerance != null ? ` (tol: ${fld.tolerance})` : '';
                                     return (
                                         <td key={fn} style={{ padding: '4px', textAlign: 'right' }}>
-                                            {String(val) + tol}
+                                            {fld ? formatConstraintDisplay(fld) : ''}
                                         </td>
                                     );
                                 })}

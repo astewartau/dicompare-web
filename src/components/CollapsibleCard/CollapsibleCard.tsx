@@ -116,27 +116,50 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     };
 
     const transformField = (data: FieldData): any => {
-        switch (data.dataType) {
-            case 'number':
-                return parseFloat(data.value);
-            case 'string':
-                return data.value;
-            case 'list':
-                const items = data.value.split(',').map(s => s.trim());
-                if (data.listSubType === 'number') {
-                    return items.map(item => parseFloat(item));
-                } else {
-                    return items; // string list
-                }
-            case 'raw_json':
-                try {
-                    return JSON.parse(data.value);
-                } catch (error) {
-                    console.error('Invalid JSON:', data.value);
-                    return data.value; // Fallback to string if JSON parsing fails
-                }
+        // Helper to transform value based on data type
+        const transformValue = (value: string) => {
+            switch (data.dataType) {
+                case 'number':
+                    return parseFloat(value);
+                case 'string':
+                    return value;
+                case 'list':
+                    const items = value.split(',').map(s => s.trim());
+                    if (data.listSubType === 'number') {
+                        return items.map(item => parseFloat(item));
+                    } else {
+                        return items; // string list
+                    }
+                case 'raw_json':
+                    try {
+                        return JSON.parse(value);
+                    } catch (error) {
+                        console.error('Invalid JSON:', value);
+                        return value; // Fallback to string if JSON parsing fails
+                    }
+                default:
+                    return value;
+            }
+        };
+
+        // Transform based on constraint type
+        switch (data.constraintType) {
+            case 'value':
+                return { value: transformValue(data.value) };
+            case 'contains':
+                return { contains: data.value }; // contains is always a string
+            case 'range':
+                return { 
+                    minValue: transformValue(data.minValue || ''), 
+                    maxValue: transformValue(data.maxValue || '') 
+                };
+            case 'value+tolerance':
+                return { 
+                    value: transformValue(data.value), 
+                    tolerance: parseFloat(data.tolerance || '0') 
+                };
             default:
-                return data.value;
+                return { value: transformValue(data.value) };
         }
     };
 
@@ -176,18 +199,24 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     // Save the acquisition data when form data changes (for DICOM-generated cards)
     useEffect(() => {
         if (isDicomGenerated && stage === 2 && !globalEdit) {
-            const constantFieldsJson = formData.constant.map((field) => ({
-                field: field.name,
-                value: transformField(field.data),
-            }));
+            const constantFieldsJson = formData.constant.map((field) => {
+                const transformed = transformField(field.data);
+                return {
+                    field: field.name,
+                    ...transformed
+                };
+            });
             const seriesJson = formData.variable.map((row) => {
                 const seriesName = row.Series.value;
                 const fields = Object.keys(row)
                     .filter((key) => key !== 'Series')
-                    .map((key) => ({
-                        field: key,
-                        value: transformField(row[key]),
-                    }));
+                    .map((key) => {
+                        const transformed = transformField(row[key]);
+                        return {
+                            field: key,
+                            ...transformed
+                        };
+                    });
                 return { name: seriesName, fields };
             });
             const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
@@ -198,18 +227,24 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
     }, [formData, isDicomGenerated, stage, globalEdit, acquisition, onSaveAcquisition]);
 
     const handleGlobalSave = () => {
-        const constantFieldsJson = formData.constant.map((field) => ({
-            field: field.name,
-            value: transformField(field.data),
-        }));
+        const constantFieldsJson = formData.constant.map((field) => {
+            const transformed = transformField(field.data);
+            return {
+                field: field.name,
+                ...transformed
+            };
+        });
         const seriesJson = formData.variable.map((row) => {
             const seriesName = row.Series.value;
             const fields = Object.keys(row)
                 .filter((key) => key !== 'Series')
-                .map((key) => ({
-                    field: key,
-                    value: transformField(row[key]),
-                }));
+                .map((key) => {
+                    const transformed = transformField(row[key]);
+                    return {
+                        field: key,
+                        ...transformed
+                    };
+                });
             return { name: seriesName, fields };
         });
         const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };
@@ -272,18 +307,24 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             setFormData({ constant: newConstant, variable: newVariable });
             setStage(2);
             setGlobalEdit(false);
-            const constantFieldsJson = newConstant.map((field) => ({
-                field: field.name,
-                value: transformField(field.data),
-            }));
+            const constantFieldsJson = newConstant.map((field) => {
+                const transformed = transformField(field.data);
+                return {
+                    field: field.name,
+                    ...transformed
+                };
+            });
             const seriesJson = newVariable.map((row) => {
                 const seriesName = row.Series.value;
                 const fields = Object.keys(row)
                     .filter((key) => key !== 'Series')
-                    .map((key) => ({
-                        field: key,
-                        value: transformField(row[key]),
-                    }));
+                    .map((key) => {
+                        const transformed = transformField(row[key]);
+                        return {
+                            field: key,
+                            ...transformed
+                        };
+                    });
                 return { name: seriesName, fields };
             });
             const acquisitionJson = { fields: constantFieldsJson, series: seriesJson };

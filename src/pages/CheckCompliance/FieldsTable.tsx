@@ -5,7 +5,7 @@ import { CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 import { FieldCompliance } from './types';
 
 interface FieldsTableProps {
-    fields: Array<{ field: string; value?: any; tolerance?: number }>;
+    fields: Array<{ field: string; value?: any; tolerance?: number; contains?: any; minValue?: any; maxValue?: any }>;
     cardType: 'ref' | 'inp';
     complianceMap: Record<string, FieldCompliance>;
     schemaId?: string; // Schema ID for compliance lookup
@@ -21,16 +21,37 @@ const FieldsTable: React.FC<FieldsTableProps> = ({ fields, cardType, complianceM
         return complianceMap[key];
     };
 
-    // Function to format field values, especially arrays/lists
-    const formatValue = (value: any) => {
-        if (Array.isArray(value)) {
-            return value.join(', ');
+    // Helper function to format constraint display
+    const formatConstraintDisplay = (field: { field: string; value?: any; tolerance?: number; contains?: any; minValue?: any; maxValue?: any }) => {
+        // Check for contains constraint
+        if (field.contains !== undefined) {
+            return `Contains: "${field.contains}"`;
         }
-        if (typeof value === 'object' && value !== null && typeof value.join === 'function') {
-            // Handle array-like objects that have a join method
-            return Array.from(value).join(', ');
+        
+        // Check for range constraint
+        if (field.minValue !== undefined && field.maxValue !== undefined) {
+            return `Range: ${field.minValue} - ${field.maxValue}`;
         }
-        return String(value);
+        
+        // Check for value with tolerance
+        if (field.value !== undefined && field.tolerance !== undefined) {
+            const formattedValue = Array.isArray(field.value) ? field.value.join(', ') : String(field.value);
+            return `${formattedValue} ± ${field.tolerance}`;
+        }
+        
+        // Regular value constraint
+        if (field.value !== undefined) {
+            if (Array.isArray(field.value)) {
+                return field.value.join(', ');
+            }
+            if (typeof field.value === 'object' && field.value !== null && typeof field.value.join === 'function') {
+                // Handle array-like objects that have a join method
+                return Array.from(field.value).join(', ');
+            }
+            return String(field.value);
+        }
+        
+        return '';
     };
 
     return (
@@ -65,8 +86,7 @@ const FieldsTable: React.FC<FieldsTableProps> = ({ fields, cardType, complianceM
                             <tr key={idx}>
                                 <td style={{ borderBottom: '1px solid #eee', padding: '4px' }}>{fld.field}</td>
                                 <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'right' }}>
-                                    {formatValue(fld.value)}
-                                    {fld.tolerance !== undefined ? ` (tol: ${fld.tolerance})` : ''}
+                                    {formatConstraintDisplay(fld)}
                                 </td>
                                 {cardType === 'ref' && (
                                     <td style={{ borderBottom: '1px solid #eee', padding: '4px', textAlign: 'center' }}>
