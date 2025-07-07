@@ -1,10 +1,5 @@
 // components/CollapsibleCard/EditConstantModal.tsx
-import React, {
-    useState,
-    useEffect,
-    useRef,
-    useCallback,
-} from "react";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Modal,
     ModalOverlay,
@@ -21,22 +16,30 @@ import {
     HStack,
     Input as ChakraInput,
     Box,
-} from "@chakra-ui/react";
-import Tagify from "@yaireo/tagify";
-import "@yaireo/tagify/dist/tagify.css";
-import { ConstantField, DataType, ConstraintType, VariableRow } from "./types";
+} from '@chakra-ui/react';
+import Tagify from '@yaireo/tagify';
+import '@yaireo/tagify/dist/tagify.css';
+import { ConstantField, ConstraintType, VariableRow, BaseDataType, ListSubType } from './types';
 import AutocompleteInput from './AutocompleteInput';
 
-export const allowedConstraints = (dataType: DataType): ConstraintType[] => {
-    return dataType === "number"
-        ? ["value", "range", "value+tolerance"]
-        : ["value", "contains"];
+export const allowedConstraints = (dataType: BaseDataType): ConstraintType[] => {
+    switch (dataType) {
+        case 'number':
+            return ['value', 'range', 'value+tolerance'];
+        case 'string':
+        case 'list':
+            return ['value', 'contains'];
+        case 'raw_json':
+            return ['value']; // Only exact value matching for JSON
+        default:
+            return ['value'];
+    }
 };
 
 interface EditConstantModalProps {
     isOpen: boolean;
     onClose: () => void;
-    mode?: "constant" | "series";
+    mode?: 'constant' | 'series';
     // For constant mode:
     constantField?: ConstantField;
     // For series mode, pass the entire variable row:
@@ -51,24 +54,24 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     isOpen,
     onClose,
     onSave,
-    mode = "constant",
+    mode = 'constant',
     constantField,
     seriesRow,
     validFields = [], // Add this with default
 }) => {
-    const isSeries = mode === "series";
+    const isSeries = mode === 'series';
 
     // For constant mode.
     const [localField, setLocalField] = useState<ConstantField>(
         constantField || {
-            id: "",
-            name: "",
-            data: { constraintType: "value", value: "", dataType: "string" },
+            id: '',
+            name: '',
+            data: { constraintType: 'value', value: '', dataType: 'string', listSubType: undefined },
         }
     );
     // For series mode.
     const [localRow, setLocalRow] = useState<VariableRow>(
-        seriesRow || { Series: { value: "", constraintType: "value", dataType: "string" } }
+        seriesRow || { Series: { value: '', constraintType: 'value', dataType: 'string', listSubType: undefined } }
     );
 
     // Error state for constant mode.
@@ -91,28 +94,15 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
 
     // Shared numeric input handlers.
     const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        const allowedKeys = [
-            "Backspace",
-            "Tab",
-            "ArrowLeft",
-            "ArrowRight",
-            "Delete",
-            "Home",
-            "End",
-        ];
+        const allowedKeys = ['Backspace', 'Tab', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'];
         if (allowedKeys.includes(e.key)) return;
-        if (e.key === "." && !e.currentTarget.value.includes(".")) return;
-        if (
-            e.key === "-" &&
-            e.currentTarget.selectionStart === 0 &&
-            !e.currentTarget.value.includes("-")
-        )
-            return;
+        if (e.key === '.' && !e.currentTarget.value.includes('.')) return;
+        if (e.key === '-' && e.currentTarget.selectionStart === 0 && !e.currentTarget.value.includes('-')) return;
         if (!/^\d$/.test(e.key)) e.preventDefault();
     };
 
     const handleNumericPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-        const pasteData = e.clipboardData.getData("text");
+        const pasteData = e.clipboardData.getData('text');
         if (/[^0-9.-]/.test(pasteData)) e.preventDefault();
     };
 
@@ -120,20 +110,23 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     const setTagifyRefConstant = useCallback(
         (el: HTMLInputElement | null) => {
             inputElementRef.current = el;
-            if (el && isOpen && localField.data.dataType === "list" && !tagifyInstanceRef.current) {
+            if (el && isOpen && localField.data.dataType === 'list' && !tagifyInstanceRef.current) {
                 tagifyInstanceRef.current = new Tagify(el, { duplicates: true });
                 if (tagifyInstanceRef.current.DOM.scope) {
-                    tagifyInstanceRef.current.DOM.scope.style.width = "100%";
+                    tagifyInstanceRef.current.DOM.scope.style.width = '100%';
                 }
                 const initialTags = localField.data.value
-                    ? localField.data.value.split(",").map((t) => t.trim()).filter(Boolean)
+                    ? localField.data.value
+                          .split(',')
+                          .map((t) => t.trim())
+                          .filter(Boolean)
                     : [];
                 tagifyInstanceRef.current.addTags(initialTags);
-                tagifyInstanceRef.current.on("change", () => {
+                tagifyInstanceRef.current.on('change', () => {
                     const tags = tagifyInstanceRef.current?.value.map((tag) => tag.value) || [];
                     setLocalField((prev) => ({
                         ...prev,
-                        data: { ...prev.data, value: tags.join(", ") },
+                        data: { ...prev.data, value: tags.join(', ') },
                     }));
                 });
             }
@@ -148,10 +141,13 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     }, [constantField, isSeries]);
 
     useEffect(() => {
-        if (!isSeries && tagifyInstanceRef.current && localField.data.dataType === "list") {
+        if (!isSeries && tagifyInstanceRef.current && localField.data.dataType === 'list') {
             const currentTags = tagifyInstanceRef.current.value.map((tag) => tag.value);
             const newTags = localField.data.value
-                ? localField.data.value.split(",").map((t) => t.trim()).filter(Boolean)
+                ? localField.data.value
+                      .split(',')
+                      .map((t) => t.trim())
+                      .filter(Boolean)
                 : [];
             if (JSON.stringify(currentTags) !== JSON.stringify(newTags)) {
                 tagifyInstanceRef.current.removeAllTags();
@@ -169,16 +165,30 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     // --- Constant mode handlers ---
 
     const handleDataTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const dt = e.target.value as DataType;
+        const dt = e.target.value as BaseDataType;
         const newConstraint = allowedConstraints(dt)[0];
         setLocalField((prev) => ({
             ...prev,
-            data: { ...prev.data, dataType: dt, constraintType: newConstraint, value: "" },
+            data: { 
+                ...prev.data, 
+                dataType: dt, 
+                constraintType: newConstraint, 
+                value: '',
+                listSubType: dt === 'list' ? 'string' : undefined
+            },
         }));
-        if (dt !== "list" && tagifyInstanceRef.current) {
+        if (dt !== 'list' && tagifyInstanceRef.current) {
             tagifyInstanceRef.current.destroy();
             tagifyInstanceRef.current = null;
         }
+    };
+
+    const handleListSubTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const subType = e.target.value as ListSubType;
+        setLocalField((prev) => ({
+            ...prev,
+            data: { ...prev.data, listSubType: subType, value: '' },
+        }));
     };
 
     const handleConstraintChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -218,6 +228,16 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
         }
     };
 
+    const validateRawJSON = (value: string): boolean => {
+        if (!value.trim()) return false;
+        try {
+            JSON.parse(value);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
     const validateConstantInputs = (): boolean => {
         const newErrors: {
             fieldName?: string;
@@ -227,26 +247,42 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
             tolerance?: string;
         } = {};
         if (!localField.name || !localField.name.trim()) {
-            newErrors.fieldName = "Field name is required.";
+            newErrors.fieldName = 'Field name is required.';
         }
-        const { constraintType, value, minValue, maxValue, tolerance } = localField.data;
-        if (constraintType === "value" || constraintType === "contains") {
-            if (!value || !value.trim()) {
-                newErrors.value = "This field is required.";
+        const { constraintType, value, minValue, maxValue, tolerance, dataType, listSubType } = localField.data;
+        
+        // Special validation for Raw JSON
+        if (dataType === 'raw_json') {
+            if (!validateRawJSON(value)) {
+                newErrors.value = 'Invalid JSON format';
             }
-        } else if (constraintType === "range") {
+        } else if (dataType === 'list' && listSubType === 'number' && value) {
+            // Validate number lists
+            const items = value.split(',').map(s => s.trim());
+            const hasInvalidNumbers = items.some(item => item !== '' && isNaN(parseFloat(item)));
+            if (hasInvalidNumbers) {
+                newErrors.value = 'All list items must be valid numbers';
+            }
+        }
+        
+        // Standard validation
+        if (constraintType === 'value' || constraintType === 'contains') {
+            if (!value || !value.trim()) {
+                newErrors.value = 'This field is required.';
+            }
+        } else if (constraintType === 'range') {
             if (!minValue || !minValue.trim()) {
-                newErrors.minValue = "Min value is required.";
+                newErrors.minValue = 'Min value is required.';
             }
             if (!maxValue || !maxValue.trim()) {
-                newErrors.maxValue = "Max value is required.";
+                newErrors.maxValue = 'Max value is required.';
             }
-        } else if (constraintType === "value+tolerance") {
+        } else if (constraintType === 'value+tolerance') {
             if (!value || !value.trim()) {
-                newErrors.value = "Value is required.";
+                newErrors.value = 'Value is required.';
             }
             if (!tolerance || !tolerance.trim()) {
-                newErrors.tolerance = "Tolerance is required.";
+                newErrors.tolerance = 'Tolerance is required.';
             }
         }
         setErrors(newErrors);
@@ -257,7 +293,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     useEffect(() => {
         return () => {
             // Cleanup all Tagify instances when component unmounts
-            Object.values(tagifySeriesRefs.current).forEach(tagify => {
+            Object.values(tagifySeriesRefs.current).forEach((tagify) => {
                 tagify?.destroy();
             });
             tagifySeriesRefs.current = {};
@@ -267,7 +303,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     // Also cleanup when modal closes
     useEffect(() => {
         if (!isOpen) {
-            Object.values(tagifySeriesRefs.current).forEach(tagify => {
+            Object.values(tagifySeriesRefs.current).forEach((tagify) => {
                 tagify?.destroy();
             });
             tagifySeriesRefs.current = {};
@@ -278,27 +314,46 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     const validateSeries = (): boolean => {
         let valid = true;
         const newErrors: typeof errorsRow = {};
-        const fieldKeys = Object.keys(localRow).filter((key) => key !== "Series");
+        const fieldKeys = Object.keys(localRow).filter((key) => key !== 'Series');
+        
         for (const key of fieldKeys) {
             const field = localRow[key];
-            const currentData = field || { constraintType: "value", value: "", dataType: "string" };
+            const currentData = field || { constraintType: 'value', value: '', dataType: 'string' };
+            
+            // Special validation for Raw JSON
+            if (currentData.dataType === 'raw_json') {
+                if (!validateRawJSON(currentData.value || '')) {
+                    valid = false;
+                    newErrors[key] = { ...newErrors[key], value: 'Invalid JSON format' };
+                }
+            } else if (currentData.dataType === 'list' && currentData.listSubType === 'number' && currentData.value) {
+                // Validate number lists
+                const items = currentData.value.split(',').map(s => s.trim());
+                const hasInvalidNumbers = items.some(item => item !== '' && isNaN(parseFloat(item)));
+                if (hasInvalidNumbers) {
+                    valid = false;
+                    newErrors[key] = { ...newErrors[key], value: 'All list items must be valid numbers' };
+                }
+            }
+            
+            // Standard validation based on constraint type
             if (
-                currentData.constraintType === "value" ||
-                currentData.constraintType === "contains" ||
-                currentData.constraintType === "value+tolerance"
+                currentData.constraintType === 'value' ||
+                currentData.constraintType === 'contains' ||
+                currentData.constraintType === 'value+tolerance'
             ) {
                 if (!currentData.value || !currentData.value.trim()) {
                     valid = false;
-                    newErrors[key] = { ...newErrors[key], value: "This field is required." };
+                    newErrors[key] = { ...newErrors[key], value: 'This field is required.' };
                 }
-            } else if (currentData.constraintType === "range") {
+            } else if (currentData.constraintType === 'range') {
                 if (!currentData.minValue || !currentData.minValue.trim()) {
                     valid = false;
-                    newErrors[key] = { ...newErrors[key], minValue: "Min value is required." };
+                    newErrors[key] = { ...newErrors[key], minValue: 'Min value is required.' };
                 }
                 if (!currentData.maxValue || !currentData.maxValue.trim()) {
                     valid = false;
-                    newErrors[key] = { ...newErrors[key], maxValue: "Max value is required." };
+                    newErrors[key] = { ...newErrors[key], maxValue: 'Max value is required.' };
                 }
             }
         }
@@ -309,11 +364,11 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     // Single handleSave declaration.
     const handleSave = () => {
         if (isSeries) {
-            const seriesName = localRow["Series"]?.value || "";
+            const seriesName = localRow['Series']?.value || '';
             if (!seriesName.trim()) {
                 setErrorsRow((prev) => ({
                     ...prev,
-                    Series: { value: "Series name is required." },
+                    Series: { value: 'Series name is required.' },
                 }));
                 return;
             }
@@ -331,21 +386,45 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     const renderConstantForm = () => {
         const renderValueInput = () => {
             const { data } = localField;
-            const isNumber = data.dataType === "number";
+            const isNumber = data.dataType === 'number';
+            
+            // Handle Raw JSON type
+            if (data.dataType === 'raw_json') {
+                return (
+                    <FormControl isInvalid={!!errors.value}>
+                        <ChakraInput
+                            as="textarea"
+                            rows={4}
+                            size="sm"
+                            value={data.value}
+                            placeholder='Enter JSON: 1, "hello", [1, "hello"], {"key": "value"}'
+                            onChange={(e) =>
+                                setLocalField((prev) => ({
+                                    ...prev,
+                                    data: { ...prev.data, value: e.target.value },
+                                }))
+                            }
+                            fontFamily="mono"
+                        />
+                        {errors.value && <FormErrorMessage>{errors.value}</FormErrorMessage>}
+                    </FormControl>
+                );
+            }
+            
             switch (data.constraintType) {
-                case "value":
-                    if (data.dataType === "list") {
+                case 'value':
+                    if (data.dataType === 'list') {
                         return (
                             <FormControl isInvalid={!!errors.value}>
                                 <input
                                     ref={setTagifyRefConstant}
-                                    placeholder="Enter comma separated values"
+                                    placeholder={`Enter comma separated ${data.listSubType || 'string'} values`}
                                     style={{
-                                        width: "100%",
-                                        padding: "0.5rem",
-                                        fontSize: "0.875rem",
-                                        borderRadius: "0.375rem",
-                                        border: "1px solid #E2E8F0",
+                                        width: '100%',
+                                        padding: '0.5rem',
+                                        fontSize: '0.875rem',
+                                        borderRadius: '0.375rem',
+                                        border: '1px solid #E2E8F0',
                                     }}
                                 />
                                 {errors.value && <FormErrorMessage>{errors.value}</FormErrorMessage>}
@@ -356,7 +435,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                         <FormControl isInvalid={!!errors.value}>
                             <ChakraInput
                                 size="sm"
-                                type={isNumber ? "number" : "text"}
+                                type={isNumber ? 'number' : 'text'}
                                 value={data.value}
                                 placeholder="Enter value"
                                 onChange={(e) =>
@@ -371,14 +450,14 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                             {errors.value && <FormErrorMessage>{errors.value}</FormErrorMessage>}
                         </FormControl>
                     );
-                case "range":
+                case 'range':
                     return (
                         <HStack spacing={2}>
                             <FormControl isInvalid={!!errors.minValue}>
                                 <ChakraInput
                                     size="sm"
-                                    type={isNumber ? "number" : "text"}
-                                    value={localField.data.minValue || ""}
+                                    type={isNumber ? 'number' : 'text'}
+                                    value={localField.data.minValue || ''}
                                     placeholder="Min"
                                     onChange={(e) => handleMinChange(e.target.value)}
                                     onKeyDown={isNumber ? handleNumericKeyDown : undefined}
@@ -389,8 +468,8 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                             <FormControl isInvalid={!!errors.maxValue}>
                                 <ChakraInput
                                     size="sm"
-                                    type={isNumber ? "number" : "text"}
-                                    value={localField.data.maxValue || ""}
+                                    type={isNumber ? 'number' : 'text'}
+                                    value={localField.data.maxValue || ''}
                                     placeholder="Max"
                                     onChange={(e) => handleMaxChange(e.target.value)}
                                     onKeyDown={isNumber ? handleNumericKeyDown : undefined}
@@ -400,13 +479,13 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                             </FormControl>
                         </HStack>
                     );
-                case "value+tolerance":
+                case 'value+tolerance':
                     return (
                         <HStack spacing={2}>
                             <FormControl isInvalid={!!errors.value}>
                                 <ChakraInput
                                     size="sm"
-                                    type={isNumber ? "number" : "text"}
+                                    type={isNumber ? 'number' : 'text'}
                                     value={localField.data.value}
                                     placeholder="Enter value"
                                     onChange={(e) =>
@@ -423,8 +502,8 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                             <FormControl isInvalid={!!errors.tolerance}>
                                 <ChakraInput
                                     size="sm"
-                                    type={isNumber ? "number" : "text"}
-                                    value={localField.data.tolerance || ""}
+                                    type={isNumber ? 'number' : 'text'}
+                                    value={localField.data.tolerance || ''}
                                     placeholder="Tolerance"
                                     onChange={(e) => handleToleranceChange(e.target.value)}
                                     onKeyDown={isNumber ? handleNumericKeyDown : undefined}
@@ -434,7 +513,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                             </FormControl>
                         </HStack>
                     );
-                case "contains":
+                case 'contains':
                     return (
                         <FormControl isInvalid={!!errors.value}>
                             <ChakraInput
@@ -478,13 +557,22 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                     <FormControl>
                         <FormLabel>Data Type</FormLabel>
                         <Select size="sm" value={localField.data.dataType} onChange={handleDataTypeChange}>
-                            {(["number", "string", "list"] as DataType[]).map((dt) => (
+                            {(['number', 'string', 'list', 'raw_json'] as BaseDataType[]).map((dt) => (
                                 <option key={dt} value={dt}>
-                                    {dt}
+                                    {dt === 'raw_json' ? 'Raw JSON' : dt.charAt(0).toUpperCase() + dt.slice(1)}
                                 </option>
                             ))}
                         </Select>
                     </FormControl>
+                    {localField.data.dataType === 'list' && (
+                        <FormControl>
+                            <FormLabel>List Type</FormLabel>
+                            <Select size="sm" value={localField.data.listSubType || 'string'} onChange={handleListSubTypeChange}>
+                                <option value="string">String List</option>
+                                <option value="number">Number List</option>
+                            </Select>
+                        </FormControl>
+                    )}
                     <FormControl>
                         <FormLabel>Constraint</FormLabel>
                         <Select size="sm" value={localField.data.constraintType} onChange={handleConstraintChange}>
@@ -508,12 +596,12 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
     // The Series Name appears above the tabs.
     // Replace the entire renderSeriesForm function with this simpler version:
     const renderSeriesForm = () => {
-        const seriesName = localRow["Series"]?.value || "";
-        const fieldKeys = Object.keys(localRow).filter((key) => key !== "Series");
+        const seriesName = localRow['Series']?.value || '';
+        const fieldKeys = Object.keys(localRow).filter((key) => key !== 'Series');
 
         return (
             <>
-                <FormControl mb={4} isInvalid={!!errorsRow["Series"]?.value}>
+                <FormControl mb={4} isInvalid={!!errorsRow['Series']?.value}>
                     <FormLabel>Series Name</FormLabel>
                     <ChakraInput
                         size="sm"
@@ -522,24 +610,78 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                         onChange={(e) =>
                             setLocalRow((prev) => ({
                                 ...prev,
-                                Series: { ...prev["Series"], value: e.target.value },
+                                Series: { ...prev['Series'], value: e.target.value },
                             }))
                         }
                     />
-                    {errorsRow["Series"]?.value && (
-                        <FormErrorMessage>{errorsRow["Series"].value}</FormErrorMessage>
-                    )}
+                    {errorsRow['Series']?.value && <FormErrorMessage>{errorsRow['Series'].value}</FormErrorMessage>}
                 </FormControl>
 
                 {fieldKeys.map((fieldKey) => {
                     const field = localRow[fieldKey];
-                    const currentData = field || { constraintType: "value", value: "", dataType: "string" };
-                    const isNumber = currentData.dataType === "number";
+                    const currentData = field || { constraintType: 'value', value: '', dataType: 'string' };
+                    const isNumber = currentData.dataType === 'number';
                     const fieldErrors = errorsRow[fieldKey];
 
                     return (
                         <Box key={fieldKey} mb={6} p={4} borderWidth="1px" borderRadius="md">
-                            <FormLabel fontWeight="bold" mb={3}>{fieldKey}</FormLabel>
+                            <FormLabel fontWeight="bold" mb={3}>
+                                {fieldKey}
+                            </FormLabel>
+
+                            {/* Data Type and List Subtype Selection for Series Mode */}
+                            <HStack spacing={4} mb={4}>
+                                <FormControl>
+                                    <FormLabel>Data Type</FormLabel>
+                                    <Select 
+                                        size="sm" 
+                                        value={currentData.dataType || 'string'} 
+                                        onChange={(e) => {
+                                            const dt = e.target.value as BaseDataType;
+                                            const newConstraint = allowedConstraints(dt)[0];
+                                            setLocalRow((prev) => ({
+                                                ...prev,
+                                                [fieldKey]: {
+                                                    ...prev[fieldKey],
+                                                    dataType: dt,
+                                                    constraintType: newConstraint,
+                                                    value: '',
+                                                    listSubType: dt === 'list' ? 'string' : undefined,
+                                                },
+                                            }));
+                                        }}
+                                    >
+                                        {(['number', 'string', 'list', 'raw_json'] as BaseDataType[]).map((dt) => (
+                                            <option key={dt} value={dt}>
+                                                {dt === 'raw_json' ? 'Raw JSON' : dt.charAt(0).toUpperCase() + dt.slice(1)}
+                                            </option>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                                {currentData.dataType === 'list' && (
+                                    <FormControl>
+                                        <FormLabel>List Type</FormLabel>
+                                        <Select 
+                                            size="sm" 
+                                            value={currentData.listSubType || 'string'} 
+                                            onChange={(e) => {
+                                                const subType = e.target.value as ListSubType;
+                                                setLocalRow((prev) => ({
+                                                    ...prev,
+                                                    [fieldKey]: {
+                                                        ...prev[fieldKey],
+                                                        listSubType: subType,
+                                                        value: '',
+                                                    },
+                                                }));
+                                            }}
+                                        >
+                                            <option value="string">String List</option>
+                                            <option value="number">Number List</option>
+                                        </Select>
+                                    </FormControl>
+                                )}
+                            </HStack>
 
                             <FormControl mb={4}>
                                 <FormLabel>Constraint</FormLabel>
@@ -557,7 +699,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                                         }));
                                     }}
                                 >
-                                    {allowedConstraints(currentData.dataType).map((ct) => (
+                                    {allowedConstraints(currentData.dataType || 'string').map((ct) => (
                                         <option key={ct} value={ct}>
                                             {ct}
                                         </option>
@@ -566,38 +708,99 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                             </FormControl>
 
                             {/* Value inputs based on constraint type */}
-                            {currentData.constraintType === "value" && (
+                            {currentData.constraintType === 'value' && (
                                 <FormControl isInvalid={!!fieldErrors?.value}>
                                     <FormLabel>Value</FormLabel>
-                                    <ChakraInput
-                                        size="sm"
-                                        type={isNumber ? "number" : "text"}
-                                        value={currentData.value || ""}
-                                        placeholder="Enter value"
-                                        onChange={(e) => {
-                                            setLocalRow((prev) => ({
-                                                ...prev,
-                                                [fieldKey]: {
-                                                    ...prev[fieldKey],
-                                                    value: e.target.value,
-                                                },
-                                            }));
-                                        }}
-                                    />
-                                    {fieldErrors?.value && (
-                                        <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>
+                                    {/* Handle Raw JSON type */}
+                                    {currentData.dataType === 'raw_json' ? (
+                                        <ChakraInput
+                                            as="textarea"
+                                            rows={4}
+                                            size="sm"
+                                            value={currentData.value || ''}
+                                            placeholder='Enter JSON: 1, "hello", [1, "hello"], {"key": "value"}'
+                                            onChange={(e) => {
+                                                setLocalRow((prev) => ({
+                                                    ...prev,
+                                                    [fieldKey]: {
+                                                        ...prev[fieldKey],
+                                                        value: e.target.value,
+                                                    },
+                                                }));
+                                            }}
+                                            fontFamily="mono"
+                                        />
+                                    ) : currentData.dataType === 'list' ? (
+                                        /* Handle List type with Tagify */
+                                        <input
+                                            ref={(el) => {
+                                                if (el && !tagifySeriesRefs.current[fieldKey]) {
+                                                    const tagify = new Tagify(el, { duplicates: true });
+                                                    tagifySeriesRefs.current[fieldKey] = tagify;
+                                                    
+                                                    // Set initial tags
+                                                    const initialTags = currentData.value
+                                                        ? currentData.value
+                                                              .split(',')
+                                                              .map((t) => t.trim())
+                                                              .filter(Boolean)
+                                                        : [];
+                                                    tagify.addTags(initialTags);
+                                                    
+                                                    // Listen for changes
+                                                    tagify.on('change', () => {
+                                                        const tags = tagify.value.map((tag) => tag.value) || [];
+                                                        setLocalRow((prev) => ({
+                                                            ...prev,
+                                                            [fieldKey]: {
+                                                                ...prev[fieldKey],
+                                                                value: tags.join(', '),
+                                                            },
+                                                        }));
+                                                    });
+                                                }
+                                            }}
+                                            placeholder={`Enter comma separated ${currentData.listSubType || 'string'} values`}
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                fontSize: '0.875rem',
+                                                borderRadius: '0.375rem',
+                                                border: '1px solid #E2E8F0',
+                                            }}
+                                        />
+                                    ) : (
+                                        /* Handle regular string/number types */
+                                        <ChakraInput
+                                            size="sm"
+                                            type={isNumber ? 'number' : 'text'}
+                                            value={currentData.value || ''}
+                                            placeholder="Enter value"
+                                            onChange={(e) => {
+                                                setLocalRow((prev) => ({
+                                                    ...prev,
+                                                    [fieldKey]: {
+                                                        ...prev[fieldKey],
+                                                        value: e.target.value,
+                                                    },
+                                                }));
+                                            }}
+                                            onKeyDown={isNumber ? handleNumericKeyDown : undefined}
+                                            onPaste={isNumber ? handleNumericPaste : undefined}
+                                        />
                                     )}
+                                    {fieldErrors?.value && <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>}
                                 </FormControl>
                             )}
 
-                            {currentData.constraintType === "range" && (
+                            {currentData.constraintType === 'range' && (
                                 <HStack spacing={2}>
                                     <FormControl isInvalid={!!fieldErrors?.minValue}>
                                         <FormLabel>Min Value</FormLabel>
                                         <ChakraInput
                                             size="sm"
-                                            type={isNumber ? "number" : "text"}
-                                            value={currentData.minValue || ""}
+                                            type={isNumber ? 'number' : 'text'}
+                                            value={currentData.minValue || ''}
                                             placeholder="Min"
                                             onChange={(e) => {
                                                 setLocalRow((prev) => ({
@@ -617,8 +820,8 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                                         <FormLabel>Max Value</FormLabel>
                                         <ChakraInput
                                             size="sm"
-                                            type={isNumber ? "number" : "text"}
-                                            value={currentData.maxValue || ""}
+                                            type={isNumber ? 'number' : 'text'}
+                                            value={currentData.maxValue || ''}
                                             placeholder="Max"
                                             onChange={(e) => {
                                                 setLocalRow((prev) => ({
@@ -637,14 +840,14 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                                 </HStack>
                             )}
 
-                            {currentData.constraintType === "value+tolerance" && (
+                            {currentData.constraintType === 'value+tolerance' && (
                                 <HStack spacing={2}>
                                     <FormControl isInvalid={!!fieldErrors?.value}>
                                         <FormLabel>Value</FormLabel>
                                         <ChakraInput
                                             size="sm"
-                                            type={isNumber ? "number" : "text"}
-                                            value={currentData.value || ""}
+                                            type={isNumber ? 'number' : 'text'}
+                                            value={currentData.value || ''}
                                             placeholder="Enter value"
                                             onChange={(e) => {
                                                 setLocalRow((prev) => ({
@@ -656,16 +859,14 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                                                 }));
                                             }}
                                         />
-                                        {fieldErrors?.value && (
-                                            <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>
-                                        )}
+                                        {fieldErrors?.value && <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>}
                                     </FormControl>
                                     <FormControl isInvalid={!!fieldErrors?.tolerance}>
                                         <FormLabel>Tolerance</FormLabel>
                                         <ChakraInput
                                             size="sm"
-                                            type={isNumber ? "number" : "text"}
-                                            value={currentData.tolerance || ""}
+                                            type={isNumber ? 'number' : 'text'}
+                                            value={currentData.tolerance || ''}
                                             placeholder="Tolerance"
                                             onChange={(e) => {
                                                 setLocalRow((prev) => ({
@@ -684,12 +885,12 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                                 </HStack>
                             )}
 
-                            {currentData.constraintType === "contains" && (
+                            {currentData.constraintType === 'contains' && (
                                 <FormControl isInvalid={!!fieldErrors?.value}>
                                     <FormLabel>Contains</FormLabel>
                                     <ChakraInput
                                         size="sm"
-                                        value={currentData.value || ""}
+                                        value={currentData.value || ''}
                                         placeholder="Enter substring"
                                         onChange={(e) => {
                                             setLocalRow((prev) => ({
@@ -701,9 +902,7 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
                                             }));
                                         }}
                                     />
-                                    {fieldErrors?.value && (
-                                        <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>
-                                    )}
+                                    {fieldErrors?.value && <FormErrorMessage>{fieldErrors.value}</FormErrorMessage>}
                                 </FormControl>
                             )}
                         </Box>
@@ -717,11 +916,9 @@ const EditConstantModal: React.FC<EditConstantModalProps> = ({
         <Modal isOpen={isOpen} onClose={onClose} size="md">
             <ModalOverlay />
             <ModalContent>
-                <ModalHeader>{isSeries ? "Edit Series Row" : "Edit Constant Field"}</ModalHeader>
+                <ModalHeader>{isSeries ? 'Edit Series Row' : 'Edit Constant Field'}</ModalHeader>
                 <ModalCloseButton />
-                <ModalBody>
-                    {isSeries ? renderSeriesForm() : renderConstantForm()}
-                </ModalBody>
+                <ModalBody>{isSeries ? renderSeriesForm() : renderConstantForm()}</ModalBody>
                 <ModalFooter>
                     <Button size="sm" onClick={handleSave} colorScheme="blue">
                         Save

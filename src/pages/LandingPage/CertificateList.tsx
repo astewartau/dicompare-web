@@ -5,7 +5,8 @@ import { ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
 const certificates = [
     {
         title: 'Brain MRI Study Compliance',
-        description: 'Comprehensive compliance report for multi-site MRI brain scan records including metadata validation, image quality assessment, and protocol adherence across 150 subjects. This report demonstrates full compliance with FDA guidelines for clinical trials and includes detailed statistical analysis of acquisition parameters.',
+        description:
+            'Comprehensive compliance report for multi-site MRI brain scan records including metadata validation, image quality assessment, and protocol adherence across 150 subjects. This report demonstrates full compliance with FDA guidelines for clinical trials and includes detailed statistical analysis of acquisition parameters.',
         author: 'Dr. John Smith',
         dateAdded: '2024-01-10',
         dateModified: '2024-02-05',
@@ -14,7 +15,8 @@ const certificates = [
     },
     {
         title: 'Spinal MRI Quality Check',
-        description: 'Comprehensive audit report for spinal MRI scan quality and compliance covering 200+ cases. Includes detailed analysis of T1, T2, and STIR sequences with validation of slice thickness, field strength consistency, and anatomical coverage. Report addresses common acquisition pitfalls and provides recommendations for protocol standardization.',
+        description:
+            'Comprehensive audit report for spinal MRI scan quality and compliance covering 200+ cases. Includes detailed analysis of T1, T2, and STIR sequences with validation of slice thickness, field strength consistency, and anatomical coverage. Report addresses common acquisition pitfalls and provides recommendations for protocol standardization.',
         author: 'Dr. Jane Doe',
         dateAdded: '2024-02-01',
         dateModified: '2024-02-10',
@@ -23,7 +25,8 @@ const certificates = [
     },
     {
         title: 'Cardiac MRI Metadata Integrity',
-        description: 'Detailed verification of cardiac MRI scan metadata accuracy for longitudinal cohort study. Validates patient demographics, scan parameters, contrast timing, and ECG gating information across 300 cardiac exams. Includes analysis of DICOM header consistency and recommendations for metadata standardization in multi-center studies.',
+        description:
+            'Detailed verification of cardiac MRI scan metadata accuracy for longitudinal cohort study. Validates patient demographics, scan parameters, contrast timing, and ECG gating information across 300 cardiac exams. Includes analysis of DICOM header consistency and recommendations for metadata standardization in multi-center studies.',
         author: 'Dr. Alan Turing',
         dateAdded: '2024-01-15',
         dateModified: '2024-02-07',
@@ -32,7 +35,8 @@ const certificates = [
     },
     {
         title: 'Abdominal MRI Data Compliance',
-        description: 'Extensive compliance check for abdominal MRI scan datasets in oncology research. Covers validation of contrast protocols, acquisition timing, and anatomical coverage for liver, pancreas, and kidney imaging. Report includes quality metrics for 180 patient studies and demonstrates adherence to international imaging standards for cancer research.',
+        description:
+            'Extensive compliance check for abdominal MRI scan datasets in oncology research. Covers validation of contrast protocols, acquisition timing, and anatomical coverage for liver, pancreas, and kidney imaging. Report includes quality metrics for 180 patient studies and demonstrates adherence to international imaging standards for cancer research.',
         author: 'Dr. Emily Watson',
         dateAdded: '2024-02-05',
         dateModified: '2024-02-12',
@@ -41,16 +45,18 @@ const certificates = [
     },
     {
         title: 'Pediatric MRI Protocol Validation',
-        description: 'Specialized validation report for pediatric MRI protocols addressing age-specific imaging requirements and safety considerations. Covers sedation protocols, scan duration optimization, and image quality assessment for patients aged 2-16 years across neurological and musculoskeletal applications.',
+        description:
+            'Specialized validation report for pediatric MRI protocols addressing age-specific imaging requirements and safety considerations. Covers sedation protocols, scan duration optimization, and image quality assessment for patients aged 2-16 years across neurological and musculoskeletal applications.',
         author: 'Dr. Sarah Chen',
         dateAdded: '2024-03-01',
         dateModified: '2024-03-15',
-        from: 'Boston Children\'s Hospital',
+        from: "Boston Children's Hospital",
         link: 'https://example.com/pediatric-mri-validation',
     },
     {
         title: 'Multi-Vendor MRI Harmonization Study',
-        description: 'Cross-platform validation study examining DICOM compliance and image quality consistency across Siemens, GE, and Philips MRI systems. Includes analysis of phantom studies, human volunteer data, and protocol optimization strategies for ensuring data harmonization in multi-site research studies.',
+        description:
+            'Cross-platform validation study examining DICOM compliance and image quality consistency across Siemens, GE, and Philips MRI systems. Includes analysis of phantom studies, human volunteer data, and protocol optimization strategies for ensuring data harmonization in multi-site research studies.',
         author: 'Dr. Michael Rodriguez',
         dateAdded: '2024-03-10',
         dateModified: '2024-03-20',

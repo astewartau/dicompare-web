@@ -1,80 +1,76 @@
 // DicomViewer.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalFooter,
-  ModalBody,
-  ModalCloseButton,
-  Button,
-  Text,
-  Box,
-  Spinner,
-  VStack,
-  HStack,
-  Slider,
-  SliderTrack,
-  SliderFilledTrack,
-  SliderThumb,
-  Badge,
-  Flex
+    Modal,
+    ModalOverlay,
+    ModalContent,
+    ModalHeader,
+    ModalFooter,
+    ModalBody,
+    ModalCloseButton,
+    Button,
+    Text,
+    Box,
+    Spinner,
+    VStack,
+    HStack,
+    Slider,
+    SliderTrack,
+    SliderFilledTrack,
+    SliderThumb,
+    Badge,
+    Flex,
 } from '@chakra-ui/react';
 import { usePyodide } from '../../components/PyodideContext';
 
 interface DicomViewerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  acquisitionName: string;
+    isOpen: boolean;
+    onClose: () => void;
+    acquisitionName: string;
 }
 
-const DicomViewer: React.FC<DicomViewerProps> = ({
-  isOpen,
-  onClose,
-  acquisitionName
-}) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [imageData, setImageData] = useState<{
-    series: Array<{
-      name: string;
-      slices: number[][][];
-      width: number;
-      height: number;
-      min: number;
-      max: number;
-      sliceCount: number;
-    }>;
-  } | null>(null);
-  const [currentSeries, setCurrentSeries] = useState(0);
-  const [currentSlice, setCurrentSlice] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  
-  const { runPythonCode, setPythonGlobal } = usePyodide();
+const DicomViewer: React.FC<DicomViewerProps> = ({ isOpen, onClose, acquisitionName }) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [imageData, setImageData] = useState<{
+        series: Array<{
+            name: string;
+            slices: number[][][];
+            width: number;
+            height: number;
+            min: number;
+            max: number;
+            sliceCount: number;
+        }>;
+    } | null>(null);
+    const [currentSeries, setCurrentSeries] = useState(0);
+    const [currentSlice, setCurrentSlice] = useState(0);
+    const [error, setError] = useState<string | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Extract DICOM data when modal opens
-  useEffect(() => {
-    if (isOpen && acquisitionName) {
-      extractDicomData();
-    }
-  }, [isOpen, acquisitionName]);
+    const { runPythonCode, setPythonGlobal } = usePyodide();
 
-  // Render the image when imageData, currentSeries, or currentSlice changes
-  useEffect(() => {
-    if (imageData && canvasRef.current) {
-      renderImage();
-    }
-  }, [imageData, currentSeries, currentSlice]);
+    // Extract DICOM data when modal opens
+    useEffect(() => {
+        if (isOpen && acquisitionName) {
+            extractDicomData();
+        }
+    }, [isOpen, acquisitionName]);
 
-  const extractDicomData = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      await setPythonGlobal('target_acquisition', acquisitionName);
-      
-      const code = `
+    // Render the image when imageData, currentSeries, or currentSlice changes
+    useEffect(() => {
+        if (imageData && canvasRef.current) {
+            renderImage();
+        }
+    }, [imageData, currentSeries, currentSlice]);
+
+    const extractDicomData = async () => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            await setPythonGlobal('target_acquisition', acquisitionName);
+
+            const code = `
 import numpy as np
 import pandas as pd
 import json
@@ -86,12 +82,15 @@ from io import BytesIO
 if 'dicom_files' not in globals() or not dicom_files:
     raise ValueError("Original DICOM files not available for visualization")
 
-# Get the DICOM data for the target acquisition
-if 'in_session' not in globals() or in_session is None:
+# Get the DICOM data from ComplianceSession
+if not global_compliance_session.has_session():
     raise ValueError("No DICOM session loaded")
 
+# Get the session DataFrame from ComplianceSession
+session_df = global_compliance_session.session_df
+
 # Filter to the target acquisition
-acq_data = in_session[in_session['Acquisition'] == target_acquisition]
+acq_data = session_df[session_df['Acquisition'] == target_acquisition]
 if acq_data.empty:
     raise ValueError(f"No data found for acquisition: {target_acquisition}")
 
@@ -219,181 +218,177 @@ print(f"Final result: {len(series_results)} series extracted")
 json.dumps(result)
       `;
 
-      const result = await runPythonCode(code);
-      const data = JSON.parse(result);
-      
-      setImageData(data);
-      setCurrentSeries(0);
-      setCurrentSlice(0);
-      
-    } catch (err) {
-      console.error('Error extracting DICOM data:', err);
-      setError(`Failed to extract DICOM data: ${err}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+            const result = await runPythonCode(code);
+            const data = JSON.parse(result);
 
-  const renderImage = () => {
-    if (!imageData || !canvasRef.current || !imageData.series[currentSeries]) return;
+            setImageData(data);
+            setCurrentSeries(0);
+            setCurrentSlice(0);
+        } catch (err) {
+            console.error('Error extracting DICOM data:', err);
+            setError(`Failed to extract DICOM data: ${err}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const renderImage = () => {
+        if (!imageData || !canvasRef.current || !imageData.series[currentSeries]) return;
 
-    const currentSeriesData = imageData.series[currentSeries];
-    const { slices, width, height, min, max } = currentSeriesData;
-    
-    // Get the current slice data
-    const currentSliceData = slices[currentSlice];
-    if (!currentSliceData) return;
-    
-    // Set canvas size
-    canvas.width = width;
-    canvas.height = height;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-    // Create ImageData
-    const imageDataObj = ctx.createImageData(width, height);
-    const pixels = imageDataObj.data;
+        const currentSeriesData = imageData.series[currentSeries];
+        const { slices, width, height, min, max } = currentSeriesData;
 
-    // Convert DICOM data to grayscale image
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const idx = y * width + x;
-        const pixelIdx = idx * 4;
-        
-        // Normalize the pixel value to 0-255
-        const normalizedValue = Math.round(((currentSliceData[y][x] - min) / (max - min)) * 255);
-        
-        // Set RGB (grayscale)
-        pixels[pixelIdx] = normalizedValue;     // R
-        pixels[pixelIdx + 1] = normalizedValue; // G
-        pixels[pixelIdx + 2] = normalizedValue; // B
-        pixels[pixelIdx + 3] = 255;             // A
-      }
-    }
+        // Get the current slice data
+        const currentSliceData = slices[currentSlice];
+        if (!currentSliceData) return;
 
-    // Draw the image
-    ctx.putImageData(imageDataObj, 0, 0);
-  };
+        // Set canvas size
+        canvas.width = width;
+        canvas.height = height;
 
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl">
-      <ModalOverlay />
-      <ModalContent maxW="800px">
-        <ModalHeader>
-          DICOM Viewer - {acquisitionName}
-        </ModalHeader>
-        <ModalCloseButton />
-        
-        <ModalBody>
-          {isLoading && (
-            <VStack spacing={4} py={8}>
-              <Spinner size="xl" color="blue.500" />
-              <Text>Extracting DICOM data...</Text>
-            </VStack>
-          )}
-          
-          {error && (
-            <VStack spacing={4} py={8}>
-              <Text color="red.500" textAlign="center">
-                {error}
-              </Text>
-              <Text fontSize="sm" color="gray.600" textAlign="center">
-                This feature requires DICOM files with pixel data to be loaded.
-              </Text>
-            </VStack>
-          )}
-          
-          {imageData && !isLoading && (
-            <VStack spacing={4}>
-              {/* Series selection */}
-              {imageData.series.length > 1 && (
-                <Box width="100%">
-                  <Text fontSize="sm" mb={2} textAlign="center">
-                    Series Selection
-                  </Text>
-                  <HStack spacing={2} justify="center" wrap="wrap">
-                    {imageData.series.map((series, idx) => (
-                      <Button
-                        key={idx}
-                        size="sm"
-                        colorScheme={currentSeries === idx ? 'blue' : 'gray'}
-                        onClick={() => {
-                          setCurrentSeries(idx);
-                          setCurrentSlice(0); // Reset to first slice when changing series
-                        }}
-                      >
-                        {series.name}
-                      </Button>
-                    ))}
-                  </HStack>
-                </Box>
-              )}
-              
-              <Flex justify="space-between" width="100%" align="center">
-                <Badge colorScheme="blue">
-                  {imageData.series[currentSeries]?.width} × {imageData.series[currentSeries]?.height}
-                </Badge>
-                <Badge colorScheme="green">
-                  Slice {currentSlice + 1} of {imageData.series[currentSeries]?.sliceCount || 1}
-                </Badge>
-                <Badge colorScheme="purple">
-                  Range: {Math.round(imageData.series[currentSeries]?.min || 0)} - {Math.round(imageData.series[currentSeries]?.max || 0)}
-                </Badge>
-              </Flex>
-              
-              <Box 
-                border="1px solid" 
-                borderColor="gray.300" 
-                borderRadius="md"
-                p={2}
-                bg="black"
-                display="flex"
-                justifyContent="center"
-                alignItems="center"
-              >
-                <canvas 
-                  ref={canvasRef}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '400px',
-                    imageRendering: 'pixelated'
-                  }}
-                />
-              </Box>
-              
-              {(imageData.series[currentSeries]?.sliceCount || 1) > 1 && (
-                <Box width="100%">
-                  <Text fontSize="sm" mb={2} textAlign="center">
-                    Slice Navigator
-                  </Text>
-                  <Slider
-                    value={currentSlice}
-                    min={0}
-                    max={(imageData.series[currentSeries]?.sliceCount || 1) - 1}
-                    step={1}
-                    onChange={setCurrentSlice}
-                  >
-                    <SliderTrack>
-                      <SliderFilledTrack />
-                    </SliderTrack>
-                    <SliderThumb />
-                  </Slider>
-                </Box>
-              )}
-            </VStack>
-          )}
-        </ModalBody>
+        // Create ImageData
+        const imageDataObj = ctx.createImageData(width, height);
+        const pixels = imageDataObj.data;
 
-        <ModalFooter>
-          <Button onClick={onClose}>
-            Close
-          </Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
-  );
+        // Convert DICOM data to grayscale image
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const idx = y * width + x;
+                const pixelIdx = idx * 4;
+
+                // Normalize the pixel value to 0-255
+                const normalizedValue = Math.round(((currentSliceData[y][x] - min) / (max - min)) * 255);
+
+                // Set RGB (grayscale)
+                pixels[pixelIdx] = normalizedValue; // R
+                pixels[pixelIdx + 1] = normalizedValue; // G
+                pixels[pixelIdx + 2] = normalizedValue; // B
+                pixels[pixelIdx + 3] = 255; // A
+            }
+        }
+
+        // Draw the image
+        ctx.putImageData(imageDataObj, 0, 0);
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} size="xl">
+            <ModalOverlay />
+            <ModalContent maxW="800px">
+                <ModalHeader>DICOM Viewer - {acquisitionName}</ModalHeader>
+                <ModalCloseButton />
+
+                <ModalBody>
+                    {isLoading && (
+                        <VStack spacing={4} py={8}>
+                            <Spinner size="xl" color="blue.500" />
+                            <Text>Extracting DICOM data...</Text>
+                        </VStack>
+                    )}
+
+                    {error && (
+                        <VStack spacing={4} py={8}>
+                            <Text color="red.500" textAlign="center">
+                                {error}
+                            </Text>
+                            <Text fontSize="sm" color="gray.600" textAlign="center">
+                                This feature requires DICOM files with pixel data to be loaded.
+                            </Text>
+                        </VStack>
+                    )}
+
+                    {imageData && !isLoading && (
+                        <VStack spacing={4}>
+                            {/* Series selection */}
+                            {imageData.series.length > 1 && (
+                                <Box width="100%">
+                                    <Text fontSize="sm" mb={2} textAlign="center">
+                                        Series Selection
+                                    </Text>
+                                    <HStack spacing={2} justify="center" wrap="wrap">
+                                        {imageData.series.map((series, idx) => (
+                                            <Button
+                                                key={idx}
+                                                size="sm"
+                                                colorScheme={currentSeries === idx ? 'blue' : 'gray'}
+                                                onClick={() => {
+                                                    setCurrentSeries(idx);
+                                                    setCurrentSlice(0); // Reset to first slice when changing series
+                                                }}
+                                            >
+                                                {series.name}
+                                            </Button>
+                                        ))}
+                                    </HStack>
+                                </Box>
+                            )}
+
+                            <Flex justify="space-between" width="100%" align="center">
+                                <Badge colorScheme="blue">
+                                    {imageData.series[currentSeries]?.width} × {imageData.series[currentSeries]?.height}
+                                </Badge>
+                                <Badge colorScheme="green">
+                                    Slice {currentSlice + 1} of {imageData.series[currentSeries]?.sliceCount || 1}
+                                </Badge>
+                                <Badge colorScheme="purple">
+                                    Range: {Math.round(imageData.series[currentSeries]?.min || 0)} -{' '}
+                                    {Math.round(imageData.series[currentSeries]?.max || 0)}
+                                </Badge>
+                            </Flex>
+
+                            <Box
+                                border="1px solid"
+                                borderColor="gray.300"
+                                borderRadius="md"
+                                p={2}
+                                bg="black"
+                                display="flex"
+                                justifyContent="center"
+                                alignItems="center"
+                            >
+                                <canvas
+                                    ref={canvasRef}
+                                    style={{
+                                        maxWidth: '100%',
+                                        maxHeight: '400px',
+                                        imageRendering: 'pixelated',
+                                    }}
+                                />
+                            </Box>
+
+                            {(imageData.series[currentSeries]?.sliceCount || 1) > 1 && (
+                                <Box width="100%">
+                                    <Text fontSize="sm" mb={2} textAlign="center">
+                                        Slice Navigator
+                                    </Text>
+                                    <Slider
+                                        value={currentSlice}
+                                        min={0}
+                                        max={(imageData.series[currentSeries]?.sliceCount || 1) - 1}
+                                        step={1}
+                                        onChange={setCurrentSlice}
+                                    >
+                                        <SliderTrack>
+                                            <SliderFilledTrack />
+                                        </SliderTrack>
+                                        <SliderThumb />
+                                    </Slider>
+                                </Box>
+                            )}
+                        </VStack>
+                    )}
+                </ModalBody>
+
+                <ModalFooter>
+                    <Button onClick={onClose}>Close</Button>
+                </ModalFooter>
+            </ModalContent>
+        </Modal>
+    );
 };
 
 export default DicomViewer;

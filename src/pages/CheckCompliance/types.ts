@@ -4,7 +4,7 @@ export interface Acquisition {
     name: string;
     details: any;
     source: string;
-  }
+}
 
 export interface Pair {
     ref: Acquisition | null;
@@ -35,5 +35,4 @@ export interface SchemaUploaderProps {
     schemaLibrary: SchemaFile[];
     onAddToLibrary: (schema: SchemaFile) => void;
     onRemoveFromLibrary: (schemaName: string) => void;
-  }
-  
+}

@@ -3,369 +3,380 @@ import { usePyodide } from '../../components/PyodideContext';
 import { Pair } from './types';
 
 export const loadSchema = async (
-  pyodide: ReturnType<typeof usePyodide>,
-  schemaFile: { name: string; content: string },
-  acquisitionName?: string,
-  instanceId?: string // Add instanceId parameter
+    pyodide: ReturnType<typeof usePyodide>,
+    schemaFile: { name: string; content: string },
+    acquisitionName?: string,
+    instanceId?: string // Add instanceId parameter
 ) => {
-  const { runPythonCode, setPythonGlobal, writePythonFile } = pyodide;
+    const { runPythonCode, setPythonGlobal, writePythonFile } = pyodide;
 
-  // Write the file into Pyodide FS
-  await writePythonFile(schemaFile.name, schemaFile.content);
+    // Write the file into Pyodide FS
+    await writePythonFile(schemaFile.name, schemaFile.content);
 
-  // Set flags for snippet
-  const isJson = schemaFile.name.endsWith('.json');
-  const isPy = schemaFile.name.endsWith('.py');
-  await setPythonGlobal('ref_config_name', schemaFile.name);
-  await setPythonGlobal('is_json', isJson);
-  await setPythonGlobal('is_py', isPy);
-  await setPythonGlobal('instance_id', instanceId); // Pass the instance ID
-  await setPythonGlobal('specific_acquisition', acquisitionName || null); // Pass the specific acquisition name
+    // Set flags for snippet
+    const isJson = schemaFile.name.endsWith('.json');
+    const isPy = schemaFile.name.endsWith('.py');
+    await setPythonGlobal('ref_config_name', schemaFile.name);
+    await setPythonGlobal('is_json', isJson);
+    await setPythonGlobal('is_py', isPy);
+    await setPythonGlobal('instance_id', instanceId);
+    await setPythonGlobal('specific_acquisition', acquisitionName || null);
 
-  // Python code to load schema
-  const code = `
+    // Simplified Python code using ComplianceSession
+    const code = `
 import sys, json
 sys.path.append('.')
-
-# Use instance-specific global variables
-instance_key = f"ref_session_{instance_id}"
-instance_fields_key = f"reference_fields_{instance_id}"
-instance_models_key = f"ref_models_{instance_id}"
-
-# Initialize global dictionaries if they don't exist
-if 'schema_instances' not in globals():
-    global schema_instances
-    schema_instances = {}
-
-# Store the instance ID for later reference
-schema_instances[instance_id] = {
-    'file_name': ref_config_name,
-    'is_json': is_json,
-    'is_py': is_py
-}
-
 from dicompare.io import load_json_schema, load_python_schema
+from dicompare.serialization import make_json_serializable
 
-reference_fields = []
-ref_session = None
-ref_models = None
-
-if is_json:
-    print(f"Loading JSON file: {ref_config_name} (instance {instance_id})")
-    reference_fields, ref_session = load_json_schema(json_schema_path=ref_config_name)
-    # Store in globals with instance-specific keys
-    globals()[instance_fields_key] = reference_fields
-    globals()[instance_key] = ref_session
-
-elif is_py:
-    print(f"Loading Python module: {ref_config_name} (instance {instance_id})")
-    ref_models = load_python_schema(module_path=ref_config_name)
-    # union all model.reference_fields
-    reference_fields = sorted({ f
-        for model in ref_models.values()
-        for f in model.reference_fields
-    })
-    # Store in globals with instance-specific keys
-    globals()[instance_fields_key] = reference_fields
-    globals()[instance_models_key] = ref_models
+try:
+    print(f"Loading schema: {ref_config_name} (instance {instance_id})")
     
-    ref_session = {
-      "acquisitions": {
-        acq_name: {
-          "rules": [
-            {"rule_name": func._rule_name, "message": func._rule_message}
-            for funcs in ref_models[acq_name]._field_validators.values()
-            for func in funcs
-          ] + [
-            {"name": mv.__name__, "message": mv._rule_message}
-            for mv in getattr(ref_models[acq_name], "_model_validators", [])
-          ]
+    reference_fields = []
+    schema_dict = None
+    
+    if is_json:
+        print(f"Loading JSON schema: {ref_config_name}")
+        reference_fields, schema_dict = load_json_schema(json_schema_path=ref_config_name)
+        
+    elif is_py:
+        print(f"Loading Python schema: {ref_config_name}")
+        ref_models = load_python_schema(module_path=ref_config_name)
+        
+        # Extract reference fields from all models
+        reference_fields = sorted({
+            f for model in ref_models.values()
+            for f in model.reference_fields
+        })
+        
+        # Convert Python models to JSON schema format
+        schema_dict = {
+            "acquisitions": {
+                acq_name: {
+                    "rules": [
+                        {"rule_name": func._rule_name, "message": func._rule_message}
+                        for funcs in ref_models[acq_name]._field_validators.values()
+                        for func in funcs
+                    ] + [
+                        {"name": mv.__name__, "message": mv._rule_message}
+                        for mv in getattr(ref_models[acq_name], "_model_validators", [])
+                    ]
+                }
+                for acq_name in ref_models.keys()
+            }
         }
-        for acq_name in ref_models.keys()
-      }
+    else:
+        raise RuntimeError(f"Unsupported schema type: {ref_config_name}")
+    
+    # Add schema to ComplianceSession
+    schema_id = instance_id if instance_id else ref_config_name
+    global_compliance_session.add_schema(schema_id, schema_dict)
+    
+    print(f"Added schema '{schema_id}' to ComplianceSession")
+    print(f"Available schemas: {global_compliance_session.get_schema_names()}")
+    
+    # Filter acquisitions if specific_acquisition is provided
+    if specific_acquisition:
+        schema_acquisitions = global_compliance_session.get_schema_acquisitions(schema_id)
+        if specific_acquisition in schema_acquisitions:
+            filtered_acquisitions = {
+                specific_acquisition: schema_dict["acquisitions"][specific_acquisition]
+            }
+        else:
+            print(f"Warning: Acquisition '{specific_acquisition}' not found in schema")
+            filtered_acquisitions = {}
+    else:
+        filtered_acquisitions = schema_dict["acquisitions"]
+    
+    result = {
+        "acquisitions": filtered_acquisitions,
+        "reference_fields": reference_fields,
+        "instance_id": schema_id
     }
+    
+    # Make sure result is JSON serializable
+    result = make_json_serializable(result)
 
-else:
-    print(f"Unsupported schema: {ref_config_name}")
-    raise RuntimeError(f"Unsupported schema: {ref_config_name}")
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    print(f"Error loading schema: {e}")
+    raise RuntimeError(f"Failed to load schema: {e}")
 
-# Filter acquisitions if specific_acquisition is provided
-if specific_acquisition:
-    filtered_acquisitions = {
-        specific_acquisition: ref_session["acquisitions"][specific_acquisition]
-    } if specific_acquisition in ref_session["acquisitions"] else {}
-else:
-    filtered_acquisitions = ref_session["acquisitions"]
-
-json.dumps({
-  "acquisitions": filtered_acquisitions,
-  "reference_fields": reference_fields,
-  "instance_id": instance_id
-})
+json.dumps(result)
   `.trim();
 
-  const out = await runPythonCode(code);
-  return JSON.parse(out);
+    const out = await runPythonCode(code);
+    return JSON.parse(out);
 };
 
-
 export const analyzeDicomFiles = async (
-  pyodide: ReturnType<typeof usePyodide>,
-  files: File[],
-  referenceFields: string[],
-  updateProgress: (p: number) => void
+    pyodide: ReturnType<typeof usePyodide>,
+    files: File[],
+    referenceFields: string[],
+    updateProgress: (p: number) => void
 ) => {
-  const { runPythonCode, setPythonGlobal } = pyodide;
+    const { runPythonCode, setPythonGlobal } = pyodide;
 
-  const dicomFiles: Record<string, Uint8Array> = {};
-  for (const file of files) {
-    // Read the full file for pixel data access
-    const buf = await file.arrayBuffer();
-    dicomFiles[file.webkitRelativePath || file.name] = new Uint8Array(buf);
-  }
+    const dicomFiles: Record<string, Uint8Array> = {};
+    for (const file of files) {
+        // Read the full file for pixel data access
+        const buf = await file.arrayBuffer();
+        dicomFiles[file.webkitRelativePath || file.name] = new Uint8Array(buf);
+    }
 
-  // Define the default fields for DICOM acquisitions (same as EditTemplate.tsx)
-  const defaultDicomFields = [
-    // Core Identifiers
-    "SeriesDescription",
-    "SequenceName",
-    "SequenceVariant",
-    "ScanningSequence",
-    "ImageType",
+    // Define the default fields for DICOM acquisitions (same as EditTemplate.tsx)
+    const defaultDicomFields = [
+        // Core Identifiers
+        'SeriesDescription',
+        'SequenceName',
+        'SequenceVariant',
+        'ScanningSequence',
+        'ImageType',
 
-    "Manufacturer",
-    "ManufacturerModelName",
-    "SoftwareVersion",
-  
-    // Geometry
-    "MRAcquisitionType",
-    "SliceThickness",
-    "PixelSpacing",
-    "Rows",
-    "Columns",
-    "Slices",
-    "AcquisitionMatrix",
-    "ReconstructionDiameter",
-  
-    // Timing / Contrast
-    "RepetitionTime",
-    "EchoTime",
-    "InversionTime",
-    "FlipAngle",
-    "EchoTrainLength",
-    "GradientEchoTrainLength",
-    "NumberOfTemporalPositions",
-    "TemporalResolution",
-    "SliceTiming",
-  
-    // Diffusion-specific
-    "DiffusionBValue",
-    "DiffusionGradientDirectionSequence",
-  
-    // Parallel Imaging / Multiband
-    "ParallelAcquisitionTechnique",
-    "ParallelReductionFactorInPlane",
-    "PartialFourier",
-    "SliceAccelerationFactor",
-  
-    // Bandwidth / Readout
-    "PixelBandwidth",
-    "BandwidthPerPixelPhaseEncode",
-  
-    // Phase encoding
-    "InPlanePhaseEncodingDirection",
-    "PhaseEncodingDirectionPositive",
-    "NumberOfPhaseEncodingSteps",
-  
-    // Scanner hardware
-    "MagneticFieldStrength",
-    "ImagingFrequency",
-    "ImagedNucleus",
-    "TransmitCoilName",
-    "ReceiveCoilName",
-    "SAR",
-    "NumberOfAverages",
-    "CoilType",
-  
-    // Coverage / FOV %
-    "PercentSampling",
-    "PercentPhaseFieldOfView",
-  
-    // Scan options
-    "ScanOptions",
-    "AngioFlag",
-  
-    // Triggering / gating (mostly fMRI / cardiac)
-    "TriggerTime",
-    "TriggerSourceOrType",
-    "BeatRejectionFlag",
-    "LowRRValue",
-    "HighRRValue",
-  
-    // Advanced / niche
-    "SpoilingRFPhaseAngle",
-    "PerfusionTechnique",
-    "SpectrallySelectedExcitation",
-    "SaturationRecovery",
-    "SpectrallySelectedSuppression",
-    "TimeOfFlightContrast",
-    "SteadyStatePulseSequence",
-    "PartialFourierDirection",
-  ];
+        'Manufacturer',
+        'ManufacturerModelName',
+        'SoftwareVersion',
 
-  await setPythonGlobal('dicom_files', dicomFiles);
-  await setPythonGlobal('update_progress', updateProgress);
-  await setPythonGlobal('reference_fields', referenceFields.length ? referenceFields : defaultDicomFields);
+        // Geometry
+        'MRAcquisitionType',
+        'SliceThickness',
+        'PixelSpacing',
+        'Rows',
+        'Columns',
+        'Slices',
+        'AcquisitionMatrix',
+        'ReconstructionDiameter',
 
-  const code = `
+        // Timing / Contrast
+        'RepetitionTime',
+        'EchoTime',
+        'InversionTime',
+        'FlipAngle',
+        'EchoTrainLength',
+        'GradientEchoTrainLength',
+        'NumberOfTemporalPositions',
+        'TemporalResolution',
+        'SliceTiming',
+
+        // Diffusion-specific
+        'DiffusionBValue',
+        'DiffusionGradientDirectionSequence',
+
+        // Parallel Imaging / Multiband
+        'ParallelAcquisitionTechnique',
+        'ParallelReductionFactorInPlane',
+        'PartialFourier',
+        'SliceAccelerationFactor',
+
+        // Bandwidth / Readout
+        'PixelBandwidth',
+        'BandwidthPerPixelPhaseEncode',
+
+        // Phase encoding
+        'InPlanePhaseEncodingDirection',
+        'PhaseEncodingDirectionPositive',
+        'NumberOfPhaseEncodingSteps',
+
+        // Scanner hardware
+        'MagneticFieldStrength',
+        'ImagingFrequency',
+        'ImagedNucleus',
+        'TransmitCoilName',
+        'ReceiveCoilName',
+        'SAR',
+        'NumberOfAverages',
+        'CoilType',
+
+        // Coverage / FOV %
+        'PercentSampling',
+        'PercentPhaseFieldOfView',
+
+        // Scan options
+        'ScanOptions',
+        'AngioFlag',
+
+        // Triggering / gating (mostly fMRI / cardiac)
+        'TriggerTime',
+        'TriggerSourceOrType',
+        'BeatRejectionFlag',
+        'LowRRValue',
+        'HighRRValue',
+
+        // Advanced / niche
+        'SpoilingRFPhaseAngle',
+        'PerfusionTechnique',
+        'SpectrallySelectedExcitation',
+        'SaturationRecovery',
+        'SpectrallySelectedSuppression',
+        'TimeOfFlightContrast',
+        'SteadyStatePulseSequence',
+        'PartialFourierDirection',
+    ];
+
+    await setPythonGlobal('dicom_files', dicomFiles);
+    await setPythonGlobal('update_progress', updateProgress);
+    await setPythonGlobal('reference_fields', referenceFields.length ? referenceFields : defaultDicomFields);
+
+    const code = `
 import sys, json, asyncio
+import pandas as pd
 import pyodide
-# Force reload the io module to pick up our changes
-import dicompare.io
-import importlib
-importlib.reload(dicompare.io)
-
-from dicompare.generate_schema import create_json_schema
 from dicompare import async_load_dicom_session, assign_acquisition_and_run_numbers
+from dicompare.serialization import make_json_serializable
 
 if isinstance(reference_fields, pyodide.ffi.JsProxy):
     reference_fields = reference_fields.to_py()
 
-global in_session
 try:
-  dicom_bytes = dicom_files.to_py() if isinstance(dicom_files, pyodide.ffi.JsProxy) else dicom_files
-  print(f"Loading {len(dicom_bytes)} DICOM files...")
-  in_session = await async_load_dicom_session(dicom_bytes=dicom_files.to_py(), progress_function=update_progress)
-except Exception as e:
-  import traceback
-  traceback.print_exc()
-  print(f"Failed to load DICOM files: {e}")
-  raise RuntimeError(f"Failed to load DICOM files: {e}")
-
-# Filter reference_fields to only include fields that exist in the session
-available_fields = [f for f in reference_fields if f in in_session.columns]
-if not available_fields:
-    # If no fields from reference_fields are available, fall back to basic fields
-    basic_fields = ['ProtocolName', 'SeriesDescription', 'Manufacturer']
-    available_fields = [f for f in basic_fields if f in in_session.columns]
-    if not available_fields:
-        raise ValueError("No suitable reference fields found in the input session")
-
-print(f"Using available fields: {available_fields}")
-reference_fields = available_fields
-print(f"DEBUG: Final reference_fields that will be used: {reference_fields}")
-
-# check if '(0051,100F)' field is in in_session
-if '(0051,100F)' in in_session.columns:
-    print("Found (0051,100F) field in input session")
-else:
-    print("Did not find (0051,100F) field in input session")
-
-print("Assigning acquisition numbers...")
-print(f"DEBUG: Before assign_acquisition_and_run_numbers:")
-print(f"  - Session shape: {in_session.shape}")
-print(f"  - ProtocolName values: {in_session['ProtocolName'].unique() if 'ProtocolName' in in_session.columns else 'N/A'}")
-print(f"  - SeriesDescription values: {in_session['SeriesDescription'].unique() if 'SeriesDescription' in in_session.columns else 'N/A'}")
-print(f"  - ImageType values: {in_session['ImageType'].unique() if 'ImageType' in in_session.columns else 'N/A'}")
-print(f"  - EchoTime values: {sorted(in_session['EchoTime'].unique()) if 'EchoTime' in in_session.columns else 'N/A'}")
-print(f"  - SeriesInstanceUID values: {len(in_session['SeriesInstanceUID'].unique()) if 'SeriesInstanceUID' in in_session.columns else 'N/A'} unique")
-
-try:
-  in_session = assign_acquisition_and_run_numbers(in_session)
-except Exception as e:
-  import traceback
-  traceback.print_exc()
-  print(f"Failed to assign acquisition numbers: {e}")
-  raise RuntimeError(f"Failed to assign acquisition numbers: {e}")
-
-print(f"DEBUG: After assign_acquisition_and_run_numbers:")
-print(f"  - Session shape: {in_session.shape}")
-print(f"  - Column names: {list(in_session.columns)}")
-if 'SettingsNumber' in in_session.columns:
-  print(f"  - SettingsNumber values: {in_session['SettingsNumber'].unique()}")
-  print(f"  - SettingsNumber per ProtocolName:")
-  for pname, group in in_session.groupby('ProtocolName'):
-    settings_vals = group['SettingsNumber'].unique()
-    print(f"    {pname}: {settings_vals}")
-    if len(settings_vals) > 1:
-      print(f"      DEBUG: Found multiple settings for {pname}, checking what differs...")
-      # Show what fields differ between settings
-      for field in reference_fields:
-        if field in group.columns:
-          unique_by_setting = {}
-          for setting_num in settings_vals:
-            setting_group = group[group['SettingsNumber'] == setting_num]
-            unique_vals = setting_group[field].dropna().unique()
-            unique_by_setting[setting_num] = unique_vals
-          print(f"        {field}: {unique_by_setting}")
-else:
-  print("  - SettingsNumber column not found!")
-  print(f"  - Available columns: {[col for col in in_session.columns if 'setting' in col.lower() or 'acquisition' in col.lower()]}")
-
-print("Sorting acquisitions...")
-in_session.sort_values(by=['Acquisition'] + reference_fields, inplace=True)
-
-# print unique Acquisition values
-print(f"Unique Acquisition values: {in_session['Acquisition'].unique()}")
-
-# print number of rows per acquisition
-print(f"Number of rows per acquisition: {in_session['Acquisition'].value_counts()}")
-
-def clean_for_json(obj):
-    """Recursively clean an object to make it JSON serializable"""
-    import numpy as np
-    import pandas as pd
+    # Convert dicom_files to Python if needed
+    dicom_bytes = dicom_files.to_py() if isinstance(dicom_files, pyodide.ffi.JsProxy) else dicom_files
+    print(f"Loading {len(dicom_bytes)} DICOM files using ComplianceSession...")
     
-    if isinstance(obj, dict):
-        return {k: clean_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_for_json(item) for item in obj]
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif pd.isna(obj) or obj is None:
-        return None
-    elif isinstance(obj, (np.integer, np.floating)):
-        if np.isnan(obj) or np.isinf(obj):
-            return None
-        return obj.item()
-    elif isinstance(obj, float):
-        if np.isnan(obj) or np.isinf(obj):
-            return None
-        return obj
-    else:
-        return obj
+    # Load the session using async_load_dicom_session (for compatibility)
+    session_df = await async_load_dicom_session(dicom_bytes=dicom_bytes, progress_function=update_progress)
+    
+    print(f"Before assign_acquisition_and_run_numbers: {len(session_df)} files")
+    print(f"Unique SeriesDescription values: {session_df['SeriesDescription'].unique() if 'SeriesDescription' in session_df.columns else 'N/A'}")
+    print(f"Unique ProtocolName values: {session_df['ProtocolName'].unique() if 'ProtocolName' in session_df.columns else 'N/A'}")
+    
+    # Assign acquisition numbers
+    session_df = assign_acquisition_and_run_numbers(session_df)
+    
+    print(f"After assign_acquisition_and_run_numbers: Acquisition values = {session_df['Acquisition'].unique()}")
+    
+    # Check for and fix any nan acquisitions
+    nan_mask = session_df['Acquisition'].isna() | (session_df['Acquisition'].astype(str) == 'nan')
+    if nan_mask.any():
+        print(f"WARNING: Found {nan_mask.sum()} files with NaN acquisition names")
+        # Try to fix by using SeriesDescription or ProtocolName
+        if 'SeriesDescription' in session_df.columns:
+            session_df.loc[nan_mask, 'Acquisition'] = session_df.loc[nan_mask, 'SeriesDescription']
+        elif 'ProtocolName' in session_df.columns:
+            session_df.loc[nan_mask, 'Acquisition'] = session_df.loc[nan_mask, 'ProtocolName']
+        else:
+            session_df.loc[nan_mask, 'Acquisition'] = 'unknown_acquisition'
+        print(f"Fixed acquisition names: {session_df['Acquisition'].unique()}")
+    
+    # Load into ComplianceSession with metadata
+    metadata = {
+        'source': 'dicom_upload',
+        'file_count': len(dicom_bytes),
+        'timestamp': str(pd.Timestamp.now())
+    }
+    
+    global_compliance_session.load_dicom_session(session_df, metadata)
+    
+    print(f"Loaded session with {len(session_df)} files, {session_df['Acquisition'].nunique()} acquisitions")
+    print(f"Acquisitions: {list(session_df['Acquisition'].unique())}")
+    
+    # Get session summary for the UI
+    session_summary = global_compliance_session.get_session_summary()
+    
+    # Extract acquisitions data for UI compatibility
+    acquisitions = {}
+    for acq_name in session_df['Acquisition'].unique():
+        # Skip nan/None acquisitions
+        if pd.isna(acq_name) or acq_name is None or str(acq_name).lower() == 'nan':
+            print(f"Warning: Skipping invalid acquisition name: {acq_name}")
+            continue
+            
+        # Get subset for this acquisition
+        acq_data = session_df[session_df['Acquisition'] == acq_name]
+        
+        # Create fields and series structure (simplified)
+        fields = []
+        for field in reference_fields:
+            if field in acq_data.columns:
+                unique_vals = acq_data[field].dropna().unique()
+                if len(unique_vals) > 0:
+                    fields.append({
+                        'field': field,
+                        'value': unique_vals[0] if len(unique_vals) == 1 else list(unique_vals)
+                    })
+        
+        # Create series data using dicompare's field variability approach
+        series_data = []
+        print(f"Creating series data for acquisition '{acq_name}' using field variability analysis")
+        
+        # First, detect which fields vary within this acquisition
+        varying_fields = []
+        constant_fields = []
+        
+        for field in reference_fields:
+            if field in acq_data.columns:
+                unique_vals = acq_data[field].dropna().unique()
+                if len(unique_vals) > 1:
+                    varying_fields.append(field)
+                elif len(unique_vals) == 1:
+                    constant_fields.append(field)
+        
+        print(f"  Found {len(varying_fields)} varying fields: {varying_fields}")
+        print(f"  Found {len(constant_fields)} constant fields: {constant_fields}")
+        
+        # If we have varying fields, group by them to create series
+        if varying_fields:
+            # Group by combinations of varying field values
+            series_groups = acq_data.groupby(varying_fields, dropna=False)
+            
+            for i, (series_key, series_group) in enumerate(series_groups, start=1):
+                # Create series fields from the varying field values
+                series_fields = []
+                
+                # Handle both single and multiple varying fields
+                if len(varying_fields) == 1:
+                    field_values = [series_key]
+                else:
+                    field_values = series_key
+                
+                for j, field in enumerate(varying_fields):
+                    field_value = field_values[j] if len(varying_fields) > 1 else field_values[0]
+                    series_fields.append({
+                        'field': field,
+                        'value': field_value
+                    })
+                
+                series_name = f"Series {i}"
+                
+                print(f"  {series_name}: {len(series_group)} files, fields: {[(f['field'], f['value']) for f in series_fields]}")
+                
+                series_data.append({
+                    'name': series_name,
+                    'fields': series_fields
+                })
+            
+            print(f"Created {len(series_data)} series based on varying fields for acquisition '{acq_name}'")
+        else:
+            print(f"No varying fields found for acquisition '{acq_name}' - all fields are constant")
+        
+        acquisitions[acq_name] = {
+            'fields': fields,
+            'series': series_data,
+            'file_count': len(acq_data)
+        }
+    
+    # Return JSON-serializable data
+    result = make_json_serializable(acquisitions)
 
-print("Creating JSON reference...")
-print(f"DEBUG: Before create_json_reference - CoilType in columns: {'CoilType' in in_session.columns}")
-if 'CoilType' in in_session.columns:
-  print(f"DEBUG: CoilType values: {in_session['CoilType'].unique()}")
-print(f"DEBUG: reference_fields passed to create_json_reference: {reference_fields}")
-try:
-  input_acquisitions = create_json_schema(in_session, reference_fields)
-  # Clean the data before JSON serialization
-  clean_acquisitions = clean_for_json(input_acquisitions['acquisitions'])
 except Exception as e:
-  import traceback
-  traceback.print_exc()
-  print(f"Failed to create JSON reference: {e}")
-  raise RuntimeError(f"Failed to create JSON reference: {e}")
+    import traceback
+    traceback.print_exc()
+    print(f"Error in analyzeDicomFiles: {e}")
+    raise RuntimeError(f"Failed to load DICOM files: {e}")
 
-json.dumps(clean_acquisitions)
+json.dumps(result)
   `.trim();
 
-  const out = await runPythonCode(code);
-  return JSON.parse(out);
+    const out = await runPythonCode(code);
+    return JSON.parse(out);
 };
 
-export const processExistingSession = async (
-  pyodide: ReturnType<typeof usePyodide>,
-  referenceFields: string[]
-) => {
-  const { runPythonCode, setPythonGlobal } = pyodide;
+export const processExistingSession = async (pyodide: ReturnType<typeof usePyodide>, referenceFields: string[]) => {
+    const { runPythonCode, setPythonGlobal } = pyodide;
 
-  await setPythonGlobal('reference_fields', referenceFields);
+    await setPythonGlobal('reference_fields', referenceFields);
 
-  const code = `
+    const code = `
 import json
 from dicompare.generate_schema import create_json_schema
 from dicompare import assign_acquisition_and_run_numbers
@@ -398,220 +409,295 @@ def clean_for_json(obj):
     else:
         return obj
 
-# reuse the already-loaded in_session global
-in_session = assign_acquisition_and_run_numbers(in_session)
-in_session.sort_values(by=['Acquisition'] + reference_fields, inplace=True)
+# Get session from ComplianceSession
+if global_compliance_session.has_session():
+    session_df = global_compliance_session.session_df.copy()
+    
+    # Re-run acquisition assignment if needed
+    if 'Acquisition' not in session_df.columns:
+        session_df = assign_acquisition_and_run_numbers(session_df)
+    
+    # Sort by acquisition and reference fields
+    sort_fields = ['Acquisition'] + [f for f in reference_fields if f in session_df.columns]
+    session_df.sort_values(by=sort_fields, inplace=True)
+    
+    # Create schema from the session
+    acqs = create_json_schema(session_df, reference_fields)['acquisitions']
+    clean_acqs = clean_for_json(acqs)
+    result = clean_acqs
+else:
+    print("No session loaded in ComplianceSession")
+    result = {}
 
-acqs = create_json_schema(in_session, reference_fields)['acquisitions']
-clean_acqs = clean_for_json(acqs)
-json.dumps(clean_acqs)
+json.dumps(result)
   `.trim();
 
-  const out = await runPythonCode(code);
-  return JSON.parse(out);
+    const out = await runPythonCode(code);
+    return JSON.parse(out);
 };
 
-export const analyzeCompliance = async (
-  pyodide: ReturnType<typeof usePyodide>,
-  pairs: Pair[]
-) => {
-  const { runPythonCode, setPythonGlobal } = pyodide;
-  
-  // Group pairs by schema instance ID
-  const pairsByInstance: Record<string, Pair[]> = {};
-  
-  pairs.forEach(p => {
-    if (p.ref && p.inp) {
-      const instanceId = p.ref.id;
-      if (instanceId && !pairsByInstance[instanceId]) {
-        pairsByInstance[instanceId] = [];
-      }
-      if (instanceId) {
-        pairsByInstance[instanceId].push(p);
-      }
-    }
-  });
-  
-  // Create maps for each instance
-  const instanceMaps: Record<string, { json: Record<string, string>, py: Record<string, string> }> = {};
-  
-  Object.entries(pairsByInstance).forEach(([instanceId, instancePairs]) => {
-    const jsonMap: Record<string, string> = {};
-    const pyMap: Record<string, string> = {};
-    
-    instancePairs.forEach(p => {
-      if (p.ref && p.inp) {
-        // Use the instance ID in the key
-        const refKey = `${p.ref.name}#${instanceId}`;
-        
-        // Determine if this is a Python or JSON schema by checking for rules
-        if (p.ref.details.rules) {
-          pyMap[refKey] = p.inp.name;
-        } else {
-          jsonMap[refKey] = p.inp.name;
+export const analyzeCompliance = async (pyodide: ReturnType<typeof usePyodide>, pairs: Pair[]) => {
+    const { runPythonCode, setPythonGlobal } = pyodide;
+
+    // Group pairs by schema instance ID and create user mappings
+    const schemaUserMappings: Record<string, Record<string, string>> = {};
+
+    pairs.forEach((p) => {
+        if (p.ref && p.inp) {
+            const schemaId = p.ref.id;
+            if (schemaId) {
+                if (!schemaUserMappings[schemaId]) {
+                    schemaUserMappings[schemaId] = {};
+                }
+                // Map schema acquisition name to input acquisition name
+                schemaUserMappings[schemaId][p.ref.name] = p.inp.name;
+            }
         }
-      }
     });
-    
-    instanceMaps[instanceId] = { json: jsonMap, py: pyMap };
-  });
-  
-  await setPythonGlobal('instance_maps', instanceMaps);
 
-  const code = `
+    await setPythonGlobal('schema_user_mappings', schemaUserMappings);
+
+    const code = `
 import json, pyodide
-from dicompare.compliance import (
-  check_session_compliance_with_json_schema,
-  check_session_compliance_with_python_module
-)
+from dicompare.serialization import make_json_serializable
 
-# Convert JS maps to Python
-instance_maps = instance_maps.to_py() if isinstance(instance_maps, pyodide.ffi.JsProxy) else instance_maps
+# Convert JS mappings to Python
+schema_user_mappings = schema_user_mappings.to_py() if isinstance(schema_user_mappings, pyodide.ffi.JsProxy) else schema_user_mappings
 
 all_results = []
 
-# Check if we have the necessary globals and input session
-if 'in_session' not in globals() or in_session is None:
-  print("No input session available")
-else:
-  # Process each instance separately
-  for instance_id, maps in instance_maps.items():
-    json_map = maps['json']
-    py_map = maps['py']
+try:
+    print(f"Analyzing compliance for {len(schema_user_mappings)} schemas")
     
-    # Process the maps to handle IDs
-    def process_map(session_map):
-        processed_map = {}
-        for ref_key, inp_name in session_map.items():
-            # Extract the acquisition name from the key (remove the instance ID)
-            if '#' in ref_key:
-                ref_name = ref_key.split('#')[0]
-                processed_map[ref_name] = inp_name
+    if not global_compliance_session.has_session():
+        print("Error: No session loaded in ComplianceSession")
+        raise RuntimeError("No session loaded")
+    
+    # Process each schema mapping
+    for schema_id, user_mapping in schema_user_mappings.items():
+        print(f"Checking compliance for schema '{schema_id}' with mapping: {user_mapping}")
+        
+        try:
+            # Check if schema exists
+            if not global_compliance_session.has_schema(schema_id):
+                print(f"Warning: Schema '{schema_id}' not found in ComplianceSession")
+                continue
+            
+            # Validate mapping first
+            validation_result = global_compliance_session.validate_user_mapping(schema_id, user_mapping)
+            if not validation_result['valid']:
+                print(f"Warning: Invalid mapping for schema '{schema_id}': {validation_result['errors']}")
+                # Create error results for invalid mappings
+                for error in validation_result['errors']:
+                    all_results.append({
+                        'schema acquisition': 'unknown',
+                        'input acquisition': 'unknown', 
+                        'field': 'mapping_validation',
+                        'expected': 'valid mapping',
+                        'actual': 'invalid mapping',
+                        'passed': False,
+                        'message': error,
+                        'schema id': schema_id
+                    })
+                continue
+            
+            # Debug: Check what schema structure we have
+            schema_acquisitions = global_compliance_session.get_schema_acquisitions(schema_id)
+            schema_data = global_compliance_session.schemas[schema_id]
+            print(f"Schema acquisitions: {list(schema_acquisitions)}")
+            for acq_name in schema_acquisitions:
+                acq_data = schema_data['acquisitions'].get(acq_name, {})
+                print(f"  Acquisition '{acq_name}':")
+                print(f"    Fields: {len(acq_data.get('fields', []))}")
+                print(f"    Series: {len(acq_data.get('series', []))}")
+                
+                # Debug: Check if ImageType is in acquisition fields
+                acq_fields = acq_data.get('fields', [])
+                image_type_fields = [f for f in acq_fields if f.get('field') == 'ImageType']
+                if image_type_fields:
+                    print(f"    WARNING: Found {len(image_type_fields)} ImageType constraints in acquisition fields!")
+                    for i, field in enumerate(image_type_fields):
+                        print(f"      ImageType {i}: {field.get('value')}")
+                
+                if acq_data.get('series'):
+                    for i, series in enumerate(acq_data['series']):
+                        series_fields = series.get('fields', [])
+                        print(f"      Series {i}: name='{series.get('name')}', fields={[f['field'] for f in series_fields]}")
+                        for field in series_fields:
+                            if field.get('field') == 'ImageType':
+                                print(f"        ImageType value: {field.get('value')}")
+            
+            # Debug: Check what session data we have  
+            session_df = global_compliance_session.session_df
+            acq_data = session_df[session_df['Acquisition'].isin(user_mapping.values())]
+            print(f"Session data for compliance check:")
+            print(f"  Total rows: {len(acq_data)}")
+            print(f"  Columns: {list(acq_data.columns)}")
+            if 'ImageType' in acq_data.columns:
+                print(f"  ImageType values: {acq_data['ImageType'].unique()}")
+            if 'SeriesNumber' in acq_data.columns:
+                print(f"  SeriesNumber values: {acq_data['SeriesNumber'].unique()}")
+            
+            # Run compliance check using ComplianceSession
+            compliance_results = global_compliance_session.check_compliance(schema_id, user_mapping)
+            
+            print(f"Compliance check completed for schema '{schema_id}'")
+            print(f"Compliance results type: {type(compliance_results)}")
+            print(f"Compliance results keys: {list(compliance_results.keys()) if isinstance(compliance_results, dict) else 'Not a dict'}")
+            
+            # Check if we have the expected structure
+            if not isinstance(compliance_results, dict):
+                print(f"ERROR: Expected dict but got {type(compliance_results)}")
+                raise TypeError(f"ComplianceSession.check_compliance returned {type(compliance_results)} instead of dict")
+            
+            if 'acquisition_details' not in compliance_results:
+                print(f"ERROR: No 'acquisition_details' in compliance_results. Keys: {list(compliance_results.keys())}")
+                raise KeyError("Missing 'acquisition_details' in compliance results")
+            
+            acquisition_details = compliance_results.get('acquisition_details', {})
+            print(f"Acquisition details type: {type(acquisition_details)}")
+            
+            if isinstance(acquisition_details, dict):
+                print(f"Acquisition details keys: {list(acquisition_details.keys())}")
+                
+                # Print summary info if available
+                if 'summary' in compliance_results:
+                    summary = compliance_results['summary']
+                    print(f"Overall compliance rate: {summary.get('compliance_rate', 'unknown'):.1f}%")
+                
+                # Debug: print first acquisition details
+                for acq_name, acq_details in acquisition_details.items():
+                    print(f"Acquisition '{acq_name}' has {len(acq_details.get('detailed_results', []))} field results")
+                    if acq_details.get('detailed_results'):
+                        first_result = acq_details['detailed_results'][0]
+                        print(f"  First result: field='{first_result.get('field')}', compliant={first_result.get('compliant')}")
+                    break
             else:
-                processed_map[ref_key] = inp_name
-        return processed_map
+                print(f"ERROR: acquisition_details is {type(acquisition_details)} instead of dict")
+                raise TypeError(f"acquisition_details is {type(acquisition_details)} instead of dict")
+            
+            # Convert ComplianceSession results to the format expected by the UI
+            # The UI expects a flat list of individual field results
+            # Results are now keyed by schema acquisition name (after our fix)
+            for schema_acq_name, acq_details in acquisition_details.items():
+                # Get the input acquisition name
+                input_acq_name = acq_details.get('input_acquisition', schema_acq_name)
+                
+                for field_result in acq_details.get('detailed_results', []):
+                    result_item = {
+                        'schema acquisition': schema_acq_name,
+                        'input acquisition': input_acq_name,
+                        'field': field_result.get('field', ''),
+                        'expected': field_result.get('expected', ''),
+                        'actual': field_result.get('actual', ''),
+                        'passed': field_result.get('compliant', False),
+                        'message': field_result.get('message', ''),
+                        'schema id': schema_id
+                    }
+                    
+                    # Add series information if present and not None
+                    if 'series' in field_result and field_result['series'] is not None:
+                        result_item['series'] = field_result['series']
+                        print(f"    Found series result: series='{field_result['series']}', field='{result_item['field']}'")
+                    
+                    all_results.append(result_item)
+                    
+                    # Debug print for first few results
+                    if len(all_results) <= 3:
+                        print(f"Result item: schema_acq='{schema_acq_name}', field='{result_item['field']}', passed={result_item['passed']}, ref_id='{schema_id}'")
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Error checking compliance for schema '{schema_id}': {e}")
+            # Add error result
+            all_results.append({
+                'schema acquisition': 'error',
+                'input acquisition': 'error',
+                'field': 'compliance_check',
+                'expected': 'successful check',
+                'actual': 'error occurred',
+                'passed': False,
+                'message': f"Error: {str(e)}",
+                'schema id': schema_id
+            })
+    
+    print(f"Compliance analysis completed. Total results: {len(all_results)}")
+    
+    # Make results JSON serializable
+    serializable_results = make_json_serializable(all_results)
 
-    json_map_processed = process_map(json_map)
-    py_map_processed = process_map(py_map)
-    
-    # Check if we have schema instances dictionary
-    if 'schema_instances' not in globals():
-      print("No schema instances available")
-      continue
-      
-    # Get instance-specific session and model keys
-    instance_session_key = f"ref_session_{instance_id}"
-    instance_models_key = f"ref_models_{instance_id}"
-    
-    # Process JSON schema compliance
-    if instance_session_key in globals() and json_map:
-      instance_schema_session = globals()[instance_session_key]
-      print(f"Checking compliance with JSON schema for instance {instance_id}")
-      try:
-        json_results = check_session_compliance_with_json_schema(
-          in_session=in_session,
-          schema_session=instance_schema_session,
-          session_map=json_map_processed
-        )
-        
-        # Add instance ID to the results
-        for result in json_results:
-          schema_acq = result.get('schema acquisition')
-          if schema_acq:
-            result['reference id'] = instance_id
-        
-        all_results.extend(json_results)
-      except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"Error in JSON compliance check for instance {instance_id}: {e}")
-    
-    # Process Python module compliance
-    if instance_models_key in globals() and py_map:
-      instance_schema_models = globals()[instance_models_key]
-      print(f"Checking compliance with Python module for instance {instance_id}")
-      try:
-        py_results = check_session_compliance_with_python_module(
-          in_session=in_session,
-          schema_models=instance_schema_models,
-          session_map=py_map_processed
-        )
-        
-        # Add instance ID to the results
-        for result in py_results:
-          schema_acq = result.get('schema acquisition')
-          if schema_acq:
-            result['reference id'] = instance_id
-        
-        all_results.extend(py_results)
-      except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"Error in Python module compliance check for instance {instance_id}: {e}")
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    print(f"Fatal error in analyzeCompliance: {e}")
+    serializable_results = [{
+        'schema acquisition': 'fatal_error',
+        'input acquisition': 'fatal_error',
+        'field': 'system',
+        'expected': 'successful analysis',
+        'actual': 'fatal error',
+        'passed': False,
+        'message': f"Fatal error: {str(e)}",
+        'schema id': 'system'
+    }]
 
-json.dumps(all_results)
+json.dumps(serializable_results)
 `;
 
-  const raw = await runPythonCode(code);
-  return JSON.parse(raw);
+    const raw = await runPythonCode(code);
+    return JSON.parse(raw);
 };
 
 export const removeSchema = async (
-  pyodide: ReturnType<typeof usePyodide>,
-  acquisitionName: string,
-  fileName: string,
-  instanceId: string
+    pyodide: ReturnType<typeof usePyodide>,
+    acquisitionName: string,
+    fileName: string,
+    instanceId: string
 ) => {
-  const { runPythonCode, setPythonGlobal } = pyodide;
+    const { runPythonCode, setPythonGlobal } = pyodide;
 
-  await setPythonGlobal('acq_to_remove', acquisitionName);
-  await setPythonGlobal('file_name', fileName);
-  await setPythonGlobal('instance_id', instanceId);
+    await setPythonGlobal('schema_id', instanceId);
 
-  const code = `
+    const code = `
 import json
 
-# Get instance-specific session and model keys
-instance_session_key = f"ref_session_{instance_id}"
-instance_models_key = f"ref_models_{instance_id}"
-instance_fields_key = f"reference_fields_{instance_id}"
-
-# Clean up instance-specific globals
-if instance_session_key in globals():
-    del globals()[instance_session_key]
-    print(f"Removed {instance_session_key} from globals")
+try:
+    print(f"Removing schema '{schema_id}' from ComplianceSession")
     
-if instance_models_key in globals():
-    del globals()[instance_models_key]
-    print(f"Removed {instance_models_key} from globals")
-    
-if instance_fields_key in globals():
-    del globals()[instance_fields_key]
-    print(f"Removed {instance_fields_key} from globals")
+    if global_compliance_session.has_schema(schema_id):
+        global_compliance_session.remove_schema(schema_id)
+        print(f"Successfully removed schema '{schema_id}'")
+        print(f"Remaining schemas: {global_compliance_session.get_schema_names()}")
+        result = {"success": True, "message": f"Schema '{schema_id}' removed"}
+    else:
+        print(f"Warning: Schema '{schema_id}' not found")
+        result = {"success": False, "message": f"Schema '{schema_id}' not found"}
 
-# Remove from schema instances tracker
-if 'schema_instances' in globals() and instance_id in schema_instances:
-    del schema_instances[instance_id]
-    print(f"Removed instance {instance_id} from schema_instances")
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    print(f"Error removing schema '{schema_id}': {e}")
+    result = {"success": False, "message": f"Error: {str(e)}"}
 
-json.dumps({"success": True})
+json.dumps(result)
   `;
 
-  return await runPythonCode(code);
+    const raw = await runPythonCode(code);
+    return JSON.parse(raw);
 };
 
-
 export const reprocessSpecificAcquisition = async (
-  pyodide: ReturnType<typeof usePyodide>,
-  acquisitionName: string,
-  specificFields: string[]
+    pyodide: ReturnType<typeof usePyodide>,
+    acquisitionName: string,
+    specificFields: string[]
 ) => {
-  const { runPythonCode, setPythonGlobal } = pyodide;
+    const { runPythonCode, setPythonGlobal } = pyodide;
 
-  await setPythonGlobal('specific_acq_name', acquisitionName);
-  await setPythonGlobal('specific_fields', specificFields);
+    await setPythonGlobal('specific_acq_name', acquisitionName);
+    await setPythonGlobal('specific_fields', specificFields);
 
-  const code = `
+    const code = `
 import json
 from dicompare.generate_schema import create_json_schema
 
@@ -643,9 +729,10 @@ def clean_for_json(obj):
 if isinstance(specific_fields, pyodide.ffi.JsProxy):
     specific_fields = specific_fields.to_py()
 
-# Filter the session to only the specific acquisition
-if 'in_session' in globals() and in_session is not None:
-    acq_session = in_session[in_session['Acquisition'] == specific_acq_name].copy()
+# Get session from ComplianceSession
+if global_compliance_session.has_session():
+    session_df = global_compliance_session.session_df
+    acq_session = session_df[session_df['Acquisition'] == specific_acq_name].copy()
     
     if not acq_session.empty:
         # Filter fields to only include those that exist in the session
@@ -665,59 +752,67 @@ if 'in_session' in globals() and in_session is not None:
         else:
             result = {}
     else:
+        print(f"No data found for acquisition: {specific_acq_name}")
         result = {}
 else:
+    print("No session loaded in ComplianceSession")
     result = {}
 
 json.dumps(result)
   `.trim();
 
-  const out = await runPythonCode(code);
-  return JSON.parse(out);
+    const out = await runPythonCode(code);
+    return JSON.parse(out);
 };
 
-export const removeDicomSeries = async (
-  pyodide: ReturnType<typeof usePyodide>,
-  acquisitionName: string
-) => {
-  const { runPythonCode, setPythonGlobal } = pyodide;
+export const removeDicomSeries = async (pyodide: ReturnType<typeof usePyodide>, acquisitionName: string) => {
+    const { runPythonCode, setPythonGlobal } = pyodide;
 
-  await setPythonGlobal('acq_to_remove', acquisitionName);
+    await setPythonGlobal('acq_to_remove', acquisitionName);
 
-  const code = `
+    const code = `
 import json
+import pandas as pd
 
-# Remove the acquisition from the input session
-if 'in_session' in globals() and in_session is not None:
-    # Filter out rows with this acquisition
-    in_session = in_session[in_session['Acquisition'] != acq_to_remove]
-    print(f"Removed {acq_to_remove} from input session")
+# Remove the acquisition from the ComplianceSession
+if global_compliance_session.has_session():
+    session_df = global_compliance_session.session_df
     
-    # Regenerate the input options
-    from dicompare.generate_schema import create_json_schema
-    if 'reference_fields' in globals() and reference_fields:
-        input_acquisitions = create_json_schema(in_session, reference_fields)
-        remaining = list(input_acquisitions['acquisitions'].keys())
+    # Filter out rows with this acquisition
+    updated_session = session_df[session_df['Acquisition'] != acq_to_remove]
+    
+    if len(updated_session) < len(session_df):
+        print(f"Removing {acq_to_remove} from session ({len(session_df) - len(updated_session)} files)")
+        
+        # Reload the session without the removed acquisition
+        metadata = global_compliance_session.session_metadata.copy()
+        metadata['modified'] = str(pd.Timestamp.now())
+        metadata['removed_acquisition'] = acq_to_remove
+        
+        global_compliance_session.load_dicom_session(updated_session, metadata)
+        print(f"Session reloaded without {acq_to_remove}")
+        
+        # Get remaining acquisitions
+        remaining = list(updated_session['Acquisition'].unique())
     else:
-        remaining = []
+        print(f"Acquisition {acq_to_remove} not found in session")
+        remaining = list(session_df['Acquisition'].unique())
 else:
+    print("No session loaded in ComplianceSession")
     remaining = []
 
 json.dumps(remaining)
   `.trim();
 
-  return await runPythonCode(code);
+    return await runPythonCode(code);
 };
 
-export const loadExampleDicoms = async (
-  pyodide: ReturnType<typeof usePyodide>,
-  acquisitions: Record<string, any>
-) => {
-  const { runPythonCode, setPythonGlobal } = pyodide;
-  
-  await setPythonGlobal('example_acquisitions', acquisitions);
+export const loadExampleDicoms = async (pyodide: ReturnType<typeof usePyodide>, acquisitions: Record<string, any>) => {
+    const { runPythonCode, setPythonGlobal } = pyodide;
 
-  const code = `
+    await setPythonGlobal('example_acquisitions', acquisitions);
+
+    const code = `
 import json
 import pandas as pd
 import pyodide
@@ -774,23 +869,172 @@ for acq_name, acq_data in example_acquisitions.items():
         rows.append(fields)
 
 # Create the DataFrame
-global in_session
-in_session = pd.DataFrame(rows)
+session_df = pd.DataFrame(rows)
 
 # Fill in any missing standard columns that might be expected
 standard_columns = ['ProtocolName', 'SeriesDescription', 'Manufacturer']
 for col in standard_columns:
-    if col not in in_session.columns:
-        in_session[col] = ''
+    if col not in session_df.columns:
+        session_df[col] = ''
 
 # The acquisitions are already labeled, so we don't need to call assign_acquisition_and_run_numbers again
-print(f"Loaded {len(in_session)} example DICOM entries")
-print(f"Acquisitions: {in_session['Acquisition'].unique()}")
+print(f"Loaded {len(session_df)} example DICOM entries")
+print(f"Acquisitions: {session_df['Acquisition'].unique()}")
+
+# Load into ComplianceSession
+metadata = {
+    'source': 'example_dicoms',
+    'file_count': len(session_df),
+    'timestamp': str(pd.Timestamp.now())
+}
+
+global_compliance_session.load_dicom_session(session_df, metadata)
+print(f"Loaded example DICOMs into ComplianceSession")
 
 # Return the acquisitions in the same format as analyzeDicomFiles would
 json.dumps(example_acquisitions)
   `.trim();
 
-  const out = await runPythonCode(code);
-  return JSON.parse(out);
+    const out = await runPythonCode(code);
+    return JSON.parse(out);
+};
+
+// New functions using ComplianceSession capabilities
+
+export const validateUserMapping = async (
+    pyodide: ReturnType<typeof usePyodide>,
+    schemaId: string,
+    userMapping: Record<string, string>
+) => {
+    const { runPythonCode, setPythonGlobal } = pyodide;
+
+    await setPythonGlobal('schema_id', schemaId);
+    await setPythonGlobal('user_mapping', userMapping);
+
+    const code = `
+import json, pyodide
+from dicompare.serialization import make_json_serializable
+
+# Convert JS mapping to Python
+user_mapping = user_mapping.to_py() if isinstance(user_mapping, pyodide.ffi.JsProxy) else user_mapping
+
+try:
+    print(f"Validating user mapping for schema '{schema_id}'")
+    
+    if not global_compliance_session.has_session():
+        raise RuntimeError("No session loaded")
+    
+    if not global_compliance_session.has_schema(schema_id):
+        raise ValueError(f"Schema '{schema_id}' not found")
+    
+    # Validate the mapping
+    validation_result = global_compliance_session.validate_user_mapping(schema_id, user_mapping)
+    
+    print(f"Validation result: {validation_result['valid']}")
+    if not validation_result['valid']:
+        print(f"Errors: {validation_result['errors']}")
+    if validation_result['warnings']:
+        print(f"Warnings: {validation_result['warnings']}")
+    
+    # Make JSON serializable
+    result = make_json_serializable(validation_result)
+
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    print(f"Error validating mapping: {e}")
+    result = {
+        "valid": False,
+        "errors": [f"Validation error: {str(e)}"],
+        "warnings": [],
+        "mapping_coverage": {},
+        "unmapped_schema_acquisitions": [],
+        "unmapped_session_acquisitions": []
+    }
+
+json.dumps(result)
+  `.trim();
+
+    const out = await runPythonCode(code);
+    return JSON.parse(out);
+};
+
+export const suggestAutomaticMapping = async (pyodide: ReturnType<typeof usePyodide>, schemaId: string) => {
+    const { runPythonCode, setPythonGlobal } = pyodide;
+
+    await setPythonGlobal('schema_id', schemaId);
+
+    const code = `
+import json
+from dicompare.serialization import make_json_serializable
+
+try:
+    print(f"Generating automatic mapping suggestions for schema '{schema_id}'")
+    
+    if not global_compliance_session.has_session():
+        raise RuntimeError("No session loaded")
+    
+    if not global_compliance_session.has_schema(schema_id):
+        raise ValueError(f"Schema '{schema_id}' not found")
+    
+    # Get automatic mapping suggestions
+    suggestions = global_compliance_session.suggest_automatic_mapping(schema_id)
+    
+    print(f"Generated {len(suggestions)} mapping suggestions:")
+    for schema_acq, session_acq in suggestions.items():
+        print(f"  {schema_acq} -> {session_acq}")
+    
+    # Make JSON serializable
+    result = make_json_serializable(suggestions)
+
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    print(f"Error generating mapping suggestions: {e}")
+    result = {}
+
+json.dumps(result)
+  `.trim();
+
+    const out = await runPythonCode(code);
+    return JSON.parse(out);
+};
+
+export const getSessionSummary = async (pyodide: ReturnType<typeof usePyodide>) => {
+    const { runPythonCode } = pyodide;
+
+    const code = `
+import json
+from dicompare.serialization import make_json_serializable
+
+try:
+    print("Getting session summary from ComplianceSession")
+    
+    # Get comprehensive session summary
+    summary = global_compliance_session.get_session_summary()
+    
+    print(f"Session status: {summary.get('status', 'unknown')}")
+    if summary.get('status') == 'loaded':
+        session_info = summary.get('session', {})
+        schemas_info = summary.get('schemas', {})
+        print(f"Session has {len(schemas_info)} schemas")
+        print(f"Available schemas: {list(schemas_info.keys())}")
+    
+    # Make JSON serializable
+    result = make_json_serializable(summary)
+
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    print(f"Error getting session summary: {e}")
+    result = {
+        "status": "error",
+        "error": str(e)
+    }
+
+json.dumps(result)
+  `.trim();
+
+    const out = await runPythonCode(code);
+    return JSON.parse(out);
 };

@@ -29,15 +29,18 @@ const LandingPage = () => {
                             Empowering imaging research with privacy-first data validation
                         </Text>
                         <Text fontSize="lg" mr={20}>
-                            DICOMpare streamlines medical imaging research by providing tools to generate standardized DICOM templates and validate data compliance. Our privacy-first approach ensures your sensitive medical data never leaves your environment while maintaining the highest standards for data quality and protocol adherence across multi-site studies.
+                            DICOMpare streamlines medical imaging research by providing tools to generate standardized
+                            DICOM templates and validate data compliance. Our privacy-first approach ensures your
+                            sensitive medical data never leaves your environment while maintaining the highest standards
+                            for data quality and protocol adherence across multi-site studies.
                         </Text>
                     </VStack>
                 </Box>
                 <Box flex="0.8">
-                    <Image 
-                        src="../assets/ct-scan.png" 
-                        alt="MRI Visualization" 
-                        borderRadius="md" 
+                    <Image
+                        src="../assets/ct-scan.png"
+                        alt="MRI Visualization"
+                        borderRadius="md"
                         boxShadow="lg"
                         maxW="300px"
                         w="100%"
