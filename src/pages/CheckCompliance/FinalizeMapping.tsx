@@ -63,7 +63,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ onValidationChange, o
     const pyodide = usePyodide();
 
     // Refs to track previous values
-    const prevPairsRef = useRef<string>('');
+    const prevCompliancePairsRef = useRef<string>('');
     const onReportReadyRef = useRef(onReportReady);
     const complianceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -205,6 +205,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ onValidationChange, o
         pairs.map((pair) => ({
             refName: pair.ref?.name,
             refId: pair.ref?.id,
+            refType: pair.ref?.details?.rules ? 'Python' : 'JSON',
             inpName: pair.inp?.name,
         }))
     );
@@ -322,23 +323,43 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ onValidationChange, o
             complianceTimeoutRef.current = null;
         }
 
-        // Create a string representation of the pairs for comparison
-        const pairsString = JSON.stringify(
-            pairs.map((p) => ({
-                ref: p.ref ? { id: p.ref.id, name: p.ref.name } : null,
-                inp: p.inp?.name,
-            }))
-        );
-
         // Only run if pairs have changed and we have valid pairs
         const hasValidPairs = pairs.some((p) => p.ref && p.inp);
 
-        if (pairsString !== prevPairsRef.current && hasValidPairs) {
-            prevPairsRef.current = pairsString;
+        console.log('Compliance analysis check:', {
+            pairsChanged: pairsString !== prevCompliancePairsRef.current,
+            hasValidPairs,
+            pairsCount: pairs.length,
+            validPairsCount: pairs.filter(p => p.ref && p.inp).length,
+            pyodideReady: pyodide.pyodideReady,
+            currentPairsString: pairsString,
+            previousPairsString: prevCompliancePairsRef.current
+        });
+
+        if (pairsString !== prevCompliancePairsRef.current && hasValidPairs) {
+            prevCompliancePairsRef.current = pairsString;
 
             complianceTimeoutRef.current = setTimeout(async () => {
                 try {
+                    console.log('=== COMPLIANCE ANALYSIS TRIGGERED ===');
+                    console.log('Pairs:', pairs.map(p => ({
+                        ref: p.ref ? {id: p.ref.id, name: p.ref.name, type: p.ref.details?.rules ? 'Python' : 'JSON'} : null,
+                        inp: p.inp?.name
+                    })));
+                    console.log('Pyodide ready:', pyodide.pyodideReady);
+                    
                     const results = await analyzeCompliance(pyodide, pairs);
+                    console.log('=== COMPLIANCE RESULTS RECEIVED ===');
+                    console.log('Results count:', results.length);
+                    if (results.length > 0) {
+                        console.log('First result:', results[0]);
+                        console.log('Result types:', results.map((r: any) => ({
+                            schemaId: r['schema id'], 
+                            hasRuleName: !!r.rule_name, 
+                            hasField: !!r.field,
+                            passed: r.passed
+                        })));
+                    }
 
                     // Use the ref to ensure we have the latest callback
                     onReportReadyRef.current(results);
@@ -441,7 +462,7 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ onValidationChange, o
                 clearTimeout(complianceTimeoutRef.current);
             }
         };
-    }, [pairs, pyodide]);
+    }, [pairsString, pyodide]);
 
     // Toggle expansion handlers
     const toggleReferenceExpansion = (name: string) => {
@@ -464,6 +485,33 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ onValidationChange, o
 
             // Remove from state - only remove the specific instance with this ID
             setReferenceOptions((prev) => prev.filter((acq) => acq.id !== id));
+
+            // Clear compliance results for this schema ID
+            setComplianceMap((prev) => {
+                const newMap: Record<string, FieldCompliance> = {};
+                Object.entries(prev).forEach(([key, value]) => {
+                    // Keep results that don't belong to the deleted schema
+                    if (!key.includes(`#${id}`)) {
+                        newMap[key] = value;
+                    }
+                });
+                console.log(`Cleared compliance results for schema ${id}. Remaining keys:`, Object.keys(newMap));
+                return newMap;
+            });
+
+            // Clear overall compliance for this schema
+            setOverallCompliance((prev) => {
+                const newOverall = { ...prev };
+                Object.keys(newOverall).forEach(key => {
+                    if (key.includes(`#${id}`)) {
+                        delete newOverall[key];
+                    }
+                });
+                return newOverall;
+            });
+
+            // Force re-analysis of compliance after schema deletion to clear any stale state
+            console.log(`Schema ${id} deleted. Remaining schemas:`, referenceOptions.filter(acq => acq.id !== id).map(acq => acq.id));
 
             // Update pairs
             setPairs((prev) => {

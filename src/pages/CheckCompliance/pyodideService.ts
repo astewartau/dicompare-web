@@ -605,18 +605,65 @@ try:
                     # Skip the rest of the processing for Python schemas since we've added results directly
                     continue
                     
-                    print(f"Python validation completed: {compliance_results['summary']['passed_rules']}/{compliance_results['summary']['total_rules']} passed ({compliance_results['summary']['compliance_rate']:.1f}%)")
-                    
                 except Exception as py_error:
                     import traceback
                     traceback.print_exc()
                     print(f"Error in Python schema validation: {py_error}")
-                    # Fall back to regular compliance check
-                    compliance_results = global_compliance_session.check_compliance(schema_id, user_mapping)
+                    
+                    # For Python schema errors, create error results and continue to next schema
+                    all_results.append({
+                        'schema acquisition': 'error',
+                        'input acquisition': 'error',
+                        'field': 'python_validation_error',
+                        'rule_name': 'Python Validation Error',
+                        'expected': 'successful validation',
+                        'actual': 'error occurred',
+                        'passed': False,
+                        'message': f"Python validation error: {str(py_error)}",
+                        'schema id': schema_id
+                    })
+                    continue
             else:
                 print("Using JSON schema validation...")
                 # Run compliance check using ComplianceSession for JSON schemas
                 compliance_results = global_compliance_session.check_compliance(schema_id, user_mapping)
+                
+                print(f"JSON compliance check completed for schema '{schema_id}'")
+                print(f"JSON compliance results type: {type(compliance_results)}")
+                print(f"JSON compliance results keys: {list(compliance_results.keys()) if isinstance(compliance_results, dict) else 'Not a dict'}")
+                
+                # For JSON schemas, also convert results directly to flat format if using ComplianceSession
+                if isinstance(compliance_results, dict) and 'acquisition_details' in compliance_results:
+                    acquisition_details = compliance_results['acquisition_details']
+                    print(f"JSON schema has acquisition_details with {len(acquisition_details)} acquisitions")
+                    
+                    # Convert JSON results directly to flat format for consistency
+                    for schema_acq_name, acq_details in acquisition_details.items():
+                        input_acq_name = acq_details.get('input_acquisition', schema_acq_name)
+                        
+                        for field_result in acq_details.get('detailed_results', []):
+                            result_item = {
+                                'schema acquisition': schema_acq_name,
+                                'input acquisition': input_acq_name,
+                                'field': field_result.get('field', ''),
+                                'rule_name': field_result.get('rule_name', ''),
+                                'expected': field_result.get('expected', ''),
+                                'actual': field_result.get('actual', ''),
+                                'passed': field_result.get('passed', field_result.get('compliant', False)),
+                                'message': field_result.get('message', ''),
+                                'schema id': schema_id
+                            }
+                            
+                            # Add series information if present
+                            if 'series' in field_result and field_result['series'] is not None:
+                                result_item['series'] = field_result['series']
+                                print(f"JSON: Found series result: series='{field_result['series']}', field='{result_item['field']}'")
+                            
+                            all_results.append(result_item)
+                            print(f"Added JSON result: field='{result_item['field']}', passed={result_item['passed']}")
+                    
+                    print(f"JSON validation results converted: {len(all_results)} total results for this schema")
+                    continue
             
             print(f"Compliance check completed for schema '{schema_id}'")
             print(f"Compliance results type: {type(compliance_results)}")
