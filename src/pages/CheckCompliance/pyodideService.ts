@@ -576,49 +576,34 @@ try:
                     
                     print(f"Python compliance check returned {len(compliance_summary)} results")
                     
-                    # Convert to the format expected by the UI
-                    compliance_results = {
-                        'summary': {'compliance_rate': 0.0, 'total_rules': len(compliance_summary), 'passed_rules': 0},
-                        'acquisition_details': {},
-                        'raw_results': compliance_summary
-                    }
+                    # For Python schemas, convert results directly to the flat format expected by React
+                    print(f"Converting {len(compliance_summary)} Python validation results to React format")
                     
-                    # Group results by acquisition
+                    # Skip the nested acquisition_details structure and convert directly to flat results
                     for result in compliance_summary:
                         schema_acq_name = result.get('schema acquisition', 'unknown')
                         input_acq_name = result.get('input acquisition', 'unknown')
                         
-                        if schema_acq_name not in compliance_results['acquisition_details']:
-                            compliance_results['acquisition_details'][schema_acq_name] = {
-                                'input_acquisition': input_acq_name,
-                                'detailed_results': [],
-                                'overall_compliant': True
-                            }
-                        
-                        # Convert to detailed result format
-                        detailed_result = {
-                            'field': result.get('rule_name', result.get('field', 'unknown')),
+                        # Convert Python result directly to React format
+                        result_item = {
+                            'schema acquisition': schema_acq_name,
+                            'input acquisition': input_acq_name,
+                            'field': result.get('field', ''),
                             'rule_name': result.get('rule_name', 'unknown'),
                             'expected': result.get('expected', ''),
                             'actual': result.get('value', ''),
-                            'compliant': result.get('passed', False),
+                            'passed': result.get('passed', False),
                             'message': result.get('message', ''),
-                            'series': None
+                            'schema id': schema_id
                         }
                         
-                        compliance_results['acquisition_details'][schema_acq_name]['detailed_results'].append(detailed_result)
-                        
-                        if result.get('passed', False):
-                            compliance_results['summary']['passed_rules'] += 1
-                        else:
-                            compliance_results['acquisition_details'][schema_acq_name]['overall_compliant'] = False
+                        all_results.append(result_item)
+                        print(f"Added Python result: rule='{result_item['rule_name']}', passed={result_item['passed']}")
                     
-                    # Calculate compliance rate
-                    if compliance_results['summary']['total_rules'] > 0:
-                        compliance_results['summary']['compliance_rate'] = (
-                            compliance_results['summary']['passed_rules'] / 
-                            compliance_results['summary']['total_rules'] * 100
-                        )
+                    print(f"Python validation results converted: {len(all_results)} total results")
+                    
+                    # Skip the rest of the processing for Python schemas since we've added results directly
+                    continue
                     
                     print(f"Python validation completed: {compliance_results['summary']['passed_rules']}/{compliance_results['summary']['total_rules']} passed ({compliance_results['summary']['compliance_rate']:.1f}%)")
                     
@@ -680,9 +665,10 @@ try:
                         'schema acquisition': schema_acq_name,
                         'input acquisition': input_acq_name,
                         'field': field_result.get('field', ''),
+                        'rule_name': field_result.get('rule_name', ''),
                         'expected': field_result.get('expected', ''),
                         'actual': field_result.get('actual', ''),
-                        'passed': field_result.get('compliant', False),
+                        'passed': field_result.get('passed', field_result.get('compliant', False)),
                         'message': field_result.get('message', ''),
                         'schema id': schema_id
                     }
@@ -743,8 +729,8 @@ json.dumps(serializable_results)
 
 export const removeSchema = async (
     pyodide: ReturnType<typeof usePyodide>,
-    acquisitionName: string,
-    fileName: string,
+    _acquisitionName: string,
+    _fileName: string,
     instanceId: string
 ) => {
     const { runPythonCode, setPythonGlobal } = pyodide;

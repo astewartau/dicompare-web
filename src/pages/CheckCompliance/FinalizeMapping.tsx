@@ -372,9 +372,20 @@ const FinalizeMapping: React.FC<FinalizeMappingProps> = ({ onValidationChange, o
 
                         // Skip adding series results to the regular compliance map - they'll be handled separately
                         if (!item.series) {
-                            const key = item.field || item.rule_name;
+                            // For Python schemas, use rule_name; for JSON schemas, use field
+                            const key = item.rule_name || item.field;
                             // Include the schema ID in the key to make it unique per instance
                             const uniqueKey = schemaId ? `${key}#${schemaId}` : key;
+
+                            console.log('FinalizeMapping: Adding compliance result to map:', {
+                                key,
+                                uniqueKey,
+                                schemaId,
+                                passed: item.passed,
+                                message: item.message,
+                                rule_name: item.rule_name,
+                                field: item.field
+                            });
 
                             cmap[uniqueKey] = {
                                 status: item.passed ? 'ok' : 'error',
