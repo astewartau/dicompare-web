@@ -85,8 +85,8 @@ export const PyodideProvider: React.FC<{ children: React.ReactNode }> = ({ child
             console.log('micropip loaded! Installing dicompare...');
             await pyodideInstance.runPythonAsync(`
         import micropip
-        #await micropip.install("dicompare==0.1.25")
-        await micropip.install("http://localhost:8000/dist/dicompare-0.1.25-py3-none-any.whl")
+        await micropip.install("dicompare==0.1.26")
+        #await micropip.install("http://localhost:8000/dist/dicompare-0.1.26-py3-none-any.whl")
         
         # Initialize global ComplianceSession instance
         from dicompare.compliance_session import ComplianceSession

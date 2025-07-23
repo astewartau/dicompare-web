@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
     return {
         server: {
             port: env.VITE_PORT || 2000,
-            strictPort: true,
+            strictPort: false, // Allow port fallback
             host: true,
         },
         plugins: [react()],

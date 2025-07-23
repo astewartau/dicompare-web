@@ -8,7 +8,17 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --fix",
     "lint:fix": "npx eslint src --ext .ts,.tsx,.js,.jsx --fix",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "test:simple": "TEST_URL=http://localhost:2000 playwright test tests/working-pyodide.spec.ts --project=chromium --headed",
+    "test:against-server": "TEST_URL=http://localhost:8000 playwright test tests/working-pyodide.spec.ts --project=chromium --headed",
+    "test:manual": "playwright test tests/working-pyodide.spec.ts --project=chromium --headed --config=playwright.manual.config.ts",
+    "test:flexible": "playwright test tests/flexible-pyodide.spec.ts --project=chromium --headed --config=playwright.manual.config.ts",
+    "test:auto": "playwright test tests/auto-detect-port.spec.ts --project=chromium --headed --config=playwright.manual.config.ts",
+    "test:final": "TEST_URL=http://localhost:5200 playwright test tests/working-pyodide-final.spec.ts --project=chromium --headed --config=playwright.manual.config.ts"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.1.1",
@@ -51,6 +61,7 @@
     "react-syntax-highlighter": "^15.6.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.1",
     "@types/file-saver": "^2.0.7",
     "@types/react": "^18.3.18",
     "@types/react-beautiful-dnd": "^13.1.8",
