@@ -103,17 +103,9 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
         <div className="p-4 space-y-4">
           {/* Acquisition-Level Fields */}
           <div>
-            <FieldTable
-              fields={acquisition.acquisitionFields}
-              isEditMode={isEditMode}
-              onFieldUpdate={onFieldUpdate}
-              onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'series')}
-              onFieldDelete={onFieldDelete}
-            />
-            
             {/* Always visible field selector */}
             {isEditMode && (
-              <div className="mt-3">
+              <div className="mb-3">
                 <DicomFieldSelector
                   selectedFields={[]}
                   onFieldsChange={(fields) => onFieldAdd(fields)}
@@ -122,6 +114,14 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 />
               </div>
             )}
+            
+            <FieldTable
+              fields={acquisition.acquisitionFields}
+              isEditMode={isEditMode}
+              onFieldUpdate={onFieldUpdate}
+              onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'series')}
+              onFieldDelete={onFieldDelete}
+            />
           </div>
 
           {/* Series-Level Fields */}

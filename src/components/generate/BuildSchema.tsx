@@ -1,13 +1,27 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Plus } from 'lucide-react';
-import { Acquisition, DicomField, Series } from '../../types';
 import { mockAcquisitions } from '../../data/mockAcquisitions';
+import { useAcquisitions } from '../../hooks/useAcquisitions';
 import AcquisitionTable from './AcquisitionTable';
 
 const BuildSchema: React.FC = () => {
   const navigate = useNavigate();
-  const [acquisitions, setAcquisitions] = useState<Acquisition[]>([]);
+  const {
+    acquisitions,
+    setAcquisitions,
+    updateAcquisition,
+    deleteAcquisition,
+    addNewAcquisition,
+    updateField,
+    deleteField,
+    convertFieldLevel,
+    addFields,
+    updateSeries,
+    addSeries,
+    deleteSeries,
+    updateSeriesName
+  } = useAcquisitions();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -38,217 +52,6 @@ const BuildSchema: React.FC = () => {
     handleFileUpload(e.dataTransfer.files);
   }, [handleFileUpload]);
 
-  const addNewAcquisition = () => {
-    const newAcquisition: Acquisition = {
-      id: `acq_${Date.now()}`,
-      protocolName: 'New Acquisition',
-      seriesDescription: '',
-      totalFiles: 0,
-      acquisitionFields: [],
-      seriesFields: [],
-      series: [],
-      metadata: {}
-    };
-    setAcquisitions([...acquisitions, newAcquisition]);
-  };
-
-  const updateAcquisition = (acquisitionId: string, field: keyof Acquisition, value: any) => {
-    setAcquisitions(prev => prev.map(acq => 
-      acq.id === acquisitionId ? { ...acq, [field]: value } : acq
-    ));
-  };
-
-  const deleteAcquisition = (acquisitionId: string) => {
-    setAcquisitions(prev => prev.filter(acq => acq.id !== acquisitionId));
-  };
-
-  const updateField = (acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => {
-    setAcquisitions(prev => prev.map(acq => {
-      if (acq.id !== acquisitionId) return acq;
-      
-      return {
-        ...acq,
-        acquisitionFields: acq.acquisitionFields.map(f => 
-          f.tag === fieldTag ? { ...f, ...updates } : f
-        ),
-        seriesFields: acq.seriesFields.map(f => 
-          f.tag === fieldTag ? { ...f, ...updates } : f
-        ),
-      };
-    }));
-  };
-
-  const convertFieldLevel = (acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series') => {
-    setAcquisitions(prev => prev.map(acq => {
-      if (acq.id !== acquisitionId) return acq;
-      
-      const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTag);
-      const seriesField = acq.seriesFields.find(f => f.tag === fieldTag);
-      const field = acquisitionField || seriesField;
-      
-      if (!field) return acq;
-      
-      if (toLevel === 'acquisition') {
-        return {
-          ...acq,
-          acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTag), { ...field, level: 'acquisition' }],
-          seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag)
-        };
-      } else {
-        // When converting to series level, ensure we have at least 2 series and populate them with the acquisition field's value
-        const currentSeries = acq.series || [];
-        const seriesCount = Math.max(2, currentSeries.length);
-        
-        const updatedSeries = [];
-        for (let i = 0; i < seriesCount; i++) {
-          const existingSeries = currentSeries[i];
-          updatedSeries.push({
-            name: existingSeries?.name || `Series ${i + 1}`,
-            fields: {
-              ...(existingSeries?.fields || {}),
-              [fieldTag]: {
-                value: field.value,
-                dataType: field.dataType,
-                validationRule: field.validationRule,
-              }
-            }
-          });
-        }
-
-        return {
-          ...acq,
-          seriesFields: [...acq.seriesFields.filter(f => f.tag !== fieldTag), { ...field, level: 'series' }],
-          acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
-          series: updatedSeries
-        };
-      }
-    }));
-  };
-
-  const deleteField = (acquisitionId: string, fieldTag: string) => {
-    setAcquisitions(prev => prev.map(acq => {
-      if (acq.id !== acquisitionId) return acq;
-      
-      return {
-        ...acq,
-        acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
-        seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag)
-      };
-    }));
-  };
-
-  const addFields = async (acquisitionId: string, fieldTags: string[]) => {
-    if (fieldTags.length === 0) return;
-    
-    const { getFieldByTag, suggestDataType, suggestValidationConstraint } = await import('../../services/dicomFieldService');
-    
-    // Process each field tag to get enhanced field data
-    const newFieldsPromises = fieldTags.map(async tag => {
-      try {
-        const fieldDef = await getFieldByTag(tag);
-        const vr = fieldDef?.vr || 'UN';
-        const name = fieldDef?.keyword || fieldDef?.name || tag;
-        const dataType = suggestDataType(vr, fieldDef?.valueMultiplicity);
-        const validationRule = fieldDef ? {
-          type: suggestValidationConstraint(fieldDef)
-        } : { type: 'exact' as const };
-        
-        return {
-          tag,
-          name,
-          value: '',
-          vr,
-          level: 'acquisition' as const,
-          dataType,
-          validationRule
-        };
-      } catch (error) {
-        // Fallback if field lookup fails
-        return {
-          tag,
-          name: tag,
-          value: '',
-          vr: 'UN',
-          level: 'acquisition' as const,
-          dataType: 'string' as const,
-          validationRule: { type: 'exact' as const }
-        };
-      }
-    });
-    
-    const newFields = await Promise.all(newFieldsPromises);
-    
-    setAcquisitions(prev => prev.map(acq => {
-      if (acq.id !== acquisitionId) return acq;
-      
-      return {
-        ...acq,
-        acquisitionFields: [...acq.acquisitionFields, ...newFields]
-      };
-    }));
-  };
-
-  const updateSeries = (acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => {
-    setAcquisitions(prev => prev.map(acq => {
-      if (acq.id !== acquisitionId) return acq;
-      
-      const updatedSeries = [...(acq.series || [])];
-      if (!updatedSeries[seriesIndex]) {
-        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: {} };
-      }
-      
-      updatedSeries[seriesIndex] = {
-        ...updatedSeries[seriesIndex],
-        fields: {
-          ...updatedSeries[seriesIndex].fields,
-          [fieldTag]: value
-        }
-      };
-      
-      return { ...acq, series: updatedSeries };
-    }));
-  };
-
-  const addSeries = (acquisitionId: string) => {
-    setAcquisitions(prev => prev.map(acq => {
-      if (acq.id !== acquisitionId) return acq;
-      
-      const currentSeries = acq.series || [];
-      const newSeries: Series = {
-        name: `Series ${currentSeries.length + 1}`,
-        fields: {}
-      };
-      
-      return { ...acq, series: [...currentSeries, newSeries] };
-    }));
-  };
-
-  const deleteSeries = (acquisitionId: string, seriesIndex: number) => {
-    setAcquisitions(prev => prev.map(acq => {
-      if (acq.id !== acquisitionId) return acq;
-      
-      const updatedSeries = [...(acq.series || [])];
-      updatedSeries.splice(seriesIndex, 1);
-      
-      return { ...acq, series: updatedSeries };
-    }));
-  };
-
-  const updateSeriesName = (acquisitionId: string, seriesIndex: number, name: string) => {
-    setAcquisitions(prev => prev.map(acq => {
-      if (acq.id !== acquisitionId) return acq;
-      
-      const updatedSeries = [...(acq.series || [])];
-      if (updatedSeries[seriesIndex]) {
-        updatedSeries[seriesIndex] = {
-          ...updatedSeries[seriesIndex],
-          name
-        };
-      }
-      
-      return { ...acq, series: updatedSeries };
-    }));
-  };
 
   const handleContinue = () => {
     navigate('/generate-template/enter-metadata');
@@ -337,7 +140,7 @@ const BuildSchema: React.FC = () => {
             key={acquisition.id}
             acquisition={acquisition}
             isEditMode={true}
-            onUpdate={(field, value) => updateAcquisition(acquisition.id, field, value)}
+            onUpdate={(field, value) => updateAcquisition(acquisition.id, { [field]: value })}
             onDelete={() => deleteAcquisition(acquisition.id)}
             onFieldUpdate={(fieldTag, updates) => updateField(acquisition.id, fieldTag, updates)}
             onFieldConvert={(fieldTag, toLevel) => convertFieldLevel(acquisition.id, fieldTag, toLevel)}

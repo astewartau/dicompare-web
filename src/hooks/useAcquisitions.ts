@@ -1,0 +1,239 @@
+import { useState, useCallback } from 'react';
+import { Acquisition, DicomField, Series } from '../types';
+import { getFieldByTag, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
+
+export const useAcquisitions = () => {
+  const [acquisitions, setAcquisitions] = useState<Acquisition[]>([]);
+
+  const updateAcquisition = useCallback((id: string, updates: Partial<Acquisition>) => {
+    setAcquisitions(prev => prev.map(acq => 
+      acq.id === id ? { ...acq, ...updates } : acq
+    ));
+  }, []);
+
+  const deleteAcquisition = useCallback((id: string) => {
+    setAcquisitions(prev => prev.filter(acq => acq.id !== id));
+  }, []);
+
+  const addNewAcquisition = useCallback(() => {
+    const newAcquisition: Acquisition = {
+      id: `acq_${Date.now()}`,
+      protocolName: 'New Acquisition',
+      seriesDescription: '',
+      totalFiles: 0,
+      acquisitionFields: [],
+      seriesFields: [],
+      series: [],
+      metadata: {}
+    };
+    setAcquisitions(prev => [...prev, newAcquisition]);
+  }, []);
+
+  const updateField = useCallback((acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      return {
+        ...acq,
+        acquisitionFields: acq.acquisitionFields.map(f => 
+          f.tag === fieldTag ? { ...f, ...updates } : f
+        ),
+        seriesFields: acq.seriesFields.map(f => 
+          f.tag === fieldTag ? { ...f, ...updates } : f
+        ),
+      };
+    }));
+  }, []);
+
+  const deleteField = useCallback((acquisitionId: string, fieldTag: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      return {
+        ...acq,
+        acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
+        seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag),
+        series: acq.series?.map(s => ({
+          ...s,
+          fields: Object.fromEntries(
+            Object.entries(s.fields || {}).filter(([tag]) => tag !== fieldTag)
+          )
+        }))
+      };
+    }));
+  }, []);
+
+  const convertFieldLevel = useCallback((acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series') => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTag);
+      const seriesField = acq.seriesFields.find(f => f.tag === fieldTag);
+      const field = acquisitionField || seriesField;
+      
+      if (!field) return acq;
+      
+      if (toLevel === 'acquisition') {
+        return {
+          ...acq,
+          acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTag), { ...field, level: 'acquisition' }],
+          seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag)
+        };
+      } else {
+        // When converting to series level, ensure we have at least 2 series
+        const currentSeries = acq.series || [];
+        const seriesCount = Math.max(2, currentSeries.length);
+        
+        const updatedSeries = [];
+        for (let i = 0; i < seriesCount; i++) {
+          const existingSeries = currentSeries[i];
+          updatedSeries.push({
+            name: existingSeries?.name || `Series ${i + 1}`,
+            fields: {
+              ...(existingSeries?.fields || {}),
+              [fieldTag]: {
+                value: field.value,
+                dataType: field.dataType,
+                validationRule: field.validationRule,
+              }
+            }
+          });
+        }
+
+        return {
+          ...acq,
+          seriesFields: [...acq.seriesFields.filter(f => f.tag !== fieldTag), { ...field, level: 'series' }],
+          acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
+          series: updatedSeries
+        };
+      }
+    }));
+  }, []);
+
+  const addFields = useCallback(async (acquisitionId: string, fieldTags: string[]) => {
+    if (fieldTags.length === 0) return;
+    
+    // Process each field tag to get enhanced field data
+    const newFieldsPromises = fieldTags.map(async tag => {
+      try {
+        const fieldDef = await getFieldByTag(tag);
+        const vr = fieldDef?.vr || 'UN';
+        const name = fieldDef?.keyword || fieldDef?.name || tag;
+        const dataType = suggestDataType(vr, fieldDef?.valueMultiplicity);
+        const validationRule = fieldDef ? {
+          type: suggestValidationConstraint(fieldDef)
+        } : { type: 'exact' as const };
+        
+        return {
+          tag,
+          name,
+          value: '',
+          vr,
+          level: 'acquisition' as const,
+          dataType,
+          validationRule
+        };
+      } catch (error) {
+        // Fallback if field lookup fails
+        return {
+          tag,
+          name: tag,
+          value: '',
+          vr: 'UN',
+          level: 'acquisition' as const,
+          dataType: 'string' as const,
+          validationRule: { type: 'exact' as const }
+        };
+      }
+    });
+    
+    const newFields = await Promise.all(newFieldsPromises);
+    
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      return {
+        ...acq,
+        acquisitionFields: [...acq.acquisitionFields, ...newFields]
+      };
+    }));
+  }, []);
+
+  const updateSeries = useCallback((acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      if (!updatedSeries[seriesIndex]) {
+        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: {} };
+      }
+      
+      updatedSeries[seriesIndex] = {
+        ...updatedSeries[seriesIndex],
+        fields: {
+          ...updatedSeries[seriesIndex].fields,
+          [fieldTag]: value
+        }
+      };
+      
+      return { ...acq, series: updatedSeries };
+    }));
+  }, []);
+
+  const addSeries = useCallback((acquisitionId: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const currentSeries = acq.series || [];
+      const newSeries: Series = {
+        name: `Series ${currentSeries.length + 1}`,
+        fields: {}
+      };
+      
+      return { ...acq, series: [...currentSeries, newSeries] };
+    }));
+  }, []);
+
+  const deleteSeries = useCallback((acquisitionId: string, seriesIndex: number) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      updatedSeries.splice(seriesIndex, 1);
+      
+      return { ...acq, series: updatedSeries };
+    }));
+  }, []);
+
+  const updateSeriesName = useCallback((acquisitionId: string, seriesIndex: number, name: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      if (updatedSeries[seriesIndex]) {
+        updatedSeries[seriesIndex] = {
+          ...updatedSeries[seriesIndex],
+          name
+        };
+      }
+      
+      return { ...acq, series: updatedSeries };
+    }));
+  }, []);
+
+  return {
+    acquisitions,
+    setAcquisitions,
+    updateAcquisition,
+    deleteAcquisition,
+    addNewAcquisition,
+    updateField,
+    deleteField,
+    convertFieldLevel,
+    addFields,
+    updateSeries,
+    addSeries,
+    deleteSeries,
+    updateSeriesName
+  };
+};

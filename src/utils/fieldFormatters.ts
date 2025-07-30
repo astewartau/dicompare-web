@@ -1,62 +1,84 @@
 import { DicomField, SeriesFieldValue, ValidationRule } from '../types';
+import { FieldValue, validateFieldValue, extractFieldValue } from '../types/fieldValues';
 
+export interface FormatOptions {
+  showConstraint?: boolean;
+  showValue?: boolean;
+}
+
+export function formatFieldDisplay(
+  value: any,
+  validationRule?: ValidationRule,
+  options: FormatOptions = { showConstraint: false, showValue: true }
+): string {
+  // If we're showing constraint and there's a non-exact constraint, show constraint format
+  if (options.showConstraint && validationRule && validationRule.type !== 'exact') {
+    return formatValidationRule(validationRule);
+  }
+  
+  // Otherwise, show the value
+  if (options.showValue !== false) {
+    return formatRawValue(value);
+  }
+  
+  return '-';
+}
+
+// Type-safe version that works with FieldValue
+export function formatTypedFieldValue(
+  fieldValue: FieldValue,
+  validationRule?: ValidationRule,
+  options: FormatOptions = { showConstraint: false, showValue: true }
+): string {
+  // If we're showing constraint and there's a non-exact constraint, show constraint format
+  if (options.showConstraint && validationRule && validationRule.type !== 'exact') {
+    return formatValidationRule(validationRule);
+  }
+  
+  // Otherwise, show the typed value
+  if (options.showValue !== false) {
+    return formatTypedValue(fieldValue);
+  }
+  
+  return '-';
+}
+
+function formatTypedValue(fieldValue: FieldValue): string {
+  switch (fieldValue.type) {
+    case 'string':
+      return fieldValue.value || '-';
+    case 'number':
+      return String(fieldValue.value);
+    case 'list_string':
+      return fieldValue.value.length > 0 ? fieldValue.value.join(', ') : '-';
+    case 'list_number':
+      return fieldValue.value.length > 0 ? fieldValue.value.join(', ') : '-';
+    case 'json':
+      return JSON.stringify(fieldValue.value, null, 2);
+    default:
+      return '-';
+  }
+}
+
+// Backward compatibility - formatFieldValue for DicomField
 export function formatFieldValue(field: DicomField): string {
-  // For DicomField, check if we should show constraint-based value
-  if (field.validationRule && field.validationRule.type !== 'exact') {
-    // For non-exact constraints, show the constraint value
-    switch (field.validationRule.type) {
-      case 'tolerance':
-        return String(field.validationRule.value || 0);
-      case 'range':
-        return `${field.validationRule.min ?? '-∞'} to ${field.validationRule.max ?? '∞'}`;
-      case 'contains':
-        return `contains "${field.validationRule.contains || ''}"`;
-      case 'custom':
-        return 'custom logic';
-    }
+  return formatFieldDisplay(field.value, field.validationRule, { showValue: true, showConstraint: true });
+}
+
+// Backward compatibility - formatSeriesFieldValue
+export function formatSeriesFieldValue(fieldValue: any): string {
+  // Handle new SeriesFieldValue format
+  if (typeof fieldValue === 'object' && fieldValue !== null && 'validationRule' in fieldValue) {
+    const seriesValue = fieldValue as SeriesFieldValue;
+    return formatFieldDisplay(seriesValue.value, seriesValue.validationRule, { showValue: true, showConstraint: true });
   }
   
-  // For exact constraints or when no validation rule, use the main value
-  const value = field.value;
-  
-  if (value === null || value === undefined) {
-    return '-';
-  }
-  
-  if (Array.isArray(value)) {
-    // Format arrays as comma-separated values
-    return value.join(', ');
-  }
-  
-  if (typeof value === 'object') {
-    // Format objects as JSON
-    return JSON.stringify(value, null, 2);
-  }
-  
-  return String(value);
+  // Handle legacy simple values
+  return formatRawValue(fieldValue);
 }
 
 export function formatConstraint(field: DicomField): string {
-  if (!field.validationRule) {
-    return 'exact';
-  }
-  
-  const rule = field.validationRule;
-  
-  switch (rule.type) {
-    case 'exact':
-      return 'exact';
-    case 'tolerance':
-      return `${rule.value || 0} ±${rule.tolerance || 0}`;
-    case 'range':
-      return `range: [${rule.min}, ${rule.max}]`;
-    case 'contains':
-      return `contains: "${rule.contains}"`;
-    case 'custom':
-      return 'custom';
-    default:
-      return rule.type;
-  }
+  return formatValidationRule(field.validationRule);
 }
 
 export function formatDataType(dataType: string): string {
@@ -76,27 +98,11 @@ export function formatDataType(dataType: string): string {
   }
 }
 
-export function formatSeriesFieldValue(fieldValue: any): string {
-  // Handle new SeriesFieldValue format
-  if (typeof fieldValue === 'object' && fieldValue !== null && 'validationRule' in fieldValue) {
-    const seriesValue = fieldValue as SeriesFieldValue;
-    
-    if (seriesValue.validationRule && seriesValue.validationRule.type !== 'exact') {
-      // For non-exact constraints, only show the constraint info
-      return formatValidationRule(seriesValue.validationRule);
-    }
-    
-    // For exact constraints, show the actual value
-    if (seriesValue.value !== undefined) {
-      return formatRawValue(seriesValue.value);
-    }
+export function formatValidationRule(rule?: ValidationRule): string {
+  if (!rule) {
+    return 'exact';
   }
   
-  // Handle legacy simple values
-  return formatRawValue(fieldValue);
-}
-
-export function formatValidationRule(rule: ValidationRule): string {
   switch (rule.type) {
     case 'exact':
       return 'exact';

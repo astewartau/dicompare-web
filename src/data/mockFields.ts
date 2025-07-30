@@ -85,8 +85,8 @@ export const t1MprageFields: EnhancedDicomField[] = [
            f.name === 'EchoTime' ? '3.25' :
            f.name === 'FlipAngle' ? '9' : f.value
   })),
-  // Series-level: typically only ImageType varies
-  { tag: '0008,0008', name: 'ImageType', value: ['ORIGINAL', 'PRIMARY', 'M', 'ND'], vr: 'CS', level: 'series', dataType: 'list_string' }
+  // ImageType is constant in T1 MPRAGE, so make it acquisition-level
+  { tag: '0008,0008', name: 'ImageType', value: ['ORIGINAL', 'PRIMARY', 'M', 'ND'], vr: 'CS', level: 'acquisition', dataType: 'list_string' }
 ];
 
 export const boldFmriFields: EnhancedDicomField[] = [
@@ -102,9 +102,8 @@ export const boldFmriFields: EnhancedDicomField[] = [
            f.name === 'FlipAngle' ? '52' :
            f.name === 'MultibandFactor' ? '8' : f.value
   })),
-  // Series-level: EchoTime and ImageType may vary
-  { tag: '0018,0081', name: 'EchoTime', value: '37', vr: 'DS', level: 'series', dataType: 'number' },
-  { tag: '0008,0008', name: 'ImageType', value: ['ORIGINAL', 'PRIMARY', 'M', 'ND'], vr: 'CS', level: 'series', dataType: 'list_string' }
+  // EchoTime and ImageType are constant in single-series BOLD, so make them acquisition-level
+  { tag: '0008,0008', name: 'ImageType', value: ['ORIGINAL', 'PRIMARY', 'M', 'ND'], vr: 'CS', level: 'acquisition', dataType: 'list_string' }
 ];
 
 export const dtiFields: EnhancedDicomField[] = [
