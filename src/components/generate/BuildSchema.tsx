@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, Plus, Settings, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { Acquisition, DicomField } from '../../types';
-import { mockAcquisitions, mockDicomFields } from '../../data/mockData';
+import { mockAcquisitions, commonAcquisitionFields } from '../../data/mockData';
 
 const BuildSchema: React.FC = () => {
   const navigate = useNavigate();
@@ -237,7 +237,7 @@ const BuildSchema: React.FC = () => {
                       </p>
                       
                       <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {mockDicomFields.map((field) => {
+                        {commonAcquisitionFields.map((field) => {
                           const isSelected = acquisition.acquisitionFields.some(f => f.tag === field.tag);
                           
                           return (
@@ -283,7 +283,7 @@ const BuildSchema: React.FC = () => {
                       </p>
                       
                       <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {mockDicomFields.map((field) => {
+                        {commonAcquisitionFields.map((field) => {
                           const isSelected = acquisition.seriesFields.some(f => f.tag === field.tag);
                           
                           return (

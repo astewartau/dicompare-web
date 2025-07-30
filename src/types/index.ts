@@ -2,10 +2,15 @@
 export interface DicomField {
   tag: string;
   name: string;
-  value: string | number | string[];
+  value: string | number | string[] | number[] | any;
   vr: string; // Value Representation
   level: 'acquisition' | 'series';
 }
+
+// Enhanced field types for validation
+export type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' | 'json';
+export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'custom';
+export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 
 // Acquisition Types
 export interface Acquisition {
@@ -19,17 +24,24 @@ export interface Acquisition {
     manufacturer?: string;
     magneticFieldStrength?: string;
     patientPosition?: string;
+    sequenceName?: string;
+    seriesCount?: number;
+    echoTimes?: string[];
+    multibandFactor?: string;
+    notes?: string;
+    [key: string]: any;
   };
 }
 
 // Schema/Template Types
 export interface ValidationRule {
-  type: 'exact' | 'range' | 'pattern' | 'tolerance' | 'custom';
+  type: ValidationConstraint;
   value?: any;
   min?: number;
   max?: number;
   pattern?: string;
   tolerance?: number;
+  contains?: string;
   customLogic?: string;
 }
 
@@ -39,6 +51,7 @@ export interface SchemaField {
   required: boolean;
   validationRule: ValidationRule;
   level: 'acquisition' | 'series';
+  dataType?: FieldDataType;
 }
 
 export interface Template {
