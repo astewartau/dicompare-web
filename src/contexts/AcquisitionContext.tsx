@@ -1,68 +1,278 @@
-import React, { createContext, useContext, ReactNode } from 'react';
-import { DicomField } from '../types';
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { Acquisition, DicomField, Series } from '../types';
+import { searchDicomFields, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
 
 interface AcquisitionContextType {
-  acquisitionId: string;
-  isEditMode: boolean;
-  onFieldUpdate: (fieldTag: string, updates: Partial<DicomField>) => void;
-  onFieldDelete: (fieldTag: string) => void;
-  onFieldConvert: (fieldTag: string, toLevel: 'acquisition' | 'series') => void;
-  onSeriesUpdate: (seriesIndex: number, fieldTag: string, value: any) => void;
-  onSeriesAdd: () => void;
-  onSeriesDelete: (seriesIndex: number) => void;
-  onSeriesNameUpdate: (seriesIndex: number, name: string) => void;
+  acquisitions: Acquisition[];
+  setAcquisitions: (acquisitions: Acquisition[]) => void;
+  updateAcquisition: (id: string, updates: Partial<Acquisition>) => void;
+  deleteAcquisition: (id: string) => void;
+  addNewAcquisition: () => void;
+  updateField: (acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => void;
+  deleteField: (acquisitionId: string, fieldTag: string) => void;
+  convertFieldLevel: (acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series') => void;
+  addFields: (acquisitionId: string, fieldTags: string[]) => Promise<void>;
+  updateSeries: (acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => void;
+  addSeries: (acquisitionId: string) => void;
+  deleteSeries: (acquisitionId: string, seriesIndex: number) => void;
+  updateSeriesName: (acquisitionId: string, seriesIndex: number, name: string) => void;
 }
 
-const AcquisitionContext = createContext<AcquisitionContextType | null>(null);
+const AcquisitionContext = createContext<AcquisitionContextType | undefined>(undefined);
 
 interface AcquisitionProviderProps {
   children: ReactNode;
-  acquisitionId: string;
-  isEditMode: boolean;
-  onFieldUpdate: (fieldTag: string, updates: Partial<DicomField>) => void;
-  onFieldDelete: (fieldTag: string) => void;
-  onFieldConvert: (fieldTag: string, toLevel: 'acquisition' | 'series') => void;
-  onSeriesUpdate: (seriesIndex: number, fieldTag: string, value: any) => void;
-  onSeriesAdd: () => void;
-  onSeriesDelete: (seriesIndex: number) => void;
-  onSeriesNameUpdate: (seriesIndex: number, name: string) => void;
 }
 
-export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({
-  children,
-  acquisitionId,
-  isEditMode,
-  onFieldUpdate,
-  onFieldDelete,
-  onFieldConvert,
-  onSeriesUpdate,
-  onSeriesAdd,
-  onSeriesDelete,
-  onSeriesNameUpdate
-}) => {
-  const contextValue: AcquisitionContextType = {
-    acquisitionId,
-    isEditMode,
-    onFieldUpdate,
-    onFieldDelete,
-    onFieldConvert,
-    onSeriesUpdate,
-    onSeriesAdd,
-    onSeriesDelete,
-    onSeriesNameUpdate
+export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ children }) => {
+  const [acquisitions, setAcquisitions] = useState<Acquisition[]>([]);
+
+  const updateAcquisition = useCallback((id: string, updates: Partial<Acquisition>) => {
+    setAcquisitions(prev => prev.map(acq => 
+      acq.id === id ? { ...acq, ...updates } : acq
+    ));
+  }, []);
+
+  const deleteAcquisition = useCallback((id: string) => {
+    setAcquisitions(prev => prev.filter(acq => acq.id !== id));
+  }, []);
+
+  const addNewAcquisition = useCallback(() => {
+    const newAcquisition: Acquisition = {
+      id: `acq_${Date.now()}`,
+      protocolName: 'New Acquisition',
+      seriesDescription: '',
+      totalFiles: 0,
+      acquisitionFields: [],
+      seriesFields: [],
+      series: [],
+      metadata: {}
+    };
+    setAcquisitions(prev => [...prev, newAcquisition]);
+  }, []);
+
+  const updateField = useCallback((acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      return {
+        ...acq,
+        acquisitionFields: acq.acquisitionFields.map(f => 
+          f.tag === fieldTag ? { ...f, ...updates } : f
+        ),
+        seriesFields: acq.seriesFields.map(f => 
+          f.tag === fieldTag ? { ...f, ...updates } : f
+        ),
+      };
+    }));
+  }, []);
+
+  const deleteField = useCallback((acquisitionId: string, fieldTag: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      return {
+        ...acq,
+        acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
+        seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag),
+        series: acq.series?.map(s => ({
+          ...s,
+          fields: Object.fromEntries(
+            Object.entries(s.fields || {}).filter(([tag]) => tag !== fieldTag)
+          )
+        }))
+      };
+    }));
+  }, []);
+
+  const convertFieldLevel = useCallback((acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series') => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTag);
+      const seriesField = acq.seriesFields.find(f => f.tag === fieldTag);
+      const field = acquisitionField || seriesField;
+      
+      if (!field) return acq;
+      
+      if (toLevel === 'acquisition') {
+        return {
+          ...acq,
+          acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTag), { ...field, level: 'acquisition' }],
+          seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag)
+        };
+      } else {
+        // When converting to series level, ensure we have at least 2 series
+        const currentSeries = acq.series || [];
+        const seriesCount = Math.max(2, currentSeries.length);
+        
+        const updatedSeries = [];
+        for (let i = 0; i < seriesCount; i++) {
+          const existingSeries = currentSeries[i];
+          updatedSeries.push({
+            name: existingSeries?.name || `Series ${i + 1}`,
+            fields: {
+              ...(existingSeries?.fields || {}),
+              [fieldTag]: {
+                value: field.value,
+                dataType: field.dataType,
+                validationRule: field.validationRule,
+              }
+            }
+          });
+        }
+
+        return {
+          ...acq,
+          seriesFields: [...acq.seriesFields.filter(f => f.tag !== fieldTag), { ...field, level: 'series' }],
+          acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
+          series: updatedSeries
+        };
+      }
+    }));
+  }, []);
+
+  const addFields = useCallback(async (acquisitionId: string, fieldTags: string[]) => {
+    if (fieldTags.length === 0) return;
+    
+    // Process each field tag to get enhanced field data from local service
+    const newFieldsPromises = fieldTags.map(async tag => {
+      try {
+        // Use local DICOM field service (no Pyodide needed!)
+        const results = await searchDicomFields(tag, 1);
+        const fieldDef = results.find(f => f.tag.replace(/[()]/g, '') === tag);
+        
+        const vr = fieldDef?.vr || fieldDef?.valueRepresentation || 'UN';
+        const name = fieldDef?.name || tag;
+        const dataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
+        const validationRule = fieldDef ? {
+          type: suggestValidationConstraint(fieldDef)
+        } : { type: 'exact' as const };
+        
+        return {
+          tag,
+          name,
+          value: '',
+          vr,
+          level: 'acquisition' as const,
+          dataType,
+          validationRule
+        };
+      } catch (error) {
+        // Fallback if field lookup fails
+        return {
+          tag,
+          name: tag,
+          value: '',
+          vr: 'UN',
+          level: 'acquisition' as const,
+          dataType: 'string' as const,
+          validationRule: { type: 'exact' as const }
+        };
+      }
+    });
+    
+    const newFields = await Promise.all(newFieldsPromises);
+    
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      return {
+        ...acq,
+        acquisitionFields: [...acq.acquisitionFields, ...newFields]
+      };
+    }));
+  }, []);
+
+  const updateSeries = useCallback((acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      if (!updatedSeries[seriesIndex]) {
+        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: {} };
+      }
+      
+      updatedSeries[seriesIndex] = {
+        ...updatedSeries[seriesIndex],
+        fields: {
+          ...updatedSeries[seriesIndex].fields,
+          [fieldTag]: value
+        }
+      };
+      
+      return { ...acq, series: updatedSeries };
+    }));
+  }, []);
+
+  const addSeries = useCallback((acquisitionId: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const currentSeries = acq.series || [];
+      const newSeries: Series = {
+        name: `Series ${currentSeries.length + 1}`,
+        fields: {}
+      };
+      
+      return { ...acq, series: [...currentSeries, newSeries] };
+    }));
+  }, []);
+
+  const deleteSeries = useCallback((acquisitionId: string, seriesIndex: number) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      updatedSeries.splice(seriesIndex, 1);
+      
+      return { ...acq, series: updatedSeries };
+    }));
+  }, []);
+
+  const updateSeriesName = useCallback((acquisitionId: string, seriesIndex: number, name: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      if (updatedSeries[seriesIndex]) {
+        updatedSeries[seriesIndex] = {
+          ...updatedSeries[seriesIndex],
+          name
+        };
+      }
+      
+      return { ...acq, series: updatedSeries };
+    }));
+  }, []);
+
+  const value: AcquisitionContextType = {
+    acquisitions,
+    setAcquisitions,
+    updateAcquisition,
+    deleteAcquisition,
+    addNewAcquisition,
+    updateField,
+    deleteField,
+    convertFieldLevel,
+    addFields,
+    updateSeries,
+    addSeries,
+    deleteSeries,
+    updateSeriesName
   };
 
   return (
-    <AcquisitionContext.Provider value={contextValue}>
+    <AcquisitionContext.Provider value={value}>
       {children}
     </AcquisitionContext.Provider>
   );
 };
 
-export const useAcquisitionContext = (): AcquisitionContextType => {
+export const useAcquisitions = (): AcquisitionContextType => {
   const context = useContext(AcquisitionContext);
-  if (!context) {
-    throw new Error('useAcquisitionContext must be used within an AcquisitionProvider');
+  if (context === undefined) {
+    throw new Error('useAcquisitions must be used within an AcquisitionProvider');
   }
   return context;
 };

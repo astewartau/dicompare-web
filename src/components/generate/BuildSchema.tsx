@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Plus, Loader2 } from 'lucide-react';
 import { dicompareAPI, type AnalysisResult } from '../../services/DicompareAPI';
-import { useAcquisitions } from '../../hooks/useAcquisitions';
+import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import AcquisitionTable from './AcquisitionTable';
 
 const BuildSchema: React.FC = () => {
