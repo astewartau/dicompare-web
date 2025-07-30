@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, Database, Eye, Loader, CheckCircle } from 'lucide-react';
 import { Acquisition, ProcessingProgress } from '../../types';
 import { mockAcquisitions } from '../../data/mockData';
+import AcquisitionTable from '../generate/AcquisitionTable';
 
 const DataLoading: React.FC = () => {
   const navigate = useNavigate();
@@ -67,11 +68,6 @@ const DataLoading: React.FC = () => {
 
   const handleContinue = () => {
     navigate('/check-compliance/schema-selection');
-  };
-
-  const visualizeData = (acquisition: Acquisition) => {
-    // This would open a modal or navigate to a data visualization view
-    console.log('Visualizing data for:', acquisition.protocolName);
   };
 
   if (isProcessing) {
@@ -174,7 +170,7 @@ const DataLoading: React.FC = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
@@ -231,52 +227,29 @@ const DataLoading: React.FC = () => {
         </div>
       </div>
 
-      {/* Acquisitions List */}
-      <div className="space-y-4 mb-8">
-        <h3 className="text-lg font-semibold text-gray-900">Detected Acquisitions</h3>
+      {/* Acquisitions Grid */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Detected Acquisitions</h3>
         
-        {loadedData.map((acquisition) => (
-          <div
-            key={acquisition.id}
-            className="bg-white rounded-lg shadow-md p-6 border border-gray-200"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h4 className="text-lg font-medium text-gray-900 mb-1">
-                  {acquisition.protocolName}
-                </h4>
-                <p className="text-gray-600 mb-2">{acquisition.seriesDescription}</p>
-                
-                <div className="flex items-center space-x-4 text-sm text-gray-500">
-                  <span>{acquisition.totalFiles} files</span>
-                  {acquisition.metadata.manufacturer && (
-                    <span>• {acquisition.metadata.manufacturer}</span>
-                  )}
-                  {acquisition.metadata.magneticFieldStrength && (
-                    <span>• {acquisition.metadata.magneticFieldStrength}T</span>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-3">
-                <div className="text-right text-sm">
-                  <div className="text-gray-900 font-medium">
-                    {acquisition.acquisitionFields.length + acquisition.seriesFields.length} fields
-                  </div>
-                  <div className="text-gray-500">extracted</div>
-                </div>
-                
-                <button
-                  onClick={() => visualizeData(acquisition)}
-                  className="p-2 text-gray-400 hover:text-medical-600 hover:bg-medical-50 rounded-lg"
-                  title="Visualize data"
-                >
-                  <Eye className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          {loadedData.map((acquisition) => (
+            <AcquisitionTable
+              key={acquisition.id}
+              acquisition={acquisition}
+              isEditMode={false}
+              onUpdate={() => {}} // No-op for read-only mode
+              onDelete={() => {}} // No-op for read-only mode
+              onFieldUpdate={() => {}} // No-op for read-only mode
+              onFieldConvert={() => {}} // No-op for read-only mode
+              onFieldDelete={() => {}} // No-op for read-only mode
+              onFieldAdd={() => {}} // No-op for read-only mode
+              onSeriesUpdate={() => {}} // No-op for read-only mode
+              onSeriesAdd={() => {}} // No-op for read-only mode
+              onSeriesDelete={() => {}} // No-op for read-only mode
+              onSeriesNameUpdate={() => {}} // No-op for read-only mode
+            />
+          ))}
+        </div>
       </div>
 
       {/* Continue Button */}

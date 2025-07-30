@@ -332,7 +332,7 @@ class DicompareAPI:
                 "description": "Parameters of scanning sequence",
                 "suggested_data_type": "string",
                 "suggested_validation": "exact",
-                "common_values": ["PFP\\SP", "SP", "FS", "SS"]
+                "common_values": ["PFP\\\\SP", "SP", "FS", "SS"]
             },
             "0018,0023": {
                 "tag": "0018,0023",
@@ -638,6 +638,309 @@ class DicompareAPI:
                 "estimated_validation_time": f"{len(acquisitions) * 1.2:.1f}s per study"
             }
         }
+    
+    def parse_schema(self, schema_content: str, format: str = 'json') -> Dict:
+        """Parse uploaded schema file and extract detailed validation rules"""
+        try:
+            if format == 'json':
+                schema_data = json.loads(schema_content)
+            elif format == 'python':
+                # Simple Python schema parsing - execute safe subset
+                local_vars = {}
+                exec(schema_content, {"__builtins__": {}}, local_vars)
+                schema_data = local_vars.get('schema', {})
+            else:
+                raise ValueError(f"Unsupported schema format: {format}")
+            
+            # Extract validation rules from schema
+            validation_rules = []
+            schema_fields = []
+            
+            if 'acquisitions' in schema_data:
+                for acq in schema_data['acquisitions']:
+                    for field in acq.get('acquisition_fields', []):
+                        rule = self._extract_validation_rule(field)
+                        if rule:
+                            validation_rules.append(rule)
+                        schema_fields.append(self._extract_schema_field(field))
+                    
+                    for field in acq.get('series_fields', []):
+                        rule = self._extract_validation_rule(field)
+                        if rule:
+                            validation_rules.append(rule)
+                        schema_fields.append(self._extract_schema_field(field))
+            
+            return {
+                "parsed_schema": {
+                    "title": schema_data.get("title", schema_data.get("name", "Unknown Schema")),
+                    "version": schema_data.get("version", "1.0.0"),
+                    "description": schema_data.get("description", ""),
+                    "acquisitions": schema_data.get("acquisitions", []),
+                    "validation_rules": validation_rules,
+                    "fields": schema_fields,
+                    "metadata": {
+                        "total_acquisitions": len(schema_data.get("acquisitions", [])),
+                        "total_rules": len(validation_rules),
+                        "total_fields": len(schema_fields)
+                    }
+                }
+            }
+        except Exception as e:
+            return {
+                "error": f"Schema parsing failed: {str(e)}",
+                "parsed_schema": None
+            }
+    
+    def _extract_validation_rule(self, field: Dict) -> Dict:
+        """Extract validation rule from field definition"""
+        field_info = self.get_field_info(field.get("tag", ""))
+        validation_type = field_info.get("suggested_validation", "exact")
+        
+        rule = {
+            "fieldPath": field.get("tag", ""),
+            "type": validation_type,
+            "message": f"Validation for {field.get('name', 'field')}"
+        }
+        
+        if "value" in field:
+            rule["value"] = field["value"]
+        elif "values" in field:
+            rule["value"] = field["values"]
+        
+        if validation_type == "tolerance" and "validation_hints" in field_info:
+            hints = field_info["validation_hints"]
+            rule["tolerance"] = hints.get("tolerance_typical", 1.0)
+        elif validation_type == "range" and "validation_hints" in field_info:
+            hints = field_info["validation_hints"]
+            rule["min"] = hints.get("range_typical", [0, 100])[0]
+            rule["max"] = hints.get("range_typical", [0, 100])[1]
+        
+        return rule
+    
+    def _extract_schema_field(self, field: Dict) -> Dict:
+        """Extract schema field information"""
+        field_info = self.get_field_info(field.get("tag", ""))
+        
+        return {
+            "path": field.get("tag", ""),
+            "tag": field.get("tag", ""),
+            "name": field.get("name", field_info.get("name", "Unknown")),
+            "required": field.get("required", True),
+            "dataType": field_info.get("suggested_data_type", "string"),
+            "validation": [self._extract_validation_rule(field)]
+        }
+    
+    def validate_compliance(self, dicom_data: Dict, schema_content: str, format: str = 'json') -> Dict:
+        """Perform real compliance checking using schema rules vs DICOM data"""
+        try:
+            # Parse the schema first
+            parsed = self.parse_schema(schema_content, format)
+            if "error" in parsed:
+                return {"error": parsed["error"]}
+            
+            schema = parsed["parsed_schema"]
+            field_results = []
+            passed = 0
+            failed = 0
+            warnings = 0
+            
+            # Get acquisitions from DICOM data
+            acquisitions = dicom_data.get("acquisitions", [])
+            
+            # Validate each rule against DICOM data
+            for rule in schema["validation_rules"]:
+                result = self._validate_field_rule(rule, acquisitions)
+                field_results.append(result)
+                
+                if result["status"] == "pass":
+                    passed += 1
+                elif result["status"] == "fail":
+                    failed += 1
+                else:
+                    warnings += 1
+            
+            overall_status = "pass" if failed == 0 else ("warning" if failed == 0 and warnings > 0 else "fail")
+            
+            return {
+                "compliance_report": {
+                    "schemaId": "uploaded_schema",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "overallStatus": overall_status,
+                    "fieldResults": field_results,
+                    "summary": {
+                        "total": len(field_results),
+                        "passed": passed,
+                        "failed": failed,
+                        "warnings": warnings
+                    }
+                }
+            }
+        except Exception as e:
+            return {"error": f"Compliance validation failed: {str(e)}"}
+    
+    def _validate_field_rule(self, rule: Dict, acquisitions: List[Dict]) -> Dict:
+        """Validate a single field rule against DICOM acquisitions"""
+        field_path = rule["fieldPath"]
+        expected_value = rule.get("value")
+        validation_type = rule.get("type", "exact")
+        
+        # Find field value in acquisitions
+        actual_value = None
+        found_field = False
+        
+        for acq in acquisitions:
+            # Check acquisition fields
+            for field in acq.get("acquisition_fields", []):
+                if field.get("tag") == field_path:
+                    actual_value = field.get("value")
+                    found_field = True
+                    break
+            
+            # Check series fields
+            if not found_field:
+                for field in acq.get("series_fields", []):
+                    if field.get("tag") == field_path:
+                        actual_value = field.get("values", [])
+                        found_field = True
+                        break
+        
+        if not found_field:
+            return {
+                "fieldPath": field_path,
+                "fieldName": rule.get("message", f"Field {field_path}"),
+                "status": "fail",
+                "message": f"Required field {field_path} not found in DICOM data",
+                "rule": rule
+            }
+        
+        # Validate based on rule type
+        if validation_type == "exact":
+            matches = actual_value == expected_value
+            status = "pass" if matches else "fail"
+            message = f"Expected {expected_value}, got {actual_value}" if not matches else "Value matches expected"
+        
+        elif validation_type == "tolerance":
+            tolerance = rule.get("tolerance", 1.0)
+            if isinstance(actual_value, (int, float)) and isinstance(expected_value, (int, float)):
+                diff = abs(actual_value - expected_value)
+                matches = diff <= tolerance
+                status = "pass" if matches else "fail"
+                message = f"Value {actual_value} within tolerance ±{tolerance} of {expected_value}" if matches else f"Value {actual_value} outside tolerance ±{tolerance} of {expected_value}"
+            else:
+                status = "fail"
+                message = f"Cannot apply tolerance validation to non-numeric values"
+        
+        elif validation_type == "range":
+            min_val = rule.get("min", 0)
+            max_val = rule.get("max", 100)
+            if isinstance(actual_value, (int, float)):
+                matches = min_val <= actual_value <= max_val
+                status = "pass" if matches else "fail"
+                message = f"Value {actual_value} within range [{min_val}, {max_val}]" if matches else f"Value {actual_value} outside range [{min_val}, {max_val}]"
+            else:
+                status = "fail"
+                message = f"Cannot apply range validation to non-numeric value"
+        
+        elif validation_type == "contains":
+            if isinstance(expected_value, list) and actual_value in expected_value:
+                status = "pass"
+                message = f"Value {actual_value} found in allowed values"
+            else:
+                status = "fail"
+                message = f"Value {actual_value} not in allowed values {expected_value}"
+        
+        else:
+            status = "warning"
+            message = f"Unknown validation type: {validation_type}"
+        
+        return {
+            "fieldPath": field_path,
+            "fieldName": rule.get("message", f"Field {field_path}"),
+            "status": status,
+            "expectedValue": expected_value,
+            "actualValue": actual_value,
+            "message": message,
+            "rule": rule
+        }
+    
+    def get_example_schemas(self) -> List[Dict]:
+        """Return pre-loaded example schemas for demo purposes"""
+        return [
+            {
+                "id": "t1_mprage_schema",
+                "name": "T1 MPRAGE Validation Schema",
+                "description": "Standard structural T1-weighted MPRAGE validation template",
+                "category": "Structural MRI",
+                "content": json.dumps({
+                    "title": "T1 MPRAGE Validation Schema",
+                    "version": "1.0.0",
+                    "description": "Validation schema for T1-weighted MPRAGE acquisitions",
+                    "acquisitions": [{
+                        "id": "t1_mprage",
+                        "protocol_name": "T1_MPRAGE",
+                        "acquisition_fields": [
+                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                            {"tag": "0018,0024", "name": "SequenceName", "value": "tfl3d1", "required": True},
+                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 2000, "tolerance": 100, "required": True},
+                            {"tag": "0018,0081", "name": "EchoTime", "value": 3.25, "tolerance": 0.5, "required": True},
+                            {"tag": "0018,1314", "name": "FlipAngle", "value": 9, "tolerance": 1, "required": True}
+                        ]
+                    }]
+                }),
+                "format": "json"
+            },
+            {
+                "id": "bold_fmri_schema",
+                "name": "BOLD fMRI Validation Schema",
+                "description": "Validation schema for BOLD functional MRI acquisitions",
+                "category": "Functional MRI",
+                "content": json.dumps({
+                    "title": "BOLD fMRI Validation Schema",
+                    "version": "1.0.0", 
+                    "description": "Validation schema for BOLD fMRI acquisitions with multiband",
+                    "acquisitions": [{
+                        "id": "bold_fmri",
+                        "protocol_name": "BOLD_fMRI",
+                        "acquisition_fields": [
+                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                            {"tag": "0018,0024", "name": "SequenceName", "value": "epfid2d1_64", "required": True},
+                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 800, "tolerance": 50, "required": True},
+                            {"tag": "0018,0081", "name": "EchoTime", "value": 37, "tolerance": 2, "required": True},
+                            {"tag": "0019,1028", "name": "MultibandFactor", "value": 8, "required": True}
+                        ]
+                    }]
+                }),
+                "format": "json"
+            },
+            {
+                "id": "dti_schema",
+                "name": "DTI Validation Schema",
+                "description": "Validation schema for Diffusion Tensor Imaging",
+                "category": "Diffusion MRI",
+                "content": json.dumps({
+                    "title": "DTI Validation Schema",
+                    "version": "1.0.0",
+                    "description": "Validation schema for 30-direction DTI acquisitions",
+                    "acquisitions": [{
+                        "id": "dti_30dir",
+                        "protocol_name": "DTI_30dir",
+                        "acquisition_fields": [
+                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                            {"tag": "0018,0024", "name": "SequenceName", "value": "ep2d_diff", "required": True},
+                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 8400, "tolerance": 200, "required": True}
+                        ],
+                        "series_fields": [
+                            {"tag": "0018,9087", "name": "DiffusionBValue", "values": [0, 1000], "required": True}
+                        ]
+                    }]
+                }),
+                "format": "json"
+            }
+        ]
+    
+    def get_example_dicom_data(self) -> Dict:
+        """Return example DICOM data (same as analyze_dicom_files for consistency)"""
+        return self.analyze_dicom_files([])
 
 # Create global instance
 dicompare = DicompareAPI()

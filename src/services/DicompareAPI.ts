@@ -1,4 +1,5 @@
 import { pyodideManager } from './PyodideManager';
+import { ParsedSchema, ComplianceReport, SchemaTemplate } from '../types/schema';
 
 export interface AnalysisResult {
   acquisitions: Acquisition[];
@@ -154,6 +155,80 @@ json.dumps(result)
    */
   isInitialized(): boolean {
     return pyodideManager.isInitialized();
+  }
+
+  /**
+   * Parse uploaded schema file and extract detailed validation rules
+   */
+  async parseSchema(schemaContent: string, format: string = 'json'): Promise<ParsedSchema> {
+    await this.ensureInitialized();
+    
+    const result = await pyodideManager.runPython(`
+import json
+result = dicompare.parse_schema(${JSON.stringify(schemaContent)}, "${format}")
+json.dumps(result)
+    `);
+    
+    const parsed = JSON.parse(result);
+    if (parsed.error) {
+      throw new Error(parsed.error);
+    }
+    
+    return parsed.parsed_schema;
+  }
+
+  /**
+   * Perform compliance checking using schema rules vs DICOM data
+   */
+  async validateCompliance(dicomData: AnalysisResult, schemaContent: string, format: string = 'json'): Promise<ComplianceReport> {
+    await this.ensureInitialized();
+    
+    const result = await pyodideManager.runPython(`
+import json
+result = dicompare.validate_compliance(
+    ${JSON.stringify(dicomData)}, 
+    ${JSON.stringify(schemaContent)}, 
+    "${format}"
+)
+json.dumps(result)
+    `);
+    
+    const parsed = JSON.parse(result);
+    if (parsed.error) {
+      throw new Error(parsed.error);
+    }
+    
+    return parsed.compliance_report;
+  }
+
+  /**
+   * Get pre-loaded example schemas for demo purposes
+   */
+  async getExampleSchemas(): Promise<SchemaTemplate[]> {
+    await this.ensureInitialized();
+    
+    const result = await pyodideManager.runPython(`
+import json
+result = dicompare.get_example_schemas()
+json.dumps(result)
+    `);
+    
+    return JSON.parse(result);
+  }
+
+  /**
+   * Get example DICOM data (same as analyzeFiles for consistency)
+   */
+  async getExampleDicomData(): Promise<AnalysisResult> {
+    await this.ensureInitialized();
+    
+    const result = await pyodideManager.runPython(`
+import json
+result = dicompare.get_example_dicom_data()
+json.dumps(result)
+    `);
+    
+    return JSON.parse(result);
   }
 
   /**

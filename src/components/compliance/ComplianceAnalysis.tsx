@@ -22,7 +22,7 @@ const ComplianceAnalysis: React.FC = () => {
   }, []);
 
   const handleBack = () => {
-    navigate('/check-compliance/schema-selection');
+    navigate('/check-compliance/load-and-match');
   };
 
   const handleDownloadReport = () => {
@@ -346,7 +346,7 @@ const ComplianceAnalysis: React.FC = () => {
         
         <div className="space-x-4">
           <button
-            onClick={() => navigate('/check-compliance/data-loading')}
+            onClick={() => navigate('/check-compliance/load-and-match')}
             className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
             Analyze New Data
