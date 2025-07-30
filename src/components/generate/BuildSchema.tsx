@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus } from 'lucide-react';
-import { mockAcquisitions } from '../../data/mockAcquisitions';
+import { Upload, Plus, Loader2 } from 'lucide-react';
+import { dicompareAPI, type AnalysisResult } from '../../services/DicompareAPI';
 import { useAcquisitions } from '../../hooks/useAcquisitions';
 import AcquisitionTable from './AcquisitionTable';
 
@@ -24,24 +24,97 @@ const BuildSchema: React.FC = () => {
   } = useAcquisitions();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
 
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files) return;
 
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadStatus('Preparing files...');
 
-    // Simulate file processing
-    for (let i = 0; i < files.length; i++) {
-      setUploadProgress((i + 1) / files.length * 100);
-      await new Promise(resolve => setTimeout(resolve, 100));
+    try {
+      // Convert FileList to file paths (mock)
+      const filePaths = Array.from(files).map(file => file.name);
+      
+      setUploadStatus('Initializing analysis engine...');
+      setUploadProgress(20);
+      
+      // This will lazy-load Pyodide on first use
+      if (!dicompareAPI.isInitialized()) {
+        setUploadStatus('Loading Python environment (this may take a moment)...');
+      }
+      
+      setUploadProgress(40);
+      
+      // Simulate file processing
+      setUploadStatus('Processing DICOM files...');
+      await dicompareAPI.simulateFileProcessing(files.length);
+      setUploadProgress(70);
+      
+      // Analyze files using the API
+      setUploadStatus('Analyzing acquisitions...');
+      const analysisResult: AnalysisResult = await dicompareAPI.analyzeFiles(filePaths);
+      setUploadProgress(90);
+      
+      // Convert API result to internal format
+      setUploadStatus('Finalizing...');
+      const acquisitions = analysisResult.acquisitions.map(acq => ({
+        id: acq.id,
+        protocolName: acq.protocol_name,
+        seriesDescription: acq.series_description,
+        totalFiles: acq.total_files,
+        acquisitionFields: acq.acquisition_fields.map(field => ({
+          tag: field.tag,
+          name: field.name,
+          value: field.value,
+          vr: field.vr,
+          level: field.level,
+          dataType: field.data_type,
+          validationRule: { type: 'exact' as const }
+        })),
+        seriesFields: acq.series_fields.map(field => ({
+          tag: field.tag,
+          name: field.name,
+          value: field.values?.[0] || field.value,
+          vr: field.vr,
+          level: field.level,
+          dataType: field.data_type,
+          validationRule: { type: 'exact' as const }
+        })),
+        series: acq.series.map(series => ({
+          name: series.name,
+          fields: Object.fromEntries(
+            Object.entries(series.field_values).map(([tag, value]) => [
+              tag,
+              typeof value === 'object' ? value : {
+                value,
+                dataType: typeof value === 'number' ? 'number' : 
+                         Array.isArray(value) ? 'list_string' : 'string',
+                validationRule: { type: 'exact' }
+              }
+            ])
+          )
+        })),
+        metadata: acq.metadata
+      }));
+      
+      setAcquisitions(acquisitions);
+      setUploadProgress(100);
+      
+      console.log('✅ Analysis complete:', analysisResult.summary);
+      
+    } catch (error) {
+      console.error('❌ Upload failed:', error);
+      setUploadStatus('Upload failed. Please try again.');
+    } finally {
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setUploadStatus('');
+      }, 500);
     }
-
-    // Use mock data to simulate processed acquisitions
-    setAcquisitions(mockAcquisitions);
-    setIsUploading(false);
-    setUploadProgress(0);
-  }, []);
+  }, [setAcquisitions]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -98,13 +171,22 @@ const BuildSchema: React.FC = () => {
 
           {isUploading && (
             <div className="mt-6">
-              <div className="bg-gray-200 rounded-full h-2">
+              <div className="flex items-center mb-2">
+                <Loader2 className="h-4 w-4 animate-spin text-medical-600 mr-2" />
+                <span className="text-sm font-medium text-gray-700">{uploadStatus}</span>
+              </div>
+              <div className="bg-gray-200 rounded-full h-3">
                 <div 
-                  className="bg-medical-600 h-2 rounded-full transition-all duration-300"
+                  className="bg-medical-600 h-3 rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <p className="text-sm text-gray-600 mt-2">Processing files... {Math.round(uploadProgress)}%</p>
+              <p className="text-xs text-gray-500 mt-2">
+                {Math.round(uploadProgress)}% complete
+                {uploadProgress >= 40 && uploadProgress < 70 && !dicompareAPI.isInitialized() && 
+                  " • First-time setup may take up to 30 seconds"
+                }
+              </p>
             </div>
           )}
         </div>

@@ -1,6 +1,10 @@
 import { Acquisition } from '../types';
 import { t1MprageFields, boldFmriFields, dtiFields, EnhancedDicomField } from './mockFields';
 
+// NOTE: This mock data has been superseded by the Pyodide-based mock implementation
+// in src/services/PyodideManager.ts for the Generate Template flow.
+// This file is kept for backward compatibility with compliance components.
+
 // Helper function to separate acquisition vs series fields properly
 const separateFields = (fields: EnhancedDicomField[]) => {
   const acquisitionFields = fields.filter(f => f.level === 'acquisition');

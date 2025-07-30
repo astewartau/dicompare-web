@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { searchDicomFields, getFieldSuggestions, getEnhancedFieldSuggestions, DicomFieldDefinition, isValidDicomTag, suggestDataType, suggestValidationConstraint } from '../../services/dicomFieldService';
+import React, { useState, useEffect, useRef, KeyboardEvent, FormEvent } from 'react';
+import { dicompareAPI, type FieldDictionary } from '../../services/DicompareAPI';
+import { isValidDicomTag } from '../../services/dicomFieldService';
 
 interface DicomFieldSelectorProps {
   selectedFields: string[];
@@ -11,7 +12,7 @@ interface DicomFieldSelectorProps {
   className?: string;
 }
 
-const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
+const DicomFieldSelector = ({
   selectedFields,
   onFieldsChange,
   placeholder = "Search DICOM fields by name or tag...",
@@ -21,7 +22,7 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
   className = ""
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState<DicomFieldDefinition[]>([]);
+  const [suggestions, setSuggestions] = useState<FieldDictionary[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,11 +38,16 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
       if (searchTerm.trim().length > 0) {
         setIsLoading(true);
         try {
-          const results = showSuggestions 
-            ? await getEnhancedFieldSuggestions(searchTerm, 10)
-            : await getFieldSuggestions(searchTerm, 10);
-          setSuggestions(results);
-          setIsDropdownOpen(true);
+          // Only search if Pyodide is already initialized to avoid loading delay in search
+          if (dicompareAPI.isInitialized()) {
+            const results = await dicompareAPI.searchFields(searchTerm, 10);
+            setSuggestions(results);
+            setIsDropdownOpen(true);
+          } else {
+            // Fall back to empty results if Pyodide not initialized
+            setSuggestions([]);
+            setIsDropdownOpen(false);
+          }
         } catch (error) {
           console.error('Error searching DICOM fields:', error);
           setSuggestions([]);
@@ -70,7 +76,7 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleFieldSelect = (field: DicomFieldDefinition) => {
+  const handleFieldSelect = (field: FieldDictionary) => {
     if (!selectedFields.includes(field.tag) && (!maxSelections || selectedFields.length < maxSelections)) {
       onFieldsChange([...selectedFields, field.tag]);
     }
@@ -85,7 +91,7 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
     onFieldsChange(selectedFields.filter(tag => tag !== fieldTag));
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (!isDropdownOpen || suggestions.length === 0) {
       if (e.key === 'Enter' && searchTerm.trim()) {
         // Allow manual entry of field tags
@@ -136,7 +142,7 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
 
   const getFieldDisplayName = async (tag: string): Promise<string> => {
     try {
-      const results = await searchDicomFields(tag);
+      const results = await dicompareAPI.searchFields(tag, 1);
       const field = results.find(f => f.tag === tag);
       return field ? `${field.name} (${tag})` : tag;
     } catch {
@@ -184,7 +190,7 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
         {isDropdownOpen && suggestions.length > 0 && (
           <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-64 overflow-y-auto">
             {suggestions.map((field, index) => {
-              const enhancedField = field as DicomFieldDefinition & {
+              const enhancedField = field as FieldDictionary & {
                 suggestedDataType?: string;
                 suggestedConstraint?: string;
               };
@@ -288,13 +294,13 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
 };
 
 // Component for displaying selected field tags
-const SelectedFieldTag: React.FC<{ fieldTag: string; onRemove: () => void }> = ({ fieldTag, onRemove }) => {
+const SelectedFieldTag = ({ fieldTag, onRemove }: { fieldTag: string; onRemove: () => void }) => {
   const [displayName, setDisplayName] = useState(fieldTag);
 
   useEffect(() => {
     const loadFieldName = async () => {
       try {
-        const results = await searchDicomFields(fieldTag);
+        const results = await dicompareAPI.searchFields(fieldTag, 1);
         const field = results.find(f => f.tag === fieldTag);
         if (field) {
           setDisplayName(field.name);
@@ -324,11 +330,15 @@ const SelectedFieldTag: React.FC<{ fieldTag: string; onRemove: () => void }> = (
 };
 
 // Modal for manual field tag entry
-const ManualEntryModal: React.FC<{
+const ManualEntryModal = ({ 
+  initialValue, 
+  onSubmit, 
+  onCancel 
+}: {
   initialValue: string;
   onSubmit: () => void;
   onCancel: () => void;
-}> = ({ initialValue, onSubmit, onCancel }) => {
+}) => {
   const [value, setValue] = useState(initialValue);
   const [isValid, setIsValid] = useState(false);
 
@@ -336,7 +346,7 @@ const ManualEntryModal: React.FC<{
     setIsValid(isValidDicomTag(value));
   }, [value]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (isValid) {
       onSubmit();

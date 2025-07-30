@@ -1,5 +1,9 @@
 import { DicomField } from '../types';
 
+// NOTE: The comprehensive DICOM field dictionary has been moved to the Pyodide-based 
+// mock implementation in src/services/PyodideManager.ts for the Generate Template flow.
+// This file is kept for backward compatibility with compliance components.
+
 // Field data types for enhanced validation
 export type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' | 'json';
 export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'custom';
