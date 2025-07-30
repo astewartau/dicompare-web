@@ -8,6 +8,7 @@ import DicomFieldSelector from '../common/DicomFieldSelector';
 interface AcquisitionTableProps {
   acquisition: Acquisition;
   isEditMode: boolean;
+  incompleteFields?: Set<string>;
   onUpdate: (field: keyof Acquisition, value: any) => void;
   onDelete: () => void;
   onFieldUpdate: (fieldTag: string, updates: Partial<DicomField>) => void;
@@ -23,6 +24,7 @@ interface AcquisitionTableProps {
 const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   acquisition,
   isEditMode,
+  incompleteFields = new Set(),
   onUpdate,
   onDelete,
   onFieldUpdate,
@@ -39,78 +41,79 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const hasSeriesFields = acquisition.seriesFields && acquisition.seriesFields.length > 0;
 
   return (
-    <div className="border border-gray-300 rounded-lg bg-white shadow-sm">
-      {/* Header Bar */}
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+    <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit">
+      {/* Compact Header Bar */}
+      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
         <div className="flex items-center justify-between">
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             {isEditMode ? (
-              <div className="space-y-3">
+              <div className="space-y-1">
                 <input
                   type="text"
                   value={acquisition.protocolName}
                   onChange={(e) => onUpdate('protocolName', e.target.value)}
-                  className="text-lg font-semibold text-gray-900 bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-medical-500"
+                  className="text-sm font-semibold text-gray-900 bg-white border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-medical-500"
                   placeholder="Acquisition Name"
                 />
                 <input
                   type="text"
                   value={acquisition.seriesDescription}
                   onChange={(e) => onUpdate('seriesDescription', e.target.value)}
-                  className="text-sm text-gray-600 bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-medical-500"
+                  className="text-xs text-gray-600 bg-white border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-medical-500"
                   placeholder="Description"
                 />
               </div>
             ) : (
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">{acquisition.protocolName}</h3>
-                <p className="text-sm text-gray-600">{acquisition.seriesDescription}</p>
+                <h3 className="text-sm font-semibold text-gray-900 truncate">{acquisition.protocolName}</h3>
+                <p className="text-xs text-gray-600 truncate">{acquisition.seriesDescription}</p>
               </div>
             )}
           </div>
           
-          <div className="flex items-center space-x-2">
-            {acquisition.totalFiles > 0 && (
-              <span className="text-sm text-gray-500">
-                {acquisition.totalFiles} files • {acquisition.acquisitionFields.length} constant fields
-                {hasSeriesFields && ` • ${acquisition.seriesFields.length} varying fields`}
-              </span>
-            )}
-            
+          <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
             {isEditMode && (
               <button
                 onClick={onDelete}
-                className="p-1.5 text-gray-600 hover:text-red-600 transition-colors"
+                className="p-1 text-gray-600 hover:text-red-600 transition-colors"
                 title="Delete acquisition"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3 w-3" />
               </button>
             )}
             
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1.5 text-gray-600 hover:text-gray-800 transition-colors"
+              className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
               title={isExpanded ? 'Collapse' : 'Expand'}
             >
-              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             </button>
           </div>
         </div>
+        
+        {/* Compact stats row */}
+        {acquisition.totalFiles > 0 && (
+          <div className="mt-1 text-xs text-gray-500">
+            {acquisition.totalFiles} files • {acquisition.acquisitionFields.length} fields
+            {hasSeriesFields && ` • ${acquisition.seriesFields.length} varying`}
+          </div>
+        )}
       </div>
 
-      {/* Body Content */}
+      {/* Compact Body Content */}
       {isExpanded && (
-        <div className="p-4 space-y-4">
+        <div className="p-3 space-y-3">
           {/* Acquisition-Level Fields */}
           <div>
-            {/* Always visible field selector */}
+            {/* Compact field selector */}
             {isEditMode && (
-              <div className="mb-3">
+              <div className="mb-2">
                 <DicomFieldSelector
                   selectedFields={[]}
                   onFieldsChange={(fields) => onFieldAdd(fields)}
-                  placeholder="Search and add DICOM fields..."
-                  className="w-full"
+                  placeholder="Add DICOM fields..."
+                  className="w-full text-sm"
                 />
               </div>
             )}
@@ -118,6 +121,8 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
             <FieldTable
               fields={acquisition.acquisitionFields}
               isEditMode={isEditMode}
+              incompleteFields={incompleteFields}
+              acquisitionId={acquisition.id}
               onFieldUpdate={onFieldUpdate}
               onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'series')}
               onFieldDelete={onFieldDelete}
@@ -131,6 +136,8 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 seriesFields={acquisition.seriesFields}
                 series={acquisition.series || []}
                 isEditMode={isEditMode}
+                incompleteFields={incompleteFields}
+                acquisitionId={acquisition.id}
                 onSeriesUpdate={onSeriesUpdate}
                 onSeriesAdd={onSeriesAdd}
                 onSeriesDelete={onSeriesDelete}

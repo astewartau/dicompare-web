@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Acquisition, DicomField, Series } from '../types';
-import { getFieldByTag, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
+import { searchDicomFields, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
 
 export const useAcquisitions = () => {
   const [acquisitions, setAcquisitions] = useState<Acquisition[]>([]);
@@ -113,13 +113,16 @@ export const useAcquisitions = () => {
   const addFields = useCallback(async (acquisitionId: string, fieldTags: string[]) => {
     if (fieldTags.length === 0) return;
     
-    // Process each field tag to get enhanced field data
+    // Process each field tag to get enhanced field data from local service
     const newFieldsPromises = fieldTags.map(async tag => {
       try {
-        const fieldDef = await getFieldByTag(tag);
-        const vr = fieldDef?.vr || 'UN';
-        const name = fieldDef?.keyword || fieldDef?.name || tag;
-        const dataType = suggestDataType(vr, fieldDef?.valueMultiplicity);
+        // Use local DICOM field service (no Pyodide needed!)
+        const results = await searchDicomFields(tag, 1);
+        const fieldDef = results.find(f => f.tag.replace(/[()]/g, '') === tag);
+        
+        const vr = fieldDef?.vr || fieldDef?.valueRepresentation || 'UN';
+        const name = fieldDef?.name || tag;
+        const dataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
         const validationRule = fieldDef ? {
           type: suggestValidationConstraint(fieldDef)
         } : { type: 'exact' as const };

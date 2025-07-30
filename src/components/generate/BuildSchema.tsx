@@ -26,6 +26,48 @@ const BuildSchema: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<string>('');
 
+  // Validation logic for field completeness
+  const isFieldValueValid = (field: any) => {
+    if (!field.value && field.value !== 0) return false; // Empty or null/undefined
+    if (typeof field.value === 'string' && field.value.trim() === '') return false; // Empty string
+    if (Array.isArray(field.value) && field.value.length === 0) return false; // Empty array
+    return true;
+  };
+
+  const getIncompleteFields = () => {
+    const incompleteFields = new Set<string>();
+    
+    acquisitions.forEach(acquisition => {
+      // Check acquisition-level fields
+      acquisition.acquisitionFields.forEach(field => {
+        if (!isFieldValueValid(field)) {
+          incompleteFields.add(`${acquisition.id}-${field.tag}`);
+        }
+      });
+      
+      // Check series-level fields
+      acquisition.seriesFields.forEach(field => {
+        if (!isFieldValueValid(field)) {
+          incompleteFields.add(`${acquisition.id}-${field.tag}`);
+        }
+      });
+      
+      // Check series field values
+      acquisition.series?.forEach((series, seriesIndex) => {
+        Object.entries(series.fields || {}).forEach(([fieldTag, fieldValue]) => {
+          if (!isFieldValueValid(fieldValue)) {
+            incompleteFields.add(`${acquisition.id}-series-${seriesIndex}-${fieldTag}`);
+          }
+        });
+      });
+    });
+    
+    return incompleteFields;
+  };
+
+  const incompleteFields = getIncompleteFields();
+  const hasIncompleteFields = incompleteFields.size > 0;
+
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files) return;
 
@@ -207,7 +249,7 @@ const BuildSchema: React.FC = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-4">Build Schema - Step 1</h2>
         <p className="text-gray-600">
@@ -215,13 +257,14 @@ const BuildSchema: React.FC = () => {
         </p>
       </div>
 
-      {/* Acquisitions List */}
-      <div className="space-y-4">
+      {/* Acquisitions Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
         {acquisitions.map((acquisition) => (
           <AcquisitionTable
             key={acquisition.id}
             acquisition={acquisition}
             isEditMode={true}
+            incompleteFields={incompleteFields}
             onUpdate={(field, value) => updateAcquisition(acquisition.id, { [field]: value })}
             onDelete={() => deleteAcquisition(acquisition.id)}
             onFieldUpdate={(fieldTag, updates) => updateField(acquisition.id, fieldTag, updates)}
@@ -237,7 +280,7 @@ const BuildSchema: React.FC = () => {
       </div>
 
       {/* Add New Acquisition Button */}
-      <div className="mt-6">
+      <div className="mt-6 flex justify-center">
         <button
           onClick={addNewAcquisition}
           className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
@@ -248,10 +291,18 @@ const BuildSchema: React.FC = () => {
       </div>
 
       {/* Continue Button */}
-      <div className="mt-8 flex justify-end">
+      <div className="mt-8 flex flex-col items-end">
+        {hasIncompleteFields && (
+          <div className="mb-2 text-sm text-red-600 flex items-center">
+            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            Please complete all field values before continuing ({incompleteFields.size} incomplete)
+          </div>
+        )}
         <button
           onClick={handleContinue}
-          disabled={acquisitions.length === 0}
+          disabled={acquisitions.length === 0 || hasIncompleteFields}
           className="px-6 py-3 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
           Continue to Metadata

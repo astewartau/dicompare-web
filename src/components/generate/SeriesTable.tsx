@@ -8,6 +8,8 @@ interface SeriesTableProps {
   seriesFields: DicomField[];
   series: Series[];
   isEditMode: boolean;
+  incompleteFields?: Set<string>;
+  acquisitionId?: string;
   onSeriesUpdate: (seriesIndex: number, fieldTag: string, value: any) => void;
   onSeriesAdd: () => void;
   onSeriesDelete: (seriesIndex: number) => void;
@@ -19,6 +21,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   seriesFields,
   series,
   isEditMode,
+  incompleteFields = new Set(),
+  acquisitionId = '',
   onSeriesUpdate,
   onSeriesAdd,
   onSeriesDelete,
@@ -121,12 +125,18 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                     ser.name
                   )}
                 </td>
-                {seriesFields.map((field) => (
-                  <td key={field.tag} className="px-3 py-2 whitespace-nowrap">
-                    <div
-                      className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
-                      onClick={() => isEditMode && setEditingCell({ seriesIndex, fieldTag: field.tag })}
-                    >
+                {seriesFields.map((field) => {
+                  const seriesFieldKey = `${acquisitionId}-series-${seriesIndex}-${field.tag}`;
+                  const isIncomplete = incompleteFields.has(seriesFieldKey);
+                  
+                  return (
+                    <td key={field.tag} className={`px-3 py-2 whitespace-nowrap ${
+                      isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''
+                    }`}>
+                      <div
+                        className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
+                        onClick={() => isEditMode && setEditingCell({ seriesIndex, fieldTag: field.tag })}
+                      >
                       <div>
                         <p className="text-sm text-gray-900">
                           {ser.fields[field.tag] ? formatSeriesFieldValue(ser.fields[field.tag]) : '-'}
@@ -151,7 +161,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       </div>
                     </div>
                   </td>
-                ))}
+                  );
+                })}
                 {isEditMode && (
                   <td className="px-3 py-2 text-right">
                     <div className={`${

@@ -194,42 +194,9 @@ export function canHaveMultipleValues(vr: string, valueMultiplicity?: string): b
 
 /**
  * Get suggested validation constraint based on VR characteristics
+ * Always returns 'exact' as the default constraint type
  */
 export function getSuggestedConstraintForVR(vr: string, fieldName?: string): 'exact' | 'tolerance' | 'contains' | 'range' {
-  const lowerName = fieldName?.toLowerCase() || '';
-  
-  // Numeric VRs with timing/measurement characteristics often need tolerance
-  if (isNumericVR(vr) && (
-    lowerName.includes('time') || 
-    lowerName.includes('echo') ||
-    lowerName.includes('repetition') ||
-    lowerName.includes('bandwidth') ||
-    lowerName.includes('duration')
-  )) {
-    return 'tolerance';
-  }
-  
-  // Numeric VRs with angle/position characteristics often need range
-  if (isNumericVR(vr) && (
-    lowerName.includes('angle') ||
-    lowerName.includes('flip') ||
-    lowerName.includes('field') ||
-    lowerName.includes('strength') ||
-    lowerName.includes('position')
-  )) {
-    return 'range';
-  }
-  
-  // String VRs with descriptive content often use contains
-  if (['LO', 'LT', 'ST', 'SH', 'UT'].includes(vr) && (
-    lowerName.includes('description') ||
-    lowerName.includes('protocol') ||
-    lowerName.includes('sequence') ||
-    lowerName.includes('name')
-  )) {
-    return 'contains';
-  }
-  
-  // Default to exact match
+  // Always default to exact match for all fields
   return 'exact';
 }

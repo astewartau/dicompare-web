@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, KeyboardEvent, FormEvent } from 'react';
-import { dicompareAPI, type FieldDictionary } from '../../services/DicompareAPI';
-import { isValidDicomTag } from '../../services/dicomFieldService';
+import { searchDicomFields, isValidDicomTag, type DicomFieldDefinition } from '../../services/dicomFieldService';
 
 interface DicomFieldSelectorProps {
   selectedFields: string[];
@@ -22,7 +21,7 @@ const DicomFieldSelector = ({
   className = ""
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState<FieldDictionary[]>([]);
+  const [suggestions, setSuggestions] = useState<DicomFieldDefinition[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,16 +37,10 @@ const DicomFieldSelector = ({
       if (searchTerm.trim().length > 0) {
         setIsLoading(true);
         try {
-          // Only search if Pyodide is already initialized to avoid loading delay in search
-          if (dicompareAPI.isInitialized()) {
-            const results = await dicompareAPI.searchFields(searchTerm, 10);
-            setSuggestions(results);
-            setIsDropdownOpen(true);
-          } else {
-            // Fall back to empty results if Pyodide not initialized
-            setSuggestions([]);
-            setIsDropdownOpen(false);
-          }
+          // Use local DICOM field service for instant search
+          const results = await searchDicomFields(searchTerm, 10);
+          setSuggestions(results);
+          setIsDropdownOpen(true);
         } catch (error) {
           console.error('Error searching DICOM fields:', error);
           setSuggestions([]);
@@ -76,9 +69,11 @@ const DicomFieldSelector = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleFieldSelect = (field: FieldDictionary) => {
-    if (!selectedFields.includes(field.tag) && (!maxSelections || selectedFields.length < maxSelections)) {
-      onFieldsChange([...selectedFields, field.tag]);
+  const handleFieldSelect = (field: DicomFieldDefinition) => {
+    // Convert field.tag format from "(0018,0081)" or "0018,0081" to "0018,0081"
+    const normalizedTag = field.tag.replace(/[()]/g, '');
+    if (!selectedFields.includes(normalizedTag) && (!maxSelections || selectedFields.length < maxSelections)) {
+      onFieldsChange([...selectedFields, normalizedTag]);
     }
     setSearchTerm('');
     setSuggestions([]);
@@ -131,9 +126,9 @@ const DicomFieldSelector = ({
     }
   };
 
-  const handleManualEntrySubmit = () => {
-    if (isValidDicomTag(manualEntry) && !selectedFields.includes(manualEntry)) {
-      onFieldsChange([...selectedFields, manualEntry]);
+  const handleManualEntrySubmit = (value: string) => {
+    if (isValidDicomTag(value) && !selectedFields.includes(value)) {
+      onFieldsChange([...selectedFields, value]);
     }
     setManualEntry('');
     setShowManualEntry(false);
@@ -142,8 +137,8 @@ const DicomFieldSelector = ({
 
   const getFieldDisplayName = async (tag: string): Promise<string> => {
     try {
-      const results = await dicompareAPI.searchFields(tag, 1);
-      const field = results.find(f => f.tag === tag);
+      const results = await searchDicomFields(tag, 1);
+      const field = results.find(f => f.tag.replace(/[()]/g, '') === tag);
       return field ? `${field.name} (${tag})` : tag;
     } catch {
       return tag;
@@ -190,10 +185,7 @@ const DicomFieldSelector = ({
         {isDropdownOpen && suggestions.length > 0 && (
           <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-64 overflow-y-auto">
             {suggestions.map((field, index) => {
-              const enhancedField = field as FieldDictionary & {
-                suggestedDataType?: string;
-                suggestedConstraint?: string;
-              };
+              const normalizedTag = field.tag.replace(/[()]/g, '');
               
               return (
                 <div
@@ -203,13 +195,13 @@ const DicomFieldSelector = ({
                     index === selectedSuggestionIndex 
                       ? 'bg-blue-50 border-blue-200' 
                       : 'hover:bg-gray-50'
-                  } ${selectedFields.includes(field.tag) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } ${selectedFields.includes(normalizedTag) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="font-medium text-gray-900">{field.name}</div>
                       <div className="flex items-center space-x-2 mt-1">
-                        <div className="text-sm text-blue-600 font-mono">{field.tag}</div>
+                        <div className="text-sm text-blue-600 font-mono">{normalizedTag}</div>
                         {field.keyword && (
                           <div className="text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
                             {field.keyword}
@@ -225,16 +217,6 @@ const DicomFieldSelector = ({
                       {field.description && (
                         <div className="text-xs text-gray-500 mt-1 line-clamp-2">
                           {field.description}
-                        </div>
-                      )}
-                      {showSuggestions && enhancedField.suggestedDataType && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                            {enhancedField.suggestedDataType}
-                          </span>
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-800">
-                            {enhancedField.suggestedConstraint}
-                          </span>
                         </div>
                       )}
                     </div>
@@ -300,8 +282,8 @@ const SelectedFieldTag = ({ fieldTag, onRemove }: { fieldTag: string; onRemove: 
   useEffect(() => {
     const loadFieldName = async () => {
       try {
-        const results = await dicompareAPI.searchFields(fieldTag, 1);
-        const field = results.find(f => f.tag === fieldTag);
+        const results = await searchDicomFields(fieldTag, 1);
+        const field = results.find(f => f.tag.replace(/[()]/g, '') === fieldTag);
         if (field) {
           setDisplayName(field.name);
         }
@@ -336,7 +318,7 @@ const ManualEntryModal = ({
   onCancel 
 }: {
   initialValue: string;
-  onSubmit: () => void;
+  onSubmit: (value: string) => void;
   onCancel: () => void;
 }) => {
   const [value, setValue] = useState(initialValue);
@@ -349,7 +331,7 @@ const ManualEntryModal = ({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (isValid) {
-      onSubmit();
+      onSubmit(value);
     }
   };
 
