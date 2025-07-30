@@ -140,60 +140,60 @@ From HCP example schemas:
 ### Architecture & Data Separation
 
 1. **Maintain Clean Data Layer Separation**:
-   - [ ] Keep all mock data isolated in `src/data/` directory
-   - [ ] Create separate modules for different data types (fields, templates, reports)
-   - [ ] Use lightweight data services/hooks to access mock data
+   - [x] Keep all mock data isolated in `src/data/` directory
+   - [x] Create separate modules for different data types (fields, templates, reports)
+   - [x] Use lightweight data services/hooks to access mock data
    - [ ] Avoid importing large data objects directly into components
    - [ ] Create data factories for generating test data on-demand
 
 2. **Prevent File Size Bloat**:
-   - [ ] Split large mock data files into focused, smaller modules
+   - [x] Split large mock data files into focused, smaller modules
    - [ ] Use lazy loading for large datasets (field lists, example reports)
    - [ ] Implement data pagination/virtualization for long lists
-   - [ ] Cache fetched external data (DICOM field list) efficiently
-   - [ ] Avoid duplicating data structures across files
+   - [x] Cache fetched external data (DICOM field list) efficiently
+   - [x] Avoid duplicating data structures across files
 
 3. **Don't Over-Engineer**:
-   - [ ] Start with simple data structures, refactor when needed
-   - [ ] Use existing patterns rather than creating new abstractions
-   - [ ] Keep mock data realistic but not overly complex
-   - [ ] Prioritize readable code over premature optimization
+   - [x] Start with simple data structures, refactor when needed
+   - [x] Use existing patterns rather than creating new abstractions
+   - [x] Keep mock data realistic but not overly complex
+   - [x] Prioritize readable code over premature optimization
 
 ### Immediate Fixes Needed
 
 4. **Update Mock Data Structure** (Based on Pytest Analysis):
-   - [ ] Fix acquisition vs series field classification using real logic from tests:
+   - [x] Fix acquisition vs series field classification using real logic from tests:
      - Most fields (40+) should be acquisition-level (constant within acquisition)
      - Only 1-3 fields typically vary per acquisition (series-level)
      - `ImageType` is primary series differentiator in most cases
-   - [ ] Add realistic field distributions:
+   - [x] Add realistic field distributions:
      - T1 MPRAGE: ~50 acquisition fields, `ImageType` + `SeriesNumber` series fields
      - BOLD: ~45 acquisition fields, `EchoTime` + `ImageType` series fields  
      - DTI: ~40 acquisition fields, `DiffusionBValue` + `ImageType` series fields
-   - [ ] Include proper constraint examples:
+   - [x] Include proper constraint examples:
      - Exact matches: `Manufacturer = "SIEMENS"`
      - Tolerance: `RepetitionTime = 2000 ± 50`
      - Contains: `ProtocolName contains "BOLD"`
      - Range: `FlipAngle between 8-12°`
-   - [ ] Add medical realism to mock data:
+   - [x] Add medical realism to mock data:
      - Proper TR/TE/FA combinations for different sequences
      - Realistic scanner parameters (3T field strength, proper bandwidth values)
      - Multi-echo patterns (10ms, 20ms, 30ms spacing)
-   - [ ] Split into focused files with realistic data volumes
+   - [x] Split into focused files with realistic data volumes
 
 5. **Fetch DICOM Field List**:
-   - [ ] Create lightweight service to fetch from https://raw.githubusercontent.com/astewartau/dcm-check/refs/heads/main/valid_fields.json
-   - [ ] Cache field list locally to avoid repeated fetches
-   - [ ] Parse and structure field list for UI components
-   - [ ] Add field descriptions/metadata if available
-   - [ ] Implement search/filter logic in data layer, not components
+   - [x] Create lightweight service to fetch from https://raw.githubusercontent.com/astewartau/dcm-check/refs/heads/main/valid_fields.json
+   - [x] Cache field list locally to avoid repeated fetches
+   - [x] Parse and structure field list for UI components
+   - [x] Add field descriptions/metadata if available
+   - [x] Implement search/filter logic in data layer, not components
 
 ### New UI Components Needed
 
 6. **Enhanced Field Selection**:
-   - [ ] `DicomFieldSelector` component with search/filter
-   - [ ] Auto-complete functionality
-   - [ ] Manual text entry with validation
+   - [x] `DicomFieldSelector` component with search/filter
+   - [x] Auto-complete functionality
+   - [x] Manual text entry with validation
    - [ ] Field type detection/suggestion
 
 7. **Data Type & Constraint Management**:
@@ -240,27 +240,27 @@ From HCP example schemas:
 ### Data Layer Updates
 
 7. **Restructure Mock Data for Maintainability**:
-   - [ ] Split `mockData.ts` into focused modules:
+   - [x] Split `mockData.ts` into focused modules:
      - `mockFields.ts` - DICOM field definitions and metadata
      - `mockAcquisitions.ts` - Sample acquisition data
      - `mockTemplates.ts` - Example templates/schemas
      - `mockReports.ts` - Compliance reports and public data
-   - [ ] Create lightweight data access services in `src/services/`
+   - [x] Create lightweight data access services in `src/services/`
    - [ ] Use data factories for generating variations on-demand
-   - [ ] Keep individual files under reasonable size limits (~200-300 lines)
+   - [x] Keep individual files under reasonable size limits (~200-300 lines)
 
 8. **Enhanced Types (Keep Minimal)**:
-   - [ ] Update TypeScript interfaces for new field structures
-   - [ ] Add validation constraint types:
+   - [x] Update TypeScript interfaces for new field structures
+   - [x] Add validation constraint types:
      ```typescript
      type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'custom'
      type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA'
      ```
-   - [ ] Include proper data type enums:
+   - [x] Include proper data type enums:
      ```typescript
      type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' | 'json'
      ```
-   - [ ] Add field constraint interface:
+   - [x] Add field constraint interface:
      ```typescript
      interface FieldConstraint {
        type: ValidationConstraint
@@ -272,7 +272,7 @@ From HCP example schemas:
        customLogic?: string
      }
      ```
-   - [ ] Avoid complex type hierarchies - prefer simple, flat structures
+   - [x] Avoid complex type hierarchies - prefer simple, flat structures
 
 ## User Experience Flow
 
