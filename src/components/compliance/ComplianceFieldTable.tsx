@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, AlertTriangle, HelpCircle, ChevronDown, ChevronUp
 import { DicomField, Acquisition, SchemaField } from '../../types';
 import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 import { ComplianceFieldResult } from '../../types/schema';
+import { dicompareAPI, FieldInfo } from '../../services/DicompareAPI';
 
 /**
  * ComplianceFieldTable - UI PROTOTYPE ONLY
@@ -30,6 +31,40 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   const [complianceResults, setComplianceResults] = useState<ComplianceFieldResult[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadedSchemaFields, setLoadedSchemaFields] = useState<DicomField[]>([]);
+
+  // Load schema fields from API
+  const loadSchemaFields = async () => {
+    if (!schemaId) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Get schema fields from Python API
+      const apiFields: FieldInfo[] = await dicompareAPI.getSchemaFields(schemaId);
+      
+      // Convert API format to DicomField format
+      const schemaFields: DicomField[] = apiFields.map(field => ({
+        tag: field.tag,
+        name: field.name,
+        value: field.value,
+        vr: field.vr,
+        level: field.level,
+        dataType: field.data_type,
+        validationRule: field.validation_rule || { type: 'exact' as const },
+        consistency: field.consistency
+      }));
+
+      setLoadedSchemaFields(schemaFields);
+    } catch (err) {
+      console.error('Failed to load schema fields:', err);
+      setError('Failed to load schema fields from API');
+      setLoadedSchemaFields([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Mock compliance validation - UI prototype only
   const performComplianceCheck = async () => {
@@ -79,6 +114,13 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
       setIsLoading(false);
     }
   };
+
+  // Load schema fields when we have a schema (always load for display)
+  useEffect(() => {
+    if (schemaId && loadedSchemaFields.length === 0 && !isLoading && !error) {
+      loadSchemaFields();
+    }
+  }, [schemaId]); // Trigger when schema changes
 
   // Only validate when compliance summary is expanded
   useEffect(() => {
@@ -134,10 +176,18 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   const compliance = getComplianceStats();
   const compliancePercentage = compliance.percentage;
 
-  if (fields.length === 0) {
+  // Always display schema fields when available
+  const fieldsToDisplay = loadedSchemaFields.length > 0 ? loadedSchemaFields : fields;
+  const isSchemaOnlyMode = fields.length === 0 && loadedSchemaFields.length > 0;
+  const hasAcquisitionData = fields.length > 0;
+
+
+  if (fieldsToDisplay.length === 0 && !isLoading) {
     return (
       <div className="border border-gray-200 rounded-md p-4 text-center">
-        <p className="text-gray-500 text-xs">No fields to validate</p>
+        <p className="text-gray-500 text-xs">
+          {schemaId ? 'Loading schema fields...' : 'No fields to display'}
+        </p>
       </div>
     );
   }
@@ -161,15 +211,17 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
                 Field
               </th>
               <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Value
+                Expected Value
               </th>
-              <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                Status
-              </th>
+              {hasAcquisitionData && (
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  Status
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {fields.map((field, index) => {
+            {fieldsToDisplay.map((field, index) => {
               const complianceResult = getFieldComplianceResult(field);
               
               return (
@@ -195,14 +247,16 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
                       )}
                     </div>
                   </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <div 
-                      className="inline-flex items-center justify-center cursor-help"
-                      title={complianceResult.message}
-                    >
-                      {getStatusIcon(complianceResult.status)}
-                    </div>
-                  </td>
+                  {hasAcquisitionData && (
+                    <td className="px-2 py-1.5 text-center">
+                      <div 
+                        className="inline-flex items-center justify-center cursor-help"
+                        title={complianceResult.message}
+                      >
+                        {getStatusIcon(complianceResult.status)}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -210,36 +264,37 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
         </table>
       </div>
 
-      {/* Compliance Summary */}
-      <div className="border border-gray-200 rounded-md overflow-hidden">
-        <button
-          onClick={() => setExpandedCompliance(!expandedCompliance)}
-          className="w-full px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between hover:bg-gray-100 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <span className="text-sm font-medium text-gray-900">Compliance Summary</span>
-            <div className="flex items-center space-x-2 text-xs">
-              {complianceResults.length > 0 ? (
-                <span className={`px-2 py-1 rounded-full ${
-                  compliancePercentage >= 90 ? 'bg-green-100 text-green-800' :
-                  compliancePercentage >= 70 ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {compliancePercentage}% compliant
-                </span>
-              ) : (
-                <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                  Click to validate
-                </span>
-              )}
+      {/* Compliance Summary - only show when we have acquisition data to validate */}
+      {hasAcquisitionData && (
+        <div className="border border-gray-200 rounded-md overflow-hidden">
+          <button
+            onClick={() => setExpandedCompliance(!expandedCompliance)}
+            className="w-full px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between hover:bg-gray-100 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <span className="text-sm font-medium text-gray-900">Compliance Summary</span>
+              <div className="flex items-center space-x-2 text-xs">
+                {complianceResults.length > 0 ? (
+                  <span className={`px-2 py-1 rounded-full ${
+                    compliancePercentage >= 90 ? 'bg-green-100 text-green-800' :
+                    compliancePercentage >= 70 ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {compliancePercentage}% compliant
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                    Click to validate
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-          {expandedCompliance ? (
-            <ChevronUp className="h-4 w-4 text-gray-500" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-gray-500" />
-          )}
-        </button>
+            {expandedCompliance ? (
+              <ChevronUp className="h-4 w-4 text-gray-500" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-gray-500" />
+            )}
+          </button>
         
         {expandedCompliance && (
           <div className="p-3 bg-white space-y-3">
@@ -323,7 +378,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
             )}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

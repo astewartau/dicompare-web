@@ -941,6 +941,84 @@ class DicompareAPI:
     def get_example_dicom_data(self) -> Dict:
         """Return example DICOM data (same as analyze_dicom_files for consistency)"""
         return self.analyze_dicom_files([])
+    
+    def get_schema_fields(self, schema_id: str) -> List[Dict]:
+        """Get field requirements for a specific schema"""
+        schemas = self.get_example_schemas()
+        
+        for schema in schemas:
+            if schema["id"] == schema_id:
+                content = json.loads(schema["content"])
+                acquisition_fields = []
+                
+                for acq in content.get("acquisitions", []):
+                    for field in acq.get("acquisition_fields", []):
+                        # Determine validation rule based on field properties
+                        validation_rule = {"type": "exact"}
+                        if "tolerance" in field:
+                            validation_rule = {
+                                "type": "tolerance", 
+                                "value": field["value"],
+                                "tolerance": field["tolerance"]
+                            }
+                        elif "min" in field or "max" in field:
+                            validation_rule = {
+                                "type": "range",
+                                "min": field.get("min", 0),
+                                "max": field.get("max", 100)
+                            }
+                        
+                        field_info = {
+                            "tag": field["tag"],
+                            "name": field["name"],
+                            "value": field["value"],
+                            "vr": self._get_vr_for_tag(field["tag"]),
+                            "level": "acquisition",
+                            "data_type": self._infer_data_type(field["value"]),
+                            "consistency": "consistent",
+                            "validation_rule": validation_rule
+                        }
+                        acquisition_fields.append(field_info)
+                
+                return acquisition_fields
+        
+        # Return empty list if schema not found
+        return []
+    
+    def _get_vr_for_tag(self, tag: str) -> str:
+        """Get VR (Value Representation) for a DICOM tag"""
+        vr_map = {
+            "0008,0060": "CS",  # Modality
+            "0008,0070": "LO",  # Manufacturer  
+            "0008,103E": "LO",  # SeriesDescription
+            "0018,0024": "SH",  # SequenceName
+            "0018,0080": "DS",  # RepetitionTime
+            "0018,0081": "DS",  # EchoTime
+            "0018,1314": "DS",  # FlipAngle
+            "0018,0087": "DS",  # MagneticFieldStrength
+            "0018,0050": "DS",  # SliceThickness
+            "0018,5100": "CS",  # PatientPosition
+            "0008,0008": "CS",  # ImageType
+            "0019,1028": "IS",  # MultibandFactor (private)
+            "0018,9087": "FD"   # DiffusionBValue
+        }
+        return vr_map.get(tag, "UN")
+    
+    def _infer_data_type(self, value) -> str:
+        """Infer data type from value"""
+        if isinstance(value, str):
+            return "string"
+        elif isinstance(value, (int, float)):
+            return "number"
+        elif isinstance(value, list):
+            if len(value) > 0:
+                if isinstance(value[0], str):
+                    return "list_string"
+                else:
+                    return "list_number"
+            return "list_string"
+        else:
+            return "string"
 
 # Create global instance
 dicompare = DicompareAPI()

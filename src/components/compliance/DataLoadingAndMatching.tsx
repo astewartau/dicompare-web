@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Database, Loader, CheckCircle, FileText, Code, Link2, Plus, X } from 'lucide-react';
+import { Upload, Database, Loader, CheckCircle, FileText, Code, Link2, Plus, X, Trash2 } from 'lucide-react';
 import { Acquisition, ProcessingProgress, Template, DicomField, Series } from '../../types';
 import { dicompareAPI, AnalysisResult } from '../../services/DicompareAPI';
 import { useSchemaContext } from '../../contexts/SchemaContext';
@@ -17,7 +17,8 @@ const DataLoadingAndMatching: React.FC = () => {
     schemas, 
     selectedSchema, 
     selectSchema, 
-    getSchemaContent 
+    getSchemaContent,
+    deleteSchema
   } = useSchemaContext();
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -199,6 +200,36 @@ const DataLoadingAndMatching: React.FC = () => {
       delete newPairings[acquisitionId];
       return newPairings;
     });
+  };
+
+  const handleDeleteSchema = async (schemaId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent the schema selection from firing
+    
+    try {
+      // Remove any pairings with this schema
+      setPairings(prev => {
+        const newPairings = { ...prev };
+        Object.keys(newPairings).forEach(acquisitionId => {
+          if (newPairings[acquisitionId] === schemaId) {
+            delete newPairings[acquisitionId];
+          }
+        });
+        return newPairings;
+      });
+
+      // Clear pre-selection if this schema was selected
+      if (preSelectedSchemaId === schemaId) {
+        setPreSelectedSchemaId(null);
+      }
+
+      // Delete from context (handles uploaded schemas)
+      await deleteSchema(schemaId);
+      
+      // For example schemas, remove from availableSchemas state
+      setAvailableSchemas(prev => prev.filter(schema => schema.id !== schemaId));
+    } catch (error) {
+      console.error('Failed to delete schema:', error);
+    }
   };
 
   const handleContinue = () => {
@@ -394,42 +425,50 @@ const DataLoadingAndMatching: React.FC = () => {
             {getAllAvailableSchemas().map((template) => {
               const isSelected = isForUploadArea && preSelectedSchemaId === template.id;
               return (
-                <button
-                  key={template.id}
-                  onClick={() => {
-                    if (isForUploadArea) {
-                      setPreSelectedSchemaId(template.id);
-                    } else {
-                      console.log('Schema selected for upload area:', template.id);
-                    }
-                  }}
-                  className={`w-full p-3 text-left border rounded-lg transition-all ${
-                    isSelected
-                      ? 'border-medical-300 bg-medical-50'
-                      : 'border-gray-200 hover:border-medical-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h5 className="font-medium text-gray-900 text-sm mb-1">{template.name}</h5>
-                      <p className="text-xs text-gray-600 mb-1 line-clamp-2">
-                        {template.description || 'No description available'}
-                      </p>
-                      <div className="flex items-center space-x-2 text-xs text-gray-500">
-                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                          {template.category}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded-full ${
-                          template.format === 'json' 
-                            ? 'bg-blue-100 text-blue-700' 
-                            : 'bg-green-100 text-green-700'
-                        }`}>
-                          {template.format.toUpperCase()}
-                        </span>
+                <div key={template.id} className="relative group">
+                  <button
+                    onClick={() => {
+                      if (isForUploadArea) {
+                        setPreSelectedSchemaId(template.id);
+                      } else {
+                        console.log('Schema selected for upload area:', template.id);
+                      }
+                    }}
+                    className={`w-full p-3 text-left border rounded-lg transition-all ${
+                      isSelected
+                        ? 'border-medical-300 bg-medical-50'
+                        : 'border-gray-200 hover:border-medical-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h5 className="font-medium text-gray-900 text-sm mb-1">{template.name}</h5>
+                        <p className="text-xs text-gray-600 mb-1 line-clamp-2">
+                          {template.description || 'No description available'}
+                        </p>
+                        <div className="flex items-center space-x-2 text-xs text-gray-500">
+                          <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full">
+                            {template.category}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded-full ${
+                            template.format === 'json' 
+                              ? 'bg-blue-100 text-blue-700' 
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                            {template.format.toUpperCase()}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteSchema(template.id, e)}
+                    className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all bg-white rounded shadow-sm hover:shadow-md"
+                    title="Delete schema"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -510,7 +549,46 @@ const DataLoadingAndMatching: React.FC = () => {
         {loadedData.length === 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea()}
-            {renderSchemaSelector(true)}
+            {preSelectedSchemaId ? (
+              // Show schema details when one is selected for upload area
+              <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit">
+                {/* Template Header */}
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-900 truncate">
+                        {getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.name}
+                      </h3>
+                      <p className="text-xs text-gray-600 truncate">Schema Requirements</p>
+                    </div>
+                    <button
+                      onClick={() => setPreSelectedSchemaId(null)}
+                      className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+                      title="Deselect schema"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    v{getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.version || '1.0.0'} • {getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.authors?.join(', ') || 'Example Schema'}
+                  </div>
+                </div>
+
+                {/* Schema Preview */}
+                <div className="p-3 space-y-3">
+                  <div>
+                    <ComplianceFieldTable
+                      fields={[]} // Empty fields for schema-only display
+                      acquisition={{} as Acquisition} // Empty acquisition object
+                      schemaFields={[]} // Not used anymore, Python API handles schema internally
+                      schemaId={preSelectedSchemaId}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              renderSchemaSelector(true)
+            )}
           </div>
         )}
 
@@ -574,7 +652,7 @@ const DataLoadingAndMatching: React.FC = () => {
                   <div className="p-3 space-y-3">
                     <div>
                       <ComplianceFieldTable
-                        fields={acquisition.acquisitionFields}
+                        fields={acquisition.acquisitionFields} // Pass acquisition fields for compliance validation
                         acquisition={acquisition}
                         schemaFields={[]} // Not used anymore, Python API handles schema internally
                         schemaId={pairedTemplate.id}
@@ -594,32 +672,40 @@ const DataLoadingAndMatching: React.FC = () => {
                   <div className="space-y-2 max-h-96 overflow-y-auto">
                     {getAllAvailableSchemas().map((template) => {
                       return (
-                        <button
-                          key={template.id}
-                          onClick={() => handleTemplatePairing(acquisition.id, template.id)}
-                          className="w-full p-3 text-left border rounded-lg transition-all border-gray-200 hover:border-medical-300 hover:bg-gray-50"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h5 className="font-medium text-gray-900 text-sm mb-1">{template.name}</h5>
-                              <p className="text-xs text-gray-600 mb-1 line-clamp-2">
-                                {template.description || 'No description available'}
-                              </p>
-                              <div className="flex items-center space-x-2 text-xs text-gray-500">
-                                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                                  {template.category}
-                                </span>
-                                <span className={`px-1.5 py-0.5 rounded-full ${
-                                  template.format === 'json' 
-                                    ? 'bg-blue-100 text-blue-700' 
-                                    : 'bg-green-100 text-green-700'
-                                }`}>
-                                  {template.format.toUpperCase()}
-                                </span>
+                        <div key={template.id} className="relative group">
+                          <button
+                            onClick={() => handleTemplatePairing(acquisition.id, template.id)}
+                            className="w-full p-3 text-left border rounded-lg transition-all border-gray-200 hover:border-medical-300 hover:bg-gray-50"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h5 className="font-medium text-gray-900 text-sm mb-1">{template.name}</h5>
+                                <p className="text-xs text-gray-600 mb-1 line-clamp-2">
+                                  {template.description || 'No description available'}
+                                </p>
+                                <div className="flex items-center space-x-2 text-xs text-gray-500">
+                                  <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full">
+                                    {template.category}
+                                  </span>
+                                  <span className={`px-1.5 py-0.5 rounded-full ${
+                                    template.format === 'json' 
+                                      ? 'bg-blue-100 text-blue-700' 
+                                      : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {template.format.toUpperCase()}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </button>
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteSchema(template.id, e)}
+                            className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all bg-white rounded shadow-sm hover:shadow-md"
+                            title="Delete schema"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -639,7 +725,46 @@ const DataLoadingAndMatching: React.FC = () => {
         {loadedData.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea(true)}
-            {renderSchemaSelector(true)}
+            {preSelectedSchemaId ? (
+              // Show schema details when one is selected for upload area
+              <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit">
+                {/* Template Header */}
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-900 truncate">
+                        {getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.name}
+                      </h3>
+                      <p className="text-xs text-gray-600 truncate">Schema Requirements</p>
+                    </div>
+                    <button
+                      onClick={() => setPreSelectedSchemaId(null)}
+                      className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+                      title="Deselect schema"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    v{getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.version || '1.0.0'} • {getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.authors?.join(', ') || 'Example Schema'}
+                  </div>
+                </div>
+
+                {/* Schema Preview */}
+                <div className="p-3 space-y-3">
+                  <div>
+                    <ComplianceFieldTable
+                      fields={[]} // Empty fields for schema-only display
+                      acquisition={{} as Acquisition} // Empty acquisition object
+                      schemaFields={[]} // Not used anymore, Python API handles schema internally
+                      schemaId={preSelectedSchemaId}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              renderSchemaSelector(true)
+            )}
           </div>
         )}
       </div>

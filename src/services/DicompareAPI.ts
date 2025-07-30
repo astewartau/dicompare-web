@@ -31,6 +31,13 @@ export interface FieldInfo {
   level: 'acquisition' | 'series';
   data_type: 'string' | 'number' | 'list_string' | 'list_number' | 'json';
   consistency: 'constant' | 'varying';
+  validation_rule?: {
+    type: 'exact' | 'tolerance' | 'range' | 'contains';
+    value?: any;
+    tolerance?: number;
+    min?: number;
+    max?: number;
+  };
 }
 
 export interface SeriesInfo {
@@ -225,6 +232,21 @@ json.dumps(result)
     const result = await pyodideManager.runPython(`
 import json
 result = dicompare.get_example_dicom_data()
+json.dumps(result)
+    `);
+    
+    return JSON.parse(result);
+  }
+
+  /**
+   * Get schema field requirements for a specific schema
+   */
+  async getSchemaFields(schemaId: string): Promise<FieldInfo[]> {
+    await this.ensureInitialized();
+    
+    const result = await pyodideManager.runPython(`
+import json
+result = dicompare.get_schema_fields("${schemaId}")
 json.dumps(result)
     `);
     
