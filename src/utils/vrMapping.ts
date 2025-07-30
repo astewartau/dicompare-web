@@ -1,0 +1,235 @@
+import { FieldDataType } from '../types';
+
+// Comprehensive VR (Value Representation) to JSON-serializable data type mapping
+// Based on DICOM standard and dicom-parser documentation
+export const VR_TO_DATATYPE_MAP: Record<string, FieldDataType> = {
+  // String types
+  'AE': 'string',        // Application Entity
+  'AS': 'string',        // Age String  
+  'CS': 'string',        // Code String (often single values, sometimes multiple)
+  'DA': 'string',        // Date
+  'DT': 'string',        // Date Time
+  'LO': 'string',        // Long String
+  'LT': 'string',        // Long Text
+  'PN': 'string',        // Person Name (could be object but string for simplicity)
+  'SH': 'string',        // Short String
+  'ST': 'string',        // Short Text
+  'TM': 'string',        // Time
+  'UC': 'string',        // Unlimited Characters
+  'UI': 'string',        // Unique Identifier (UID)
+  'UR': 'string',        // URI/URL
+  'UT': 'string',        // Unlimited Text
+  
+  // Numeric types
+  'DS': 'number',        // Decimal String (numeric data stored as string)
+  'IS': 'number',        // Integer String (integer data stored as string)
+  'FL': 'number',        // Floating Point Single
+  'FD': 'number',        // Floating Point Double
+  'SL': 'number',        // Signed Long
+  'SS': 'number',        // Signed Short
+  'SV': 'number',        // Signed 64-bit Very Long
+  'UL': 'number',        // Unsigned Long
+  'US': 'number',        // Unsigned Short
+  'UV': 'number',        // Unsigned 64-bit Very Long
+  
+  // Binary/Complex types (JSON for complex structures)
+  'AT': 'string',        // Attribute Tag (could be string representation)
+  'OB': 'string',        // Other Byte (binary data as string/base64)
+  'OD': 'string',        // Other Double (binary data as string)
+  'OF': 'string',        // Other Float (binary data as string)
+  'OL': 'string',        // Other Long (binary data as string)
+  'OV': 'string',        // Other 64-bit Very Long (binary data as string)
+  'OW': 'string',        // Other Word (binary data as string)
+  'SQ': 'json',          // Sequence of Items (complex nested structure)
+  'UN': 'string',        // Unknown (default to string)
+};
+
+// Special cases where the data type can vary based on value multiplicity
+export const VR_MULTIPLICITY_CONSIDERATIONS: Record<string, {
+  single: FieldDataType;
+  multiple: FieldDataType;
+}> = {
+  'DS': { single: 'number', multiple: 'list_number' },        // Decimal String
+  'IS': { single: 'number', multiple: 'list_number' },        // Integer String
+  'CS': { single: 'string', multiple: 'list_string' },        // Code String
+  'UI': { single: 'string', multiple: 'list_string' },        // UID (rare but possible)
+  'FL': { single: 'number', multiple: 'list_number' },        // Float
+  'FD': { single: 'number', multiple: 'list_number' },        // Double
+  'UL': { single: 'number', multiple: 'list_number' },        // Unsigned Long
+  'US': { single: 'number', multiple: 'list_number' },        // Unsigned Short
+  'SL': { single: 'number', multiple: 'list_number' },        // Signed Long
+  'SS': { single: 'number', multiple: 'list_number' },        // Signed Short
+};
+
+/**
+ * Determine the most appropriate data type for a DICOM field based on its VR and value multiplicity
+ */
+export function getDataTypeFromVR(
+  vr: string, 
+  valueMultiplicity?: string, 
+  actualValue?: any
+): FieldDataType {
+  // If we have an actual value, prioritize that for type detection
+  if (actualValue !== undefined && actualValue !== null) {
+    if (Array.isArray(actualValue)) {
+      // Determine array element type
+      if (actualValue.length > 0) {
+        const firstElement = actualValue[0];
+        if (typeof firstElement === 'number' || !isNaN(Number(firstElement))) {
+          return 'list_number';
+        }
+        return 'list_string';
+      }
+      // Empty array - fall back to VR-based decision
+    } else if (typeof actualValue === 'object') {
+      return 'json';
+    } else if (typeof actualValue === 'number' || !isNaN(Number(actualValue))) {
+      return 'number';
+    } else if (typeof actualValue === 'string') {
+      return 'string';
+    }
+  }
+  
+  // Check for multiplicity-based type variations
+  if (valueMultiplicity && VR_MULTIPLICITY_CONSIDERATIONS[vr]) {
+    const consideration = VR_MULTIPLICITY_CONSIDERATIONS[vr];
+    
+    // Parse multiplicity (e.g., "1", "1-n", "2-n", "1-3")
+    if (valueMultiplicity.includes('-n') || valueMultiplicity.includes('-')) {
+      const parts = valueMultiplicity.split('-');
+      const minValue = parseInt(parts[0]);
+      const maxValue = parts[1] === 'n' ? Infinity : parseInt(parts[1]);
+      
+      // If maximum is greater than 1, could be multiple values
+      if (maxValue > 1) {
+        return consideration.multiple;
+      }
+    } else {
+      // Single value specified (e.g., "1")
+      const count = parseInt(valueMultiplicity);
+      if (count > 1) {
+        return consideration.multiple;
+      }
+    }
+    
+    return consideration.single;
+  }
+  
+  // Default VR-based mapping
+  return VR_TO_DATATYPE_MAP[vr] || 'string';
+}
+
+/**
+ * Get a human-readable description of what type of data this VR typically contains
+ */
+export function getVRDescription(vr: string): string {
+  const descriptions: Record<string, string> = {
+    'AE': 'Application Entity title',
+    'AS': 'Age in years (e.g., "025Y")',
+    'AT': 'Attribute tag reference',
+    'CS': 'Code string (short identifier)',
+    'DA': 'Date (YYYYMMDD)',
+    'DS': 'Decimal number as string',
+    'DT': 'Date and time',
+    'FL': 'Single-precision floating point',
+    'FD': 'Double-precision floating point',
+    'IS': 'Integer as string',
+    'LO': 'Long string (up to 64 chars)',
+    'LT': 'Long text (up to 10240 chars)',
+    'OB': 'Binary data (bytes)',
+    'OD': 'Double-precision binary data',
+    'OF': 'Single-precision binary data',
+    'OL': 'Long binary data',
+    'OV': '64-bit binary data',
+    'OW': 'Word binary data',
+    'PN': 'Person name',
+    'SH': 'Short string (up to 16 chars)',
+    'SL': 'Signed long integer',
+    'SQ': 'Sequence of items (nested data)',
+    'SS': 'Signed short integer',
+    'ST': 'Short text (up to 1024 chars)',
+    'SV': 'Signed 64-bit integer',
+    'TM': 'Time (HHMMSS)',
+    'UC': 'Unlimited characters',
+    'UI': 'Unique identifier',
+    'UL': 'Unsigned long integer',
+    'UN': 'Unknown format',
+    'UR': 'URI or URL',
+    'US': 'Unsigned short integer',
+    'UT': 'Unlimited text',
+    'UV': 'Unsigned 64-bit integer',
+  };
+  
+  return descriptions[vr] || `Unknown VR type: ${vr}`;
+}
+
+/**
+ * Determine if a VR typically contains numeric data
+ */
+export function isNumericVR(vr: string): boolean {
+  const numericVRs = ['DS', 'IS', 'FL', 'FD', 'SL', 'SS', 'SV', 'UL', 'US', 'UV'];
+  return numericVRs.includes(vr);
+}
+
+/**
+ * Determine if a VR can contain multiple values
+ */
+export function canHaveMultipleValues(vr: string, valueMultiplicity?: string): boolean {
+  if (valueMultiplicity) {
+    // Check if multiplicity allows multiple values
+    if (valueMultiplicity.includes('-n') || valueMultiplicity.includes('-')) {
+      const parts = valueMultiplicity.split('-');
+      const maxValue = parts[1] === 'n' ? Infinity : parseInt(parts[1]);
+      return maxValue > 1;
+    } else {
+      const count = parseInt(valueMultiplicity);
+      return count > 1;
+    }
+  }
+  
+  // Some VRs commonly have multiple values
+  const multiValueVRs = ['CS', 'DS', 'IS', 'UI'];
+  return multiValueVRs.includes(vr);
+}
+
+/**
+ * Get suggested validation constraint based on VR characteristics
+ */
+export function getSuggestedConstraintForVR(vr: string, fieldName?: string): 'exact' | 'tolerance' | 'contains' | 'range' {
+  const lowerName = fieldName?.toLowerCase() || '';
+  
+  // Numeric VRs with timing/measurement characteristics often need tolerance
+  if (isNumericVR(vr) && (
+    lowerName.includes('time') || 
+    lowerName.includes('echo') ||
+    lowerName.includes('repetition') ||
+    lowerName.includes('bandwidth') ||
+    lowerName.includes('duration')
+  )) {
+    return 'tolerance';
+  }
+  
+  // Numeric VRs with angle/position characteristics often need range
+  if (isNumericVR(vr) && (
+    lowerName.includes('angle') ||
+    lowerName.includes('flip') ||
+    lowerName.includes('field') ||
+    lowerName.includes('strength') ||
+    lowerName.includes('position')
+  )) {
+    return 'range';
+  }
+  
+  // String VRs with descriptive content often use contains
+  if (['LO', 'LT', 'ST', 'SH', 'UT'].includes(vr) && (
+    lowerName.includes('description') ||
+    lowerName.includes('protocol') ||
+    lowerName.includes('sequence') ||
+    lowerName.includes('name')
+  )) {
+    return 'contains';
+  }
+  
+  // Default to exact match
+  return 'exact';
+}

@@ -5,12 +5,26 @@ export interface DicomField {
   value: string | number | string[] | number[] | any;
   vr: string; // Value Representation
   level: 'acquisition' | 'series';
+  dataType?: FieldDataType;
+  validationRule?: ValidationRule;
 }
 
 // Enhanced field types for validation
 export type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' | 'json';
 export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'custom';
 export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
+
+// Series Types
+export interface SeriesFieldValue {
+  value: any;
+  dataType?: FieldDataType;
+  validationRule?: ValidationRule;
+}
+
+export interface Series {
+  name: string;
+  fields: { [fieldTag: string]: any | SeriesFieldValue };
+}
 
 // Acquisition Types
 export interface Acquisition {
@@ -20,6 +34,7 @@ export interface Acquisition {
   totalFiles: number;
   acquisitionFields: DicomField[];
   seriesFields: DicomField[];
+  series?: Series[];
   metadata: {
     manufacturer?: string;
     magneticFieldStrength?: string;
@@ -42,6 +57,7 @@ export interface ValidationRule {
   pattern?: string;
   tolerance?: number;
   contains?: string;
+  substring?: string; // Alias for contains
   customLogic?: string;
 }
 

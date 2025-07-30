@@ -1,12 +1,20 @@
 // Service for managing DICOM field data and external field list fetching
 // This maintains the clean separation between mock data and UI components
 
+import { FieldDataType } from '../types';
+import { getDataTypeFromVR, getSuggestedConstraintForVR } from '../utils/vrMapping';
+
 export interface DicomFieldDefinition {
   tag: string;
   name: string;
+  keyword: string;
+  valueRepresentation: string;
+  valueMultiplicity: string;
+  retired: string;
+  id: string;
+  // Legacy compatibility
   vr: string;
   description?: string;
-  keyword?: string;
 }
 
 // Cache for field list to avoid repeated fetches
@@ -28,7 +36,7 @@ export const fetchDicomFieldList = async (): Promise<DicomFieldDefinition[]> => 
   // Create new fetch promise
   fetchPromise = new Promise(async (resolve, reject) => {
     try {
-      const response = await fetch('https://raw.githubusercontent.com/astewartau/dcm-check/refs/heads/main/valid_fields.json');
+      const response = await fetch('https://raw.githubusercontent.com/innolitics/dicom-standard/refs/heads/master/standard/attributes.json');
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -36,20 +44,27 @@ export const fetchDicomFieldList = async (): Promise<DicomFieldDefinition[]> => 
       
       const data = await response.json();
       
-      // Transform the data structure if needed
-      const fieldList: DicomFieldDefinition[] = Object.entries(data).map(([tag, info]: [string, any]) => ({
-        tag,
-        name: info.name || info.keyword || 'Unknown',
-        vr: info.vr || 'UN',
-        description: info.description,
-        keyword: info.keyword
-      }));
+      // Transform the official DICOM standard data
+      const fieldList: DicomFieldDefinition[] = data
+        .filter((field: any) => field.retired !== 'Y') // Exclude retired fields
+        .map((field: any) => ({
+          tag: field.tag,
+          name: field.name,
+          keyword: field.keyword,
+          valueRepresentation: field.valueRepresentation,
+          valueMultiplicity: field.valueMultiplicity,
+          retired: field.retired,
+          id: field.id,
+          // Legacy compatibility
+          vr: field.valueRepresentation,
+          description: `${field.name} (${field.valueRepresentation}, ${field.valueMultiplicity})`
+        }));
 
       // Cache the result
       cachedFieldList = fieldList;
       resolve(fieldList);
     } catch (error) {
-      console.warn('Failed to fetch DICOM field list from external source, using fallback data:', error);
+      console.warn('Failed to fetch DICOM field list from official standard, using fallback data:', error);
       
       // Fallback to mock data if external fetch fails
       const fallbackData = getFallbackFieldList();
@@ -65,9 +80,10 @@ export const fetchDicomFieldList = async (): Promise<DicomFieldDefinition[]> => 
 
 // Fallback field list for offline use or when external source is unavailable
 const getFallbackFieldList = (): DicomFieldDefinition[] => [
-  { tag: '0008,0008', name: 'ImageType', vr: 'CS', description: 'Image identification characteristics' },
-  { tag: '0008,0060', name: 'Modality', vr: 'CS', description: 'Type of equipment that originally acquired the data' },
-  { tag: '0008,0070', name: 'Manufacturer', vr: 'LO', description: 'Manufacturer of the equipment that produced the composite instances' },
+  { tag: '(0008,0008)', name: 'Image Type', keyword: 'ImageType', valueRepresentation: 'CS', valueMultiplicity: '2-n', retired: 'N', id: '00080008', vr: 'CS', description: 'Image identification characteristics' },
+  { tag: '(0008,0060)', name: 'Modality', keyword: 'Modality', valueRepresentation: 'CS', valueMultiplicity: '1', retired: 'N', id: '00080060', vr: 'CS', description: 'Type of equipment that originally acquired the data' },
+  { tag: '(0008,0070)', name: 'Manufacturer', keyword: 'Manufacturer', valueRepresentation: 'LO', valueMultiplicity: '1', retired: 'N', id: '00080070', vr: 'LO', description: 'Manufacturer of the equipment that produced the composite instances' },
+  { tag: '(0018,0081)', name: 'Echo Time', keyword: 'EchoTime', valueRepresentation: 'DS', valueMultiplicity: '1', retired: 'N', id: '00180081', vr: 'DS', description: 'Time in msec between the middle of the excitation pulse and the peak of the echo' },
   { tag: '0008,0080', name: 'InstitutionName', vr: 'LO', description: 'Institution or organization to which the identified individual is responsible' },
   { tag: '0008,1010', name: 'StationName', vr: 'SH', description: 'User defined name identifying the machine' },
   { tag: '0008,1030', name: 'StudyDescription', vr: 'LO', description: 'Institution-generated description or classification of the Study' },
@@ -123,22 +139,53 @@ const getFallbackFieldList = (): DicomFieldDefinition[] => [
   { tag: '0051,1011', name: 'ParallelReductionFactorInPlane', vr: 'DS', description: 'In-plane parallel imaging factor (Siemens private)' }
 ];
 
-// Search/filter functions for field selection UI
-export const searchDicomFields = async (query: string): Promise<DicomFieldDefinition[]> => {
+// Search/filter functions for field selection UI with efficient searching
+export const searchDicomFields = async (query: string, limit: number = 50): Promise<DicomFieldDefinition[]> => {
   const fieldList = await fetchDicomFieldList();
   
   if (!query.trim()) {
-    return fieldList;
+    return fieldList.slice(0, limit);
   }
   
   const lowercaseQuery = query.toLowerCase();
+  const results: DicomFieldDefinition[] = [];
+  const exactMatches: DicomFieldDefinition[] = [];
+  const startsWithMatches: DicomFieldDefinition[] = [];
+  const containsMatches: DicomFieldDefinition[] = [];
   
-  return fieldList.filter(field => 
-    field.name.toLowerCase().includes(lowercaseQuery) ||
-    field.tag.toLowerCase().includes(lowercaseQuery) ||
-    field.description?.toLowerCase().includes(lowercaseQuery) ||
-    field.keyword?.toLowerCase().includes(lowercaseQuery)
-  );
+  // Prioritize search results: exact matches, starts with, then contains
+  for (const field of fieldList) {
+    const name = field.name.toLowerCase();
+    const tag = field.tag.toLowerCase();
+    const keyword = field.keyword.toLowerCase();
+    
+    // Exact matches (highest priority)
+    if (name === lowercaseQuery || tag === lowercaseQuery || keyword === lowercaseQuery) {
+      exactMatches.push(field);
+    }
+    // Starts with matches (medium priority)
+    else if (name.startsWith(lowercaseQuery) || keyword.startsWith(lowercaseQuery) || tag.startsWith(lowercaseQuery)) {
+      startsWithMatches.push(field);
+    }
+    // Contains matches (lowest priority)
+    else if (
+      name.includes(lowercaseQuery) ||
+      tag.includes(lowercaseQuery) ||
+      keyword.includes(lowercaseQuery) ||
+      field.description?.toLowerCase().includes(lowercaseQuery)
+    ) {
+      containsMatches.push(field);
+    }
+    
+    // Early exit if we have enough results
+    if (exactMatches.length + startsWithMatches.length + containsMatches.length >= limit * 2) {
+      break;
+    }
+  }
+  
+  // Combine results in priority order
+  const combinedResults = [...exactMatches, ...startsWithMatches, ...containsMatches];
+  return combinedResults.slice(0, limit);
 };
 
 // Get field definition by tag
@@ -210,4 +257,28 @@ export const getFieldsByCategory = async (): Promise<{ [category: string]: Dicom
   });
   
   return categories;
+};
+
+// Suggest data type based on DICOM VR (Value Representation) using enhanced mapping
+export const suggestDataType = (vr: string, valueMultiplicity?: string, value?: any): FieldDataType => {
+  return getDataTypeFromVR(vr, valueMultiplicity, value);
+};
+
+// Suggest validation constraint based on field characteristics using enhanced VR mapping
+export const suggestValidationConstraint = (field: DicomFieldDefinition, value?: any): 'exact' | 'tolerance' | 'contains' | 'range' => {
+  return getSuggestedConstraintForVR(field.vr, field.name);
+};
+
+// Get field suggestions with data type and constraint recommendations
+export const getEnhancedFieldSuggestions = async (partialInput: string, limit: number = 10): Promise<Array<DicomFieldDefinition & {
+  suggestedDataType: FieldDataType;
+  suggestedConstraint: 'exact' | 'tolerance' | 'contains' | 'range';
+}>> => {
+  const searchResults = await searchDicomFields(partialInput, limit);
+  
+  return searchResults.map(field => ({
+    ...field,
+    suggestedDataType: suggestDataType(field.vr, field.valueMultiplicity),
+    suggestedConstraint: suggestValidationConstraint(field)
+  }));
 };

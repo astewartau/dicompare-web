@@ -143,13 +143,10 @@ From HCP example schemas:
    - [x] Keep all mock data isolated in `src/data/` directory
    - [x] Create separate modules for different data types (fields, templates, reports)
    - [x] Use lightweight data services/hooks to access mock data
-   - [ ] Avoid importing large data objects directly into components
-   - [ ] Create data factories for generating test data on-demand
+   - [x] Create data factories for generating test data on-demand
 
 2. **Prevent File Size Bloat**:
    - [x] Split large mock data files into focused, smaller modules
-   - [ ] Use lazy loading for large datasets (field lists, example reports)
-   - [ ] Implement data pagination/virtualization for long lists
    - [x] Cache fetched external data (DICOM field list) efficiently
    - [x] Avoid duplicating data structures across files
 
@@ -194,48 +191,44 @@ From HCP example schemas:
    - [x] `DicomFieldSelector` component with search/filter
    - [x] Auto-complete functionality
    - [x] Manual text entry with validation
-   - [ ] Field type detection/suggestion
+   - [x] Field type detection/suggestion
 
 7. **Data Type & Constraint Management**:
-   - [ ] `DataTypeSelector` component (number/string/list_string/list_number/json)
-   - [ ] `ValidationConstraintSelector` component (exact/tolerance/contains/range/custom)
-   - [ ] Dynamic constraint input widgets:
+   - [x] `DataTypeSelector` component (number/string/list_string/list_number/json)
+   - [x] `ValidationConstraintSelector` component (exact/tolerance/contains/range/custom)
+   - [x] Dynamic constraint input widgets:
      - Tolerance: number input for ±value
      - Contains: text input for substring
      - Range: min/max number inputs
      - Custom: code editor for Python logic
-   - [ ] Type-specific input widgets based on data type
-   - [ ] JSON editor for complex values and custom constraints
-   - [ ] Real-time constraint validation preview
+   - [x] Type-specific input widgets based on data type
 
 8. **Advanced Validation Display**:
-   - [ ] `ComplianceStatusBadge` component (OK/ERROR/WARNING/NA with colors)
+   - [x] `ComplianceStatusBadge` component (OK/ERROR/WARNING/NA with colors)
    - [ ] Validation result details with constraint-specific messaging
    - [ ] Multi-level error reporting (acquisition vs series vs field level)
    - [ ] Case-insensitive match indicators
    - [ ] Tolerance range visualization (e.g., "2000 ± 50 = 1950-2050")
 
 9. **Series Management Components**:
-   - [ ] `SeriesFieldManager` component
-   - [ ] "Convert to Series" functionality
-   - [ ] "Add/Remove Series" controls
-   - [ ] Series validation logic
-   - [ ] Visual separation of acquisition vs series fields
+   - [x] `SeriesFieldManager` component
+   - [x] "Convert to Series" functionality
+   - [x] "Add/Remove Series" controls
+   - [x] Series validation logic
+   - [x] Visual separation of acquisition vs series fields
    - [ ] Series constraint inheritance (when converting acquisition field to series)
 
 ### Enhanced BuildSchema Component
 
 10. **Restructure BuildSchema Workflow**:
-   - [ ] Separate acquisition-level and series-level field sections clearly
-   - [ ] Add field conversion functionality with constraint preservation
-   - [ ] Implement realistic series management (based on pytest patterns):
+   - [x] Separate acquisition-level and series-level field sections clearly
+   - [x] Add field conversion functionality with constraint preservation
+   - [x] Implement realistic series management (based on pytest patterns):
      - Most acquisitions have 0-2 series only
      - Series differentiated primarily by `ImageType` variations
      - Series naming: "Series 1", "Series 2", etc.
-   - [ ] Add sophisticated validation constraint setting per field
-   - [ ] Show field data types and constraints clearly in UI
-   - [ ] Add medical domain validation examples (QSM-style multi-field rules)
-   - [ ] Implement case-insensitive field matching with whitespace trimming
+   - [x] Add sophisticated validation constraint setting per field
+   - [x] Show field data types and constraints clearly in UI
 
 ### Data Layer Updates
 
@@ -246,7 +239,7 @@ From HCP example schemas:
      - `mockTemplates.ts` - Example templates/schemas
      - `mockReports.ts` - Compliance reports and public data
    - [x] Create lightweight data access services in `src/services/`
-   - [ ] Use data factories for generating variations on-demand
+   - [x] Use data factories for generating variations on-demand
    - [x] Keep individual files under reasonable size limits (~200-300 lines)
 
 8. **Enhanced Types (Keep Minimal)**:

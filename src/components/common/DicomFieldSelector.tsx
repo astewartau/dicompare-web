@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { searchDicomFields, getFieldSuggestions, DicomFieldDefinition, isValidDicomTag } from '../../services/dicomFieldService';
+import { searchDicomFields, getFieldSuggestions, getEnhancedFieldSuggestions, DicomFieldDefinition, isValidDicomTag, suggestDataType, suggestValidationConstraint } from '../../services/dicomFieldService';
 
 interface DicomFieldSelectorProps {
   selectedFields: string[];
@@ -7,6 +7,7 @@ interface DicomFieldSelectorProps {
   placeholder?: string;
   maxSelections?: number;
   showCategories?: boolean;
+  showSuggestions?: boolean;
   className?: string;
 }
 
@@ -16,6 +17,7 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
   placeholder = "Search DICOM fields by name or tag...",
   maxSelections,
   showCategories = true,
+  showSuggestions = true,
   className = ""
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,7 +37,9 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
       if (searchTerm.trim().length > 0) {
         setIsLoading(true);
         try {
-          const results = await getFieldSuggestions(searchTerm, 10);
+          const results = showSuggestions 
+            ? await getEnhancedFieldSuggestions(searchTerm, 10)
+            : await getFieldSuggestions(searchTerm, 10);
           setSuggestions(results);
           setIsDropdownOpen(true);
         } catch (error) {
@@ -178,33 +182,60 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
 
         {/* Suggestions Dropdown */}
         {isDropdownOpen && suggestions.length > 0 && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-64 overflow-y-auto">
-            {suggestions.map((field, index) => (
-              <div
-                key={field.tag}
-                onClick={() => handleFieldSelect(field)}
-                className={`px-4 py-3 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                  index === selectedSuggestionIndex 
-                    ? 'bg-blue-50 border-blue-200' 
-                    : 'hover:bg-gray-50'
-                } ${selectedFields.includes(field.tag) ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{field.name}</div>
-                    <div className="text-sm text-blue-600 font-mono">{field.tag}</div>
-                    {field.description && (
-                      <div className="text-xs text-gray-500 mt-1 line-clamp-2">
-                        {field.description}
+          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-64 overflow-y-auto">
+            {suggestions.map((field, index) => {
+              const enhancedField = field as DicomFieldDefinition & {
+                suggestedDataType?: string;
+                suggestedConstraint?: string;
+              };
+              
+              return (
+                <div
+                  key={field.tag}
+                  onClick={() => handleFieldSelect(field)}
+                  className={`px-4 py-3 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                    index === selectedSuggestionIndex 
+                      ? 'bg-blue-50 border-blue-200' 
+                      : 'hover:bg-gray-50'
+                  } ${selectedFields.includes(field.tag) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{field.name}</div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <div className="text-sm text-blue-600 font-mono">{field.tag}</div>
+                        {field.keyword && (
+                          <div className="text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                            {field.keyword}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-400 ml-2">
-                    {field.vr}
+                      <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+                        <span>VR: {field.valueRepresentation || field.vr}</span>
+                        {field.valueMultiplicity && (
+                          <span>VM: {field.valueMultiplicity}</span>
+                        )}
+                      </div>
+                      {field.description && (
+                        <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                          {field.description}
+                        </div>
+                      )}
+                      {showSuggestions && enhancedField.suggestedDataType && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                            {enhancedField.suggestedDataType}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-800">
+                            {enhancedField.suggestedConstraint}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             
             {/* Manual Entry Option */}
             <div className="px-4 py-2 border-t border-gray-200 bg-gray-50">
@@ -220,7 +251,7 @@ const DicomFieldSelector: React.FC<DicomFieldSelectorProps> = ({
 
         {/* No Results */}
         {isDropdownOpen && !isLoading && searchTerm.length > 0 && suggestions.length === 0 && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
+          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
             <div className="px-4 py-3 text-gray-500 text-center">
               No fields found for "{searchTerm}"
               <button

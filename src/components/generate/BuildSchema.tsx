@@ -1,15 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, Plus, Settings, ChevronDown, ChevronUp, Tag } from 'lucide-react';
-import { Acquisition, DicomField } from '../../types';
-import { mockAcquisitions, commonAcquisitionFields } from '../../data/mockData';
+import { Upload, Plus } from 'lucide-react';
+import { Acquisition, DicomField, Series } from '../../types';
+import { mockAcquisitions } from '../../data/mockAcquisitions';
+import AcquisitionTable from './AcquisitionTable';
 
 const BuildSchema: React.FC = () => {
   const navigate = useNavigate();
   const [acquisitions, setAcquisitions] = useState<Acquisition[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files) return;
@@ -38,62 +38,215 @@ const BuildSchema: React.FC = () => {
     handleFileUpload(e.dataTransfer.files);
   }, [handleFileUpload]);
 
-  const toggleCardExpansion = (acquisitionId: string) => {
-    const newExpanded = new Set(expandedCards);
-    if (newExpanded.has(acquisitionId)) {
-      newExpanded.delete(acquisitionId);
-    } else {
-      newExpanded.add(acquisitionId);
-    }
-    setExpandedCards(newExpanded);
-  };
-
   const addNewAcquisition = () => {
     const newAcquisition: Acquisition = {
       id: `acq_${Date.now()}`,
-      protocolName: 'New Protocol',
-      seriesDescription: 'New Series',
+      protocolName: 'New Acquisition',
+      seriesDescription: '',
       totalFiles: 0,
       acquisitionFields: [],
       seriesFields: [],
+      series: [],
       metadata: {}
     };
     setAcquisitions([...acquisitions, newAcquisition]);
   };
 
-  const updateAcquisitionField = (acquisitionId: string, field: keyof Acquisition, value: any) => {
+  const updateAcquisition = (acquisitionId: string, field: keyof Acquisition, value: any) => {
     setAcquisitions(prev => prev.map(acq => 
       acq.id === acquisitionId ? { ...acq, [field]: value } : acq
     ));
   };
 
-  const toggleFieldSelection = (acquisitionId: string, field: DicomField, level: 'acquisition' | 'series') => {
+  const deleteAcquisition = (acquisitionId: string) => {
+    setAcquisitions(prev => prev.filter(acq => acq.id !== acquisitionId));
+  };
+
+  const updateField = (acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
       
-      const targetFields = level === 'acquisition' ? acq.acquisitionFields : acq.seriesFields;
-      const otherFields = level === 'acquisition' ? acq.seriesFields : acq.acquisitionFields;
+      return {
+        ...acq,
+        acquisitionFields: acq.acquisitionFields.map(f => 
+          f.tag === fieldTag ? { ...f, ...updates } : f
+        ),
+        seriesFields: acq.seriesFields.map(f => 
+          f.tag === fieldTag ? { ...f, ...updates } : f
+        ),
+      };
+    }));
+  };
+
+  const convertFieldLevel = (acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series') => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
       
-      const isAlreadySelected = targetFields.some(f => f.tag === field.tag);
+      const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTag);
+      const seriesField = acq.seriesFields.find(f => f.tag === fieldTag);
+      const field = acquisitionField || seriesField;
       
-      if (isAlreadySelected) {
-        // Remove from current level
-        const updatedFields = targetFields.filter(f => f.tag !== field.tag);
+      if (!field) return acq;
+      
+      if (toLevel === 'acquisition') {
         return {
           ...acq,
-          [level === 'acquisition' ? 'acquisitionFields' : 'seriesFields']: updatedFields
+          acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTag), { ...field, level: 'acquisition' }],
+          seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag)
         };
       } else {
-        // Add to current level and remove from other level if present
-        const filteredOtherFields = otherFields.filter(f => f.tag !== field.tag);
-        const updatedFields = [...targetFields, { ...field, level }];
+        // When converting to series level, ensure we have at least 2 series and populate them with the acquisition field's value
+        const currentSeries = acq.series || [];
+        const seriesCount = Math.max(2, currentSeries.length);
         
+        const updatedSeries = [];
+        for (let i = 0; i < seriesCount; i++) {
+          const existingSeries = currentSeries[i];
+          updatedSeries.push({
+            name: existingSeries?.name || `Series ${i + 1}`,
+            fields: {
+              ...(existingSeries?.fields || {}),
+              [fieldTag]: {
+                value: field.value,
+                dataType: field.dataType,
+                validationRule: field.validationRule,
+              }
+            }
+          });
+        }
+
         return {
           ...acq,
-          [level === 'acquisition' ? 'acquisitionFields' : 'seriesFields']: updatedFields,
-          [level === 'acquisition' ? 'seriesFields' : 'acquisitionFields']: filteredOtherFields
+          seriesFields: [...acq.seriesFields.filter(f => f.tag !== fieldTag), { ...field, level: 'series' }],
+          acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
+          series: updatedSeries
         };
       }
+    }));
+  };
+
+  const deleteField = (acquisitionId: string, fieldTag: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      return {
+        ...acq,
+        acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
+        seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag)
+      };
+    }));
+  };
+
+  const addFields = async (acquisitionId: string, fieldTags: string[]) => {
+    if (fieldTags.length === 0) return;
+    
+    const { getFieldByTag, suggestDataType, suggestValidationConstraint } = await import('../../services/dicomFieldService');
+    
+    // Process each field tag to get enhanced field data
+    const newFieldsPromises = fieldTags.map(async tag => {
+      try {
+        const fieldDef = await getFieldByTag(tag);
+        const vr = fieldDef?.vr || 'UN';
+        const name = fieldDef?.keyword || fieldDef?.name || tag;
+        const dataType = suggestDataType(vr, fieldDef?.valueMultiplicity);
+        const validationRule = fieldDef ? {
+          type: suggestValidationConstraint(fieldDef)
+        } : { type: 'exact' as const };
+        
+        return {
+          tag,
+          name,
+          value: '',
+          vr,
+          level: 'acquisition' as const,
+          dataType,
+          validationRule
+        };
+      } catch (error) {
+        // Fallback if field lookup fails
+        return {
+          tag,
+          name: tag,
+          value: '',
+          vr: 'UN',
+          level: 'acquisition' as const,
+          dataType: 'string' as const,
+          validationRule: { type: 'exact' as const }
+        };
+      }
+    });
+    
+    const newFields = await Promise.all(newFieldsPromises);
+    
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      return {
+        ...acq,
+        acquisitionFields: [...acq.acquisitionFields, ...newFields]
+      };
+    }));
+  };
+
+  const updateSeries = (acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      if (!updatedSeries[seriesIndex]) {
+        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: {} };
+      }
+      
+      updatedSeries[seriesIndex] = {
+        ...updatedSeries[seriesIndex],
+        fields: {
+          ...updatedSeries[seriesIndex].fields,
+          [fieldTag]: value
+        }
+      };
+      
+      return { ...acq, series: updatedSeries };
+    }));
+  };
+
+  const addSeries = (acquisitionId: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const currentSeries = acq.series || [];
+      const newSeries: Series = {
+        name: `Series ${currentSeries.length + 1}`,
+        fields: {}
+      };
+      
+      return { ...acq, series: [...currentSeries, newSeries] };
+    }));
+  };
+
+  const deleteSeries = (acquisitionId: string, seriesIndex: number) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      updatedSeries.splice(seriesIndex, 1);
+      
+      return { ...acq, series: updatedSeries };
+    }));
+  };
+
+  const updateSeriesName = (acquisitionId: string, seriesIndex: number, name: string) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedSeries = [...(acq.series || [])];
+      if (updatedSeries[seriesIndex]) {
+        updatedSeries[seriesIndex] = {
+          ...updatedSeries[seriesIndex],
+          name
+        };
+      }
+      
+      return { ...acq, series: updatedSeries };
     }));
   };
 
@@ -178,151 +331,24 @@ const BuildSchema: React.FC = () => {
       </div>
 
       {/* Acquisitions List */}
-      <div className="space-y-6">
-        {acquisitions.map((acquisition) => {
-          const isExpanded = expandedCards.has(acquisition.id);
-          const totalSelectedFields = acquisition.acquisitionFields.length + acquisition.seriesFields.length;
-          
-          return (
-            <div key={acquisition.id} className="bg-white rounded-lg shadow-md border border-gray-200">
-              {/* Card Header */}
-              <div className="px-6 py-4 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-4">
-                      <input
-                        type="text"
-                        value={acquisition.protocolName}
-                        onChange={(e) => updateAcquisitionField(acquisition.id, 'protocolName', e.target.value)}
-                        className="text-lg font-semibold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-medical-500 rounded px-2 py-1"
-                      />
-                      <span className="text-sm text-gray-500">
-                        {acquisition.totalFiles} files
-                      </span>
-                    </div>
-                    <input
-                      type="text"
-                      value={acquisition.seriesDescription}
-                      onChange={(e) => updateAcquisitionField(acquisition.id, 'seriesDescription', e.target.value)}
-                      className="text-sm text-gray-600 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-medical-500 rounded px-2 py-1 mt-1"
-                    />
-                  </div>
-                  
-                  <div className="flex items-center space-x-4">
-                    <span className="text-sm text-medical-600 font-medium">
-                      {totalSelectedFields} fields selected
-                    </span>
-                    <button
-                      onClick={() => toggleCardExpansion(acquisition.id)}
-                      className="p-2 text-gray-400 hover:text-gray-600"
-                    >
-                      {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Expanded Content */}
-              {isExpanded && (
-                <div className="px-6 py-4">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    {/* Acquisition-Level Fields */}
-                    <div>
-                      <h4 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
-                        <Settings className="h-5 w-5 mr-2 text-medical-600" />
-                        Acquisition-Level Fields
-                      </h4>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Fields that have the same value across all series in this acquisition
-                      </p>
-                      
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {commonAcquisitionFields.map((field) => {
-                          const isSelected = acquisition.acquisitionFields.some(f => f.tag === field.tag);
-                          
-                          return (
-                            <div
-                              key={`acq-${field.tag}`}
-                              className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                                isSelected 
-                                  ? 'border-medical-200 bg-medical-50' 
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                              onClick={() => toggleFieldSelection(acquisition.id, field, 'acquisition')}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <div className="flex items-center space-x-2">
-                                    <Tag className="h-4 w-4 text-gray-400" />
-                                    <span className="text-sm font-medium text-gray-900">
-                                      {field.name}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-gray-500 mt-1">
-                                    {field.tag} • {field.vr}
-                                  </p>
-                                </div>
-                                <div className="text-sm text-gray-600">
-                                  {Array.isArray(field.value) ? field.value.join(', ') : field.value}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Series-Level Fields */}
-                    <div>
-                      <h4 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
-                        <FileText className="h-5 w-5 mr-2 text-medical-600" />
-                        Series-Level Fields
-                      </h4>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Fields that may vary between different series in this acquisition
-                      </p>
-                      
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {commonAcquisitionFields.map((field) => {
-                          const isSelected = acquisition.seriesFields.some(f => f.tag === field.tag);
-                          
-                          return (
-                            <div
-                              key={`series-${field.tag}`}
-                              className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                                isSelected 
-                                  ? 'border-medical-200 bg-medical-50' 
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                              onClick={() => toggleFieldSelection(acquisition.id, field, 'series')}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <div className="flex items-center space-x-2">
-                                    <Tag className="h-4 w-4 text-gray-400" />
-                                    <span className="text-sm font-medium text-gray-900">
-                                      {field.name}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-gray-500 mt-1">
-                                    {field.tag} • {field.vr}
-                                  </p>
-                                </div>
-                                <div className="text-sm text-gray-600">
-                                  {Array.isArray(field.value) ? field.value.join(', ') : field.value}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className="space-y-4">
+        {acquisitions.map((acquisition) => (
+          <AcquisitionTable
+            key={acquisition.id}
+            acquisition={acquisition}
+            isEditMode={true}
+            onUpdate={(field, value) => updateAcquisition(acquisition.id, field, value)}
+            onDelete={() => deleteAcquisition(acquisition.id)}
+            onFieldUpdate={(fieldTag, updates) => updateField(acquisition.id, fieldTag, updates)}
+            onFieldConvert={(fieldTag, toLevel) => convertFieldLevel(acquisition.id, fieldTag, toLevel)}
+            onFieldDelete={(fieldTag) => deleteField(acquisition.id, fieldTag)}
+            onFieldAdd={(fields) => addFields(acquisition.id, fields)}
+            onSeriesUpdate={(seriesIndex, fieldTag, value) => updateSeries(acquisition.id, seriesIndex, fieldTag, value)}
+            onSeriesAdd={() => addSeries(acquisition.id)}
+            onSeriesDelete={(seriesIndex) => deleteSeries(acquisition.id, seriesIndex)}
+            onSeriesNameUpdate={(seriesIndex, name) => updateSeriesName(acquisition.id, seriesIndex, name)}
+          />
+        ))}
       </div>
 
       {/* Add New Acquisition Button */}
