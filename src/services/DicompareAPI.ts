@@ -1,5 +1,6 @@
 import { pyodideManager } from './PyodideManager';
 import { ParsedSchema, ComplianceReport, SchemaTemplate } from '../types/schema';
+import { Acquisition as UIAcquisition, DicomField, Series as UISeries } from '../types';
 
 export interface AnalysisResult {
   acquisitions: Acquisition[];
@@ -254,12 +255,54 @@ json.dumps(result)
   }
 
   /**
-   * Mock simulate file upload processing time
+   * Convert API acquisition data to UI format
    */
-  async simulateFileProcessing(fileCount: number): Promise<void> {
-    // Simulate processing time based on file count
-    const processingTime = Math.min(fileCount * 50, 2000); // Max 2 seconds
-    await new Promise(resolve => setTimeout(resolve, processingTime));
+  private convertToUIAcquisition(apiAcquisition: Acquisition): UIAcquisition {
+    return {
+      id: apiAcquisition.id,
+      protocolName: apiAcquisition.protocol_name,
+      seriesDescription: apiAcquisition.series_description,
+      totalFiles: apiAcquisition.total_files,
+      acquisitionFields: apiAcquisition.acquisition_fields?.map((field): DicomField => ({
+        tag: field.tag,
+        name: field.name,
+        value: field.value,
+        vr: field.vr,
+        level: field.level,
+        dataType: field.data_type,
+        consistency: field.consistency
+      })) || [],
+      seriesFields: apiAcquisition.series_fields?.map((field): DicomField => ({
+        tag: field.tag,
+        name: field.name,
+        values: field.values,
+        vr: field.vr,
+        level: field.level,
+        dataType: field.data_type,
+        consistency: field.consistency
+      })) || [],
+      series: apiAcquisition.series?.map((seriesInfo): UISeries => ({
+        name: seriesInfo.name,
+        fields: seriesInfo.field_values || {}
+      })) || [],
+      metadata: apiAcquisition.metadata || {}
+    };
+  }
+
+  /**
+   * Get example DICOM data in UI format
+   */
+  async getExampleDicomDataForUI(): Promise<UIAcquisition[]> {
+    const result = await this.getExampleDicomData();
+    return result.acquisitions.map(acq => this.convertToUIAcquisition(acq));
+  }
+
+  /**
+   * Analyze files and return UI-formatted acquisitions
+   */
+  async analyzeFilesForUI(filePaths: string[]): Promise<UIAcquisition[]> {
+    const result = await this.analyzeFiles(filePaths);
+    return result.acquisitions.map(acq => this.convertToUIAcquisition(acq));
   }
 }
 

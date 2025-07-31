@@ -112,8 +112,6 @@ export function formatValidationRule(rule?: ValidationRule): string {
       return `${rule.min ?? '-∞'} to ${rule.max ?? '∞'}`;
     case 'contains':
       return `contains "${rule.contains || ''}"`;
-    case 'custom':
-      return 'custom logic';
     default:
       return rule.type;
   }

@@ -622,245 +622,136 @@ class DicompareAPI:
         return results
     
     def generate_validation_template(self, acquisitions: List[Dict], metadata: Dict) -> Dict:
-        """Generate validation template from configured acquisitions"""
+        """Return static validation template for UI testing"""
         return {
             "template": {
                 "version": "1.0",
-                "name": metadata.get("name", "Generated Template"),
-                "description": metadata.get("description", "Auto-generated validation template"),
-                "created": datetime.now(timezone.utc).isoformat(),
-                "acquisitions": acquisitions,
-                "global_constraints": metadata.get("global_constraints", {})
+                "name": "Generated Validation Template",
+                "description": "Mock validation template for UI development",
+                "created": "2024-01-15T10:30:00Z",
+                "acquisitions": [
+                    {
+                        "id": "acq_001",
+                        "protocol_name": "T1_MPRAGE",
+                        "acquisition_fields": [
+                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 2000, "tolerance": 50, "required": True}
+                        ]
+                    }
+                ],
+                "global_constraints": {}
             },
             "statistics": {
-                "total_acquisitions": len(acquisitions),
-                "total_validation_fields": sum(len(acq.get("acquisition_fields", [])) + len(acq.get("series_fields", [])) for acq in acquisitions),
-                "estimated_validation_time": f"{len(acquisitions) * 1.2:.1f}s per study"
+                "total_acquisitions": 1,
+                "total_validation_fields": 2,
+                "estimated_validation_time": "1.2s per study"
             }
         }
     
     def parse_schema(self, schema_content: str, format: str = 'json') -> Dict:
-        """Parse uploaded schema file and extract detailed validation rules"""
-        try:
-            if format == 'json':
-                schema_data = json.loads(schema_content)
-            elif format == 'python':
-                # Simple Python schema parsing - execute safe subset
-                local_vars = {}
-                exec(schema_content, {"__builtins__": {}}, local_vars)
-                schema_data = local_vars.get('schema', {})
-            else:
-                raise ValueError(f"Unsupported schema format: {format}")
-            
-            # Extract validation rules from schema
-            validation_rules = []
-            schema_fields = []
-            
-            if 'acquisitions' in schema_data:
-                for acq in schema_data['acquisitions']:
-                    for field in acq.get('acquisition_fields', []):
-                        rule = self._extract_validation_rule(field)
-                        if rule:
-                            validation_rules.append(rule)
-                        schema_fields.append(self._extract_schema_field(field))
-                    
-                    for field in acq.get('series_fields', []):
-                        rule = self._extract_validation_rule(field)
-                        if rule:
-                            validation_rules.append(rule)
-                        schema_fields.append(self._extract_schema_field(field))
-            
-            return {
-                "parsed_schema": {
-                    "title": schema_data.get("title", schema_data.get("name", "Unknown Schema")),
-                    "version": schema_data.get("version", "1.0.0"),
-                    "description": schema_data.get("description", ""),
-                    "acquisitions": schema_data.get("acquisitions", []),
-                    "validation_rules": validation_rules,
-                    "fields": schema_fields,
-                    "metadata": {
-                        "total_acquisitions": len(schema_data.get("acquisitions", [])),
-                        "total_rules": len(validation_rules),
-                        "total_fields": len(schema_fields)
+        """Return static parsed schema for UI testing"""
+        return {
+            "parsed_schema": {
+                "title": "Mock Validation Schema",
+                "version": "1.0.0",
+                "description": "Static mock schema for UI development",
+                "acquisitions": [
+                    {
+                        "id": "mock_acq",
+                        "protocol_name": "Mock Protocol",
+                        "acquisition_fields": [
+                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 2000, "required": True}
+                        ]
                     }
+                ],
+                "validation_rules": [
+                    {
+                        "fieldPath": "0008,0060",
+                        "type": "exact",
+                        "value": "MR",
+                        "message": "Modality must be MR"
+                    },
+                    {
+                        "fieldPath": "0018,0080", 
+                        "type": "tolerance",
+                        "value": 2000,
+                        "tolerance": 50,
+                        "message": "RepetitionTime must be 2000 ±50ms"
+                    }
+                ],
+                "fields": [
+                    {
+                        "path": "0008,0060",
+                        "tag": "0008,0060", 
+                        "name": "Modality",
+                        "required": True,
+                        "dataType": "string"
+                    },
+                    {
+                        "path": "0018,0080",
+                        "tag": "0018,0080",
+                        "name": "RepetitionTime", 
+                        "required": True,
+                        "dataType": "number"
+                    }
+                ],
+                "metadata": {
+                    "total_acquisitions": 1,
+                    "total_rules": 2,
+                    "total_fields": 2
                 }
             }
-        except Exception as e:
-            return {
-                "error": f"Schema parsing failed: {str(e)}",
-                "parsed_schema": None
-            }
-    
-    def _extract_validation_rule(self, field: Dict) -> Dict:
-        """Extract validation rule from field definition"""
-        field_info = self.get_field_info(field.get("tag", ""))
-        validation_type = field_info.get("suggested_validation", "exact")
-        
-        rule = {
-            "fieldPath": field.get("tag", ""),
-            "type": validation_type,
-            "message": f"Validation for {field.get('name', 'field')}"
-        }
-        
-        if "value" in field:
-            rule["value"] = field["value"]
-        elif "values" in field:
-            rule["value"] = field["values"]
-        
-        if validation_type == "tolerance" and "validation_hints" in field_info:
-            hints = field_info["validation_hints"]
-            rule["tolerance"] = hints.get("tolerance_typical", 1.0)
-        elif validation_type == "range" and "validation_hints" in field_info:
-            hints = field_info["validation_hints"]
-            rule["min"] = hints.get("range_typical", [0, 100])[0]
-            rule["max"] = hints.get("range_typical", [0, 100])[1]
-        
-        return rule
-    
-    def _extract_schema_field(self, field: Dict) -> Dict:
-        """Extract schema field information"""
-        field_info = self.get_field_info(field.get("tag", ""))
-        
-        return {
-            "path": field.get("tag", ""),
-            "tag": field.get("tag", ""),
-            "name": field.get("name", field_info.get("name", "Unknown")),
-            "required": field.get("required", True),
-            "dataType": field_info.get("suggested_data_type", "string"),
-            "validation": [self._extract_validation_rule(field)]
         }
     
     def validate_compliance(self, dicom_data: Dict, schema_content: str, format: str = 'json') -> Dict:
-        """Perform real compliance checking using schema rules vs DICOM data"""
-        try:
-            # Parse the schema first
-            parsed = self.parse_schema(schema_content, format)
-            if "error" in parsed:
-                return {"error": parsed["error"]}
-            
-            schema = parsed["parsed_schema"]
-            field_results = []
-            passed = 0
-            failed = 0
-            warnings = 0
-            
-            # Get acquisitions from DICOM data
-            acquisitions = dicom_data.get("acquisitions", [])
-            
-            # Validate each rule against DICOM data
-            for rule in schema["validation_rules"]:
-                result = self._validate_field_rule(rule, acquisitions)
-                field_results.append(result)
-                
-                if result["status"] == "pass":
-                    passed += 1
-                elif result["status"] == "fail":
-                    failed += 1
-                else:
-                    warnings += 1
-            
-            overall_status = "pass" if failed == 0 else ("warning" if failed == 0 and warnings > 0 else "fail")
-            
-            return {
-                "compliance_report": {
-                    "schemaId": "uploaded_schema",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "overallStatus": overall_status,
-                    "fieldResults": field_results,
-                    "summary": {
-                        "total": len(field_results),
-                        "passed": passed,
-                        "failed": failed,
-                        "warnings": warnings
+        """Return static compliance results for UI testing"""
+        return {
+            "compliance_report": {
+                "schemaId": "mock_schema",
+                "timestamp": "2024-01-15T10:30:00Z",
+                "overallStatus": "pass",
+                "fieldResults": [
+                    {
+                        "fieldPath": "0008,0060",
+                        "fieldName": "Modality",
+                        "status": "pass",
+                        "expectedValue": "MR",
+                        "actualValue": "MR",
+                        "message": "Value matches expected"
+                    },
+                    {
+                        "fieldPath": "0018,0080",
+                        "fieldName": "RepetitionTime", 
+                        "status": "pass",
+                        "expectedValue": 2000,
+                        "actualValue": 2000,
+                        "message": "Value 2000 within tolerance ±50 of 2000"
+                    },
+                    {
+                        "fieldPath": "0018,0081",
+                        "fieldName": "EchoTime",
+                        "status": "fail", 
+                        "expectedValue": 3.25,
+                        "actualValue": 4.0,
+                        "message": "Value 4.0 outside tolerance ±0.1 of 3.25"
+                    },
+                    {
+                        "fieldPath": "0018,1314",
+                        "fieldName": "FlipAngle",
+                        "status": "warning",
+                        "expectedValue": 9,
+                        "actualValue": 10,
+                        "message": "Value close but outside strict tolerance"
                     }
+                ],
+                "summary": {
+                    "total": 4,
+                    "passed": 2,
+                    "failed": 1,
+                    "warnings": 1
                 }
             }
-        except Exception as e:
-            return {"error": f"Compliance validation failed: {str(e)}"}
-    
-    def _validate_field_rule(self, rule: Dict, acquisitions: List[Dict]) -> Dict:
-        """Validate a single field rule against DICOM acquisitions"""
-        field_path = rule["fieldPath"]
-        expected_value = rule.get("value")
-        validation_type = rule.get("type", "exact")
-        
-        # Find field value in acquisitions
-        actual_value = None
-        found_field = False
-        
-        for acq in acquisitions:
-            # Check acquisition fields
-            for field in acq.get("acquisition_fields", []):
-                if field.get("tag") == field_path:
-                    actual_value = field.get("value")
-                    found_field = True
-                    break
-            
-            # Check series fields
-            if not found_field:
-                for field in acq.get("series_fields", []):
-                    if field.get("tag") == field_path:
-                        actual_value = field.get("values", [])
-                        found_field = True
-                        break
-        
-        if not found_field:
-            return {
-                "fieldPath": field_path,
-                "fieldName": rule.get("message", f"Field {field_path}"),
-                "status": "fail",
-                "message": f"Required field {field_path} not found in DICOM data",
-                "rule": rule
-            }
-        
-        # Validate based on rule type
-        if validation_type == "exact":
-            matches = actual_value == expected_value
-            status = "pass" if matches else "fail"
-            message = f"Expected {expected_value}, got {actual_value}" if not matches else "Value matches expected"
-        
-        elif validation_type == "tolerance":
-            tolerance = rule.get("tolerance", 1.0)
-            if isinstance(actual_value, (int, float)) and isinstance(expected_value, (int, float)):
-                diff = abs(actual_value - expected_value)
-                matches = diff <= tolerance
-                status = "pass" if matches else "fail"
-                message = f"Value {actual_value} within tolerance ±{tolerance} of {expected_value}" if matches else f"Value {actual_value} outside tolerance ±{tolerance} of {expected_value}"
-            else:
-                status = "fail"
-                message = f"Cannot apply tolerance validation to non-numeric values"
-        
-        elif validation_type == "range":
-            min_val = rule.get("min", 0)
-            max_val = rule.get("max", 100)
-            if isinstance(actual_value, (int, float)):
-                matches = min_val <= actual_value <= max_val
-                status = "pass" if matches else "fail"
-                message = f"Value {actual_value} within range [{min_val}, {max_val}]" if matches else f"Value {actual_value} outside range [{min_val}, {max_val}]"
-            else:
-                status = "fail"
-                message = f"Cannot apply range validation to non-numeric value"
-        
-        elif validation_type == "contains":
-            if isinstance(expected_value, list) and actual_value in expected_value:
-                status = "pass"
-                message = f"Value {actual_value} found in allowed values"
-            else:
-                status = "fail"
-                message = f"Value {actual_value} not in allowed values {expected_value}"
-        
-        else:
-            status = "warning"
-            message = f"Unknown validation type: {validation_type}"
-        
-        return {
-            "fieldPath": field_path,
-            "fieldName": rule.get("message", f"Field {field_path}"),
-            "status": status,
-            "expectedValue": expected_value,
-            "actualValue": actual_value,
-            "message": message,
-            "rule": rule
         }
     
     def get_example_schemas(self) -> List[Dict]:
@@ -943,82 +834,29 @@ class DicompareAPI:
         return self.analyze_dicom_files([])
     
     def get_schema_fields(self, schema_id: str) -> List[Dict]:
-        """Get field requirements for a specific schema"""
-        schemas = self.get_example_schemas()
-        
-        for schema in schemas:
-            if schema["id"] == schema_id:
-                content = json.loads(schema["content"])
-                acquisition_fields = []
-                
-                for acq in content.get("acquisitions", []):
-                    for field in acq.get("acquisition_fields", []):
-                        # Determine validation rule based on field properties
-                        validation_rule = {"type": "exact"}
-                        if "tolerance" in field:
-                            validation_rule = {
-                                "type": "tolerance", 
-                                "value": field["value"],
-                                "tolerance": field["tolerance"]
-                            }
-                        elif "min" in field or "max" in field:
-                            validation_rule = {
-                                "type": "range",
-                                "min": field.get("min", 0),
-                                "max": field.get("max", 100)
-                            }
-                        
-                        field_info = {
-                            "tag": field["tag"],
-                            "name": field["name"],
-                            "value": field["value"],
-                            "vr": self._get_vr_for_tag(field["tag"]),
-                            "level": "acquisition",
-                            "data_type": self._infer_data_type(field["value"]),
-                            "consistency": "consistent",
-                            "validation_rule": validation_rule
-                        }
-                        acquisition_fields.append(field_info)
-                
-                return acquisition_fields
-        
-        # Return empty list if schema not found
-        return []
-    
-    def _get_vr_for_tag(self, tag: str) -> str:
-        """Get VR (Value Representation) for a DICOM tag"""
-        vr_map = {
-            "0008,0060": "CS",  # Modality
-            "0008,0070": "LO",  # Manufacturer  
-            "0008,103E": "LO",  # SeriesDescription
-            "0018,0024": "SH",  # SequenceName
-            "0018,0080": "DS",  # RepetitionTime
-            "0018,0081": "DS",  # EchoTime
-            "0018,1314": "DS",  # FlipAngle
-            "0018,0087": "DS",  # MagneticFieldStrength
-            "0018,0050": "DS",  # SliceThickness
-            "0018,5100": "CS",  # PatientPosition
-            "0008,0008": "CS",  # ImageType
-            "0019,1028": "IS",  # MultibandFactor (private)
-            "0018,9087": "FD"   # DiffusionBValue
-        }
-        return vr_map.get(tag, "UN")
-    
-    def _infer_data_type(self, value) -> str:
-        """Infer data type from value"""
-        if isinstance(value, str):
-            return "string"
-        elif isinstance(value, (int, float)):
-            return "number"
-        elif isinstance(value, list):
-            if len(value) > 0:
-                if isinstance(value[0], str):
-                    return "list_string"
-                else:
-                    return "list_number"
-            return "list_string"
-        else:
-            return "string"
+        """Return static schema fields for UI testing"""
+        return [
+            {
+                "tag": "0008,0060",
+                "name": "Modality",
+                "value": "MR",
+                "vr": "CS",
+                "level": "acquisition",
+                "data_type": "string",
+                "consistency": "consistent",
+                "validation_rule": {"type": "exact"}
+            },
+            {
+                "tag": "0018,0080", 
+                "name": "RepetitionTime",
+                "value": 2000,
+                "vr": "DS",
+                "level": "acquisition", 
+                "data_type": "number",
+                "consistency": "consistent",
+                "validation_rule": {"type": "tolerance", "value": 2000, "tolerance": 50}
+            }
+        ]
 
 # Create global instance
 dicompare = DicompareAPI()

@@ -121,10 +121,6 @@ export const validateAgainstRule = (fieldValue: FieldValue, rule?: ValidationRul
       }
       return false;
 
-    case 'custom':
-      // Custom validation would need to be implemented based on specific requirements
-      return true;
-
     default:
       return true;
   }

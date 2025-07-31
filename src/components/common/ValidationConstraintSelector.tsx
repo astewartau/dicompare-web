@@ -40,12 +40,6 @@ const CONSTRAINT_OPTIONS: {
     description: 'Numeric fields within min/max bounds',
     supportedTypes: ['number', 'list_number']
   },
-  {
-    value: 'custom',
-    label: 'Custom Logic',
-    description: 'Python-based validation logic for complex rules',
-    supportedTypes: ['string', 'number', 'list_string', 'list_number', 'json']
-  }
 ];
 
 const ValidationConstraintSelector: React.FC<ValidationConstraintSelectorProps> = ({

@@ -6,7 +6,7 @@ import { DicomField } from '../types';
 
 // Field data types for enhanced validation
 export type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' | 'json';
-export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'custom';
+export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range';
 export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 
 // Enhanced field interface with validation constraints
@@ -19,7 +19,6 @@ export interface EnhancedDicomField extends DicomField {
     min?: number;
     max?: number;
     contains?: string;
-    customLogic?: string;
   };
 }
 

@@ -10,6 +10,7 @@ import AcquisitionTable from '../generate/AcquisitionTable';
 import FieldTable from '../generate/FieldTable';
 import SeriesTable from '../generate/SeriesTable';
 import ComplianceFieldTable from './ComplianceFieldTable';
+import SchemaSelectionCard from '../common/SchemaSelectionCard';
 
 const DataLoadingAndMatching: React.FC = () => {
   const navigate = useNavigate();
@@ -46,12 +47,16 @@ const DataLoadingAndMatching: React.FC = () => {
   };
 
   // Helper to format validation rule as a display value
-  const formatValidationRule = (rule: any): string => {
+  const formatValidationRule = (rule: {
+    exact?: any;
+    range?: { min: number; max: number };
+    tolerance?: { value: number; unit?: string };
+    contains?: string;
+  }): string => {
     if (rule.exact !== undefined) return String(rule.exact);
     if (rule.range) return `${rule.range.min} - ${rule.range.max}`;
     if (rule.tolerance) return `±${rule.tolerance.value}${rule.tolerance.unit || ''}`;
     if (rule.contains) return `Contains: "${rule.contains}"`;
-    if (rule.customLogic) return 'Custom validation';
     return 'Any value';
   };
 
@@ -66,34 +71,22 @@ const DataLoadingAndMatching: React.FC = () => {
       percentage: 0
     });
 
-    const operations = [
-      'Reading DICOM headers...',
-      'Extracting metadata...',
-      'Identifying acquisitions...',
-      'Organizing series...',
-      'Finalizing data structure...'
-    ];
-
-    for (let i = 0; i < operations.length; i++) {
-      setProgress(prev => prev ? {
-        ...prev,
-        currentOperation: operations[i],
-        percentage: (i + 1) / operations.length * 100
-      } : null);
-      
-      await new Promise(resolve => setTimeout(resolve, 800));
-    }
-
     try {
-      // Use Python API to get example DICOM data
-      const analysisResult = await dicompareAPI.getExampleDicomData();
-      const convertedAcquisitions = convertAcquisitionData(analysisResult.acquisitions);
-      setLoadedData(convertedAcquisitions);
+      setProgress({
+        currentFile: 0,
+        totalFiles: files.length,
+        currentOperation: 'Processing DICOM files...',
+        percentage: 50
+      });
+
+      // Use Python API to get example DICOM data (UI format)
+      const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
+      setLoadedData(acquisitions);
       
       // Auto-pair with pre-selected schema if one was chosen
-      if (preSelectedSchemaId && convertedAcquisitions.length > 0) {
+      if (preSelectedSchemaId && acquisitions.length > 0) {
         const newPairings: Record<string, string> = {};
-        convertedAcquisitions.forEach(acq => {
+        acquisitions.forEach(acq => {
           newPairings[acq.id] = preSelectedSchemaId;
         });
         setPairings(prev => ({ ...prev, ...newPairings }));
@@ -120,52 +113,19 @@ const DataLoadingAndMatching: React.FC = () => {
     handleFileUpload(e.dataTransfer.files);
   }, [handleFileUpload]);
 
-  // Convert Python API data structure to TypeScript interface format
-  const convertAcquisitionData = (apiAcquisitions: any[]): Acquisition[] => {
-    return apiAcquisitions.map(acq => ({
-      id: acq.id,
-      protocolName: acq.protocol_name,
-      seriesDescription: acq.series_description,
-      totalFiles: acq.total_files,
-      acquisitionFields: acq.acquisition_fields?.map((field: any) => ({
-        tag: field.tag,
-        name: field.name,
-        value: field.value,
-        vr: field.vr,
-        level: field.level,
-        dataType: field.data_type,
-        consistency: field.consistency
-      })) || [],
-      seriesFields: acq.series_fields?.map((field: any) => ({
-        tag: field.tag,
-        name: field.name,
-        values: field.values,
-        vr: field.vr,
-        level: field.level,
-        dataType: field.data_type,
-        consistency: field.consistency
-      })) || [],
-      series: acq.series?.map((seriesInfo: any): Series => ({
-        name: seriesInfo.name,
-        fields: seriesInfo.field_values || {}
-      })) || [],
-      metadata: acq.metadata || {}
-    }));
-  };
 
   const loadExampleData = async () => {
     try {
       setApiError(null);
       // Load example schemas and DICOM data when user clicks to load example data
       await loadExampleSchemasIfNeeded();
-      const analysisResult = await dicompareAPI.getExampleDicomData();
-      const convertedAcquisitions = convertAcquisitionData(analysisResult.acquisitions);
-      setLoadedData(convertedAcquisitions);
+      const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
+      setLoadedData(acquisitions);
       
       // Auto-pair with pre-selected schema if one was chosen
-      if (preSelectedSchemaId && convertedAcquisitions.length > 0) {
+      if (preSelectedSchemaId && acquisitions.length > 0) {
         const newPairings: Record<string, string> = {};
-        convertedAcquisitions.forEach(acq => {
+        acquisitions.forEach(acq => {
           newPairings[acq.id] = preSelectedSchemaId;
         });
         setPairings(prev => ({ ...prev, ...newPairings }));
@@ -360,128 +320,6 @@ const DataLoadingAndMatching: React.FC = () => {
     </div>
   );
 
-  // Component to render schema selector card
-  const renderSchemaSelector = (isForUploadArea: boolean = false) => {
-    const selectedSchemaForUpload = isForUploadArea && preSelectedSchemaId ? 
-      getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId) : null;
-
-    return (
-      <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 h-fit">
-        <div className="mb-4">
-          <h4 className="font-medium text-gray-900 text-base mb-2">
-            Select Validation Schema
-          </h4>
-          {isForUploadArea && selectedSchemaForUpload && (
-            <p className="text-xs text-gray-600">
-              Schema ready for uploaded DICOM data
-            </p>
-          )}
-        </div>
-
-        {/* Show selected schema details when one is chosen for upload area */}
-        {isForUploadArea && selectedSchemaForUpload ? (
-          <div className="space-y-4">
-            <div className="border border-medical-200 rounded-lg p-3 bg-medical-50">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <h5 className="font-medium text-gray-900 text-sm mb-1">{selectedSchemaForUpload.name}</h5>
-                  <p className="text-xs text-gray-600 mb-1">
-                    {selectedSchemaForUpload.description || 'No description available'}
-                  </p>
-                  <div className="flex items-center space-x-2 text-xs text-gray-500">
-                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                      {selectedSchemaForUpload.category}
-                    </span>
-                    <span className={`px-1.5 py-0.5 rounded-full ${
-                      selectedSchemaForUpload.format === 'json' 
-                        ? 'bg-blue-100 text-blue-700' 
-                        : 'bg-green-100 text-green-700'
-                    }`}>
-                      {selectedSchemaForUpload.format.toUpperCase()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-gray-500">
-                  v{selectedSchemaForUpload.version || '1.0.0'} • {selectedSchemaForUpload.authors?.join(', ') || 'Example Schema'}
-                </div>
-                <button
-                  onClick={() => setPreSelectedSchemaId(null)}
-                  className="text-xs text-medical-600 hover:text-medical-700"
-                >
-                  Change Schema
-                </button>
-              </div>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-600">
-                Upload DICOM files to validate against this schema
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {getAllAvailableSchemas().map((template) => {
-              const isSelected = isForUploadArea && preSelectedSchemaId === template.id;
-              return (
-                <div key={template.id} className="relative group">
-                  <button
-                    onClick={() => {
-                      if (isForUploadArea) {
-                        setPreSelectedSchemaId(template.id);
-                      } else {
-                        console.log('Schema selected for upload area:', template.id);
-                      }
-                    }}
-                    className={`w-full p-3 text-left border rounded-lg transition-all ${
-                      isSelected
-                        ? 'border-medical-300 bg-medical-50'
-                        : 'border-gray-200 hover:border-medical-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h5 className="font-medium text-gray-900 text-sm mb-1">{template.name}</h5>
-                        <p className="text-xs text-gray-600 mb-1 line-clamp-2">
-                          {template.description || 'No description available'}
-                        </p>
-                        <div className="flex items-center space-x-2 text-xs text-gray-500">
-                          <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                            {template.category}
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded-full ${
-                            template.format === 'json' 
-                              ? 'bg-blue-100 text-blue-700' 
-                              : 'bg-green-100 text-green-700'
-                          }`}>
-                            {template.format.toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={(e) => handleDeleteSchema(template.id, e)}
-                    className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all bg-white rounded shadow-sm hover:shadow-md"
-                    title="Delete schema"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {getAllAvailableSchemas().length === 0 && (
-          <p className="text-sm text-gray-500 text-center py-4">
-            No templates available. Upload a template to get started.
-          </p>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -587,7 +425,13 @@ const DataLoadingAndMatching: React.FC = () => {
                 </div>
               </div>
             ) : (
-              renderSchemaSelector(true)
+              <SchemaSelectionCard
+                schemas={getAllAvailableSchemas()}
+                selectedSchemaId={preSelectedSchemaId}
+                onSchemaSelect={setPreSelectedSchemaId}
+                onSchemaDelete={handleDeleteSchema}
+                title="Select Validation Schema"
+              />
             )}
           </div>
         )}
@@ -662,60 +506,12 @@ const DataLoadingAndMatching: React.FC = () => {
                 </div>
               ) : (
                 // Show template selection when not paired
-                <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 h-fit">
-                  <div className="mb-4">
-                    <h4 className="font-medium text-gray-900 text-base mb-2">
-                      Select template for: {acquisition.protocolName}
-                    </h4>
-                  </div>
-
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {getAllAvailableSchemas().map((template) => {
-                      return (
-                        <div key={template.id} className="relative group">
-                          <button
-                            onClick={() => handleTemplatePairing(acquisition.id, template.id)}
-                            className="w-full p-3 text-left border rounded-lg transition-all border-gray-200 hover:border-medical-300 hover:bg-gray-50"
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h5 className="font-medium text-gray-900 text-sm mb-1">{template.name}</h5>
-                                <p className="text-xs text-gray-600 mb-1 line-clamp-2">
-                                  {template.description || 'No description available'}
-                                </p>
-                                <div className="flex items-center space-x-2 text-xs text-gray-500">
-                                  <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                                    {template.category}
-                                  </span>
-                                  <span className={`px-1.5 py-0.5 rounded-full ${
-                                    template.format === 'json' 
-                                      ? 'bg-blue-100 text-blue-700' 
-                                      : 'bg-green-100 text-green-700'
-                                  }`}>
-                                    {template.format.toUpperCase()}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            onClick={(e) => handleDeleteSchema(template.id, e)}
-                            className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all bg-white rounded shadow-sm hover:shadow-md"
-                            title="Delete schema"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {getAllAvailableSchemas().length === 0 && (
-                    <p className="text-sm text-gray-500 text-center py-4">
-                      No templates available. Upload a template to get started.
-                    </p>
-                  )}
-                </div>
+                <SchemaSelectionCard
+                  schemas={getAllAvailableSchemas()}
+                  onSchemaSelect={(schemaId) => handleTemplatePairing(acquisition.id, schemaId)}
+                  onSchemaDelete={handleDeleteSchema}
+                  title={`Select template for: ${acquisition.protocolName}`}
+                />
               )}
             </div>
           );
@@ -763,7 +559,13 @@ const DataLoadingAndMatching: React.FC = () => {
                 </div>
               </div>
             ) : (
-              renderSchemaSelector(true)
+              <SchemaSelectionCard
+                schemas={getAllAvailableSchemas()}
+                selectedSchemaId={preSelectedSchemaId}
+                onSchemaSelect={setPreSelectedSchemaId}
+                onSchemaDelete={handleDeleteSchema}
+                title="Select Validation Schema"
+              />
             )}
           </div>
         )}

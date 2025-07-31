@@ -150,28 +150,6 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
         </div>
       );
 
-    case 'custom':
-      return (
-        <div className={className}>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Custom Python Logic
-          </label>
-          <textarea
-            value={value.customLogic || ''}
-            onChange={(e) => updateRule({ customLogic: e.target.value })}
-            disabled={disabled}
-            placeholder="# Python validation logic&#10;# Available variables: field_value, expected_value&#10;# Return True for pass, False for fail&#10;&#10;def validate(field_value, expected_value):&#10;    return field_value == expected_value"
-            rows={6}
-            className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm ${
-              disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-            }`}
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Write Python code to define custom validation logic. Use <code>field_value</code> and <code>expected_value</code> variables.
-          </p>
-        </div>
-      );
-
     default:
       return null;
   }

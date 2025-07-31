@@ -11,7 +11,7 @@ export interface DicomField {
 
 // Enhanced field types for validation
 export type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' | 'json';
-export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'custom';
+export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range';
 export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 
 // Series Types
@@ -58,7 +58,6 @@ export interface ValidationRule {
   tolerance?: number;
   contains?: string;
   substring?: string; // Alias for contains
-  customLogic?: string;
 }
 
 export interface SchemaField {

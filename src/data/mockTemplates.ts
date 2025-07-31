@@ -17,7 +17,6 @@ export interface EnhancedTemplate extends Omit<Template, 'acquisitions'> {
           min?: number;
           max?: number;
           contains?: string;
-          customLogic?: string;
         };
         level: 'acquisition' | 'series';
         dataType?: 'number' | 'string' | 'list_string' | 'list_number' | 'json';
@@ -163,10 +162,7 @@ export const mockTemplates: EnhancedTemplate[] = [
             tag: '0008,0070',
             name: 'Manufacturer',
             required: true,
-            validationRule: { 
-              type: 'custom', 
-              customLogic: 'value.upper() in ["SIEMENS", "GE MEDICAL SYSTEMS", "PHILIPS"]' 
-            },
+            validationRule: { type: 'exact', value: 'SIEMENS' },
             level: 'acquisition',
             dataType: 'string'
           },

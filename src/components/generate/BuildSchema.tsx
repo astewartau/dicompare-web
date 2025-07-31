@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, Loader2 } from 'lucide-react';
-import { dicompareAPI, type AnalysisResult } from '../../services/DicompareAPI';
+import { Upload, Plus, Loader2, Database } from 'lucide-react';
+import { dicompareAPI } from '../../services/DicompareAPI';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import AcquisitionTable from './AcquisitionTable';
 
@@ -36,7 +36,6 @@ const BuildSchema: React.FC = () => {
         if (rule.type === 'contains' && rule.contains) return true;
         if (rule.type === 'range' && rule.min !== undefined && rule.max !== undefined) return true;
         if (rule.type === 'tolerance' && rule.value !== undefined && rule.tolerance !== undefined) return true;
-        if (rule.type === 'custom' && rule.customLogic) return true;
         return false;
       }
       // For exact validation, check the value
@@ -46,10 +45,10 @@ const BuildSchema: React.FC = () => {
       return true;
     }
     
-    // Handle regular field objects
-    if (!field.value && field.value !== 0) return false; // Empty or null/undefined
-    if (typeof field.value === 'string' && field.value.trim() === '') return false; // Empty string
-    if (Array.isArray(field.value) && field.value.length === 0) return false; // Empty array
+    // Handle direct values (arrays, strings, numbers) - these are valid if they exist
+    if (field === null || field === undefined) return false;
+    if (typeof field === 'string' && field.trim() === '') return false;
+    if (Array.isArray(field) && field.length === 0) return false;
     return true;
   };
 
@@ -100,57 +99,31 @@ const BuildSchema: React.FC = () => {
       // Convert FileList to file paths (mock)
       const filePaths = Array.from(files).map(file => file.name);
       
-      setUploadStatus('Initializing analysis engine...');
-      setUploadProgress(20);
-      
-      // This will lazy-load Pyodide on first use
-      if (!dicompareAPI.isInitialized()) {
-        setUploadStatus('Loading Python environment (this may take a moment)...');
-      }
-      
-      setUploadProgress(40);
-      
-      // Simulate file processing
       setUploadStatus('Processing DICOM files...');
-      await dicompareAPI.simulateFileProcessing(files.length);
-      setUploadProgress(70);
+      setUploadProgress(50);
       
-      // Analyze files using the API
-      setUploadStatus('Analyzing acquisitions...');
-      const analysisResult: AnalysisResult = await dicompareAPI.analyzeFiles(filePaths);
-      setUploadProgress(90);
+      // Analyze files using the API and get UI-formatted data
+      const acquisitions = await dicompareAPI.analyzeFilesForUI(filePaths);
       
-      // Convert API result to internal format
-      setUploadStatus('Finalizing...');
-      const acquisitions = analysisResult.acquisitions.map(acq => ({
-        id: acq.id,
-        protocolName: acq.protocol_name,
-        seriesDescription: acq.series_description,
-        totalFiles: acq.total_files,
-        acquisitionFields: acq.acquisition_fields.map(field => ({
-          tag: field.tag,
-          name: field.name,
-          value: field.value,
-          vr: field.vr,
-          level: field.level,
-          dataType: field.data_type,
+      // Convert to acquisition context format with validation rules
+      const contextAcquisitions = acquisitions.map(acq => ({
+        ...acq,
+        acquisitionFields: acq.acquisitionFields.map(field => ({
+          ...field,
           validationRule: { type: 'exact' as const }
         })),
-        seriesFields: acq.series_fields.map(field => ({
-          tag: field.tag,
-          name: field.name,
+        seriesFields: acq.seriesFields.map(field => ({
+          ...field,
           value: field.values?.[0] || field.value,
-          vr: field.vr,
-          level: field.level,
-          dataType: field.data_type,
           validationRule: { type: 'exact' as const }
         })),
         series: acq.series.map(series => ({
           name: series.name,
           fields: Object.fromEntries(
-            Object.entries(series.field_values).map(([tag, value]) => [
+            Object.entries(series.fields).map(([tag, value]) => [
               tag,
-              typeof value === 'object' ? value : {
+              // If it's already an object with a value property, keep it
+              (typeof value === 'object' && value !== null && 'value' in value) ? value : {
                 value,
                 dataType: typeof value === 'number' ? 'number' : 
                          Array.isArray(value) ? 'list_string' : 'string',
@@ -158,14 +131,13 @@ const BuildSchema: React.FC = () => {
               }
             ])
           )
-        })),
-        metadata: acq.metadata
+        }))
       }));
       
-      setAcquisitions(acquisitions);
+      setAcquisitions(contextAcquisitions);
       setUploadProgress(100);
       
-      console.log('✅ Analysis complete:', analysisResult.summary);
+      console.log('✅ Analysis complete');
       
     } catch (error) {
       console.error('❌ Upload failed:', error);
@@ -188,6 +160,65 @@ const BuildSchema: React.FC = () => {
     handleFileUpload(e.dataTransfer.files);
   }, [handleFileUpload]);
 
+
+  const loadExampleData = async () => {
+    try {
+      setIsUploading(true);
+      setUploadStatus('Loading example data...');
+      setUploadProgress(50);
+      
+      // Get example DICOM data from API in UI format
+      const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
+      
+      // Convert to acquisition context format with validation rules
+      const contextAcquisitions = acquisitions.map(acq => ({
+        ...acq,
+        acquisitionFields: acq.acquisitionFields.map(field => ({
+          ...field,
+          validationRule: { type: 'exact' as const }
+        })),
+        seriesFields: acq.seriesFields.map(field => ({
+          ...field,
+          value: field.values?.[0] || field.value,
+          validationRule: { type: 'exact' as const }
+        })),
+        series: acq.series.map(series => ({
+          name: series.name,
+          fields: Object.fromEntries(
+            Object.entries(series.fields).map(([tag, value]) => [
+              tag,
+              // If it's already an object with a value property, keep it
+              (typeof value === 'object' && value !== null && 'value' in value) ? value : {
+                value,
+                dataType: typeof value === 'number' ? 'number' : 
+                         Array.isArray(value) ? 'list_string' : 'string',
+                validationRule: { type: 'exact' }
+              }
+            ])
+          )
+        }))
+      }));
+      
+      setAcquisitions(contextAcquisitions);
+      setUploadProgress(100);
+      
+      console.log('✅ Example data loaded');
+      
+    } catch (error) {
+      console.error('❌ Failed to load example data:', error);
+      setUploadStatus('Failed to load example data. Please try again.');
+    } finally {
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setUploadStatus('');
+      }, 500);
+    }
+  };
+
+  const clearData = () => {
+    setAcquisitions([]);
+  };
 
   const handleContinue = () => {
     navigate('/generate-template/enter-metadata');
@@ -249,9 +280,6 @@ const BuildSchema: React.FC = () => {
             </div>
             <p className="text-xs text-gray-500 mt-2">
               {Math.round(uploadProgress)}% complete
-              {uploadProgress >= 40 && uploadProgress < 70 && !dicompareAPI.isInitialized() && 
-                " • First-time setup may take up to 30 seconds"
-              }
             </p>
           </div>
         )}
@@ -262,14 +290,38 @@ const BuildSchema: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">Build Schema - Step 1</h2>
-        <p className="text-gray-600">
-          {acquisitions.length > 0 ? (
-            'Review detected acquisitions and configure which DICOM fields to include in your validation template.'
-          ) : (
-            'Upload DICOM files to automatically extract metadata and create acquisition templates, or manually add acquisitions.'
-          )}
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Build Schema - Step 1</h2>
+            <p className="text-gray-600">
+              {acquisitions.length > 0 ? (
+                'Review detected acquisitions and configure which DICOM fields to include in your validation template.'
+              ) : (
+                'Upload DICOM files to automatically extract metadata and create acquisition templates, or manually add acquisitions.'
+              )}
+            </p>
+          </div>
+          
+          <div className="flex space-x-3">
+            {acquisitions.length === 0 ? (
+              <button
+                onClick={loadExampleData}
+                disabled={isUploading}
+                className="inline-flex items-center px-4 py-2 border border-medical-600 text-medical-600 rounded-lg hover:bg-medical-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Database className="h-4 w-4 mr-2" />
+                Load Example Data
+              </button>
+            ) : (
+              <button
+                onClick={clearData}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Clear Data
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Acquisitions Grid */}

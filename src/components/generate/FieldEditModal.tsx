@@ -97,11 +97,6 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             newErrors.constraint = 'Substring is required for contains constraint';
           }
           break;
-        case 'custom':
-          if (!formData.validationRule.customLogic?.trim()) {
-            newErrors.constraint = 'Custom logic is required for custom constraint';
-          }
-          break;
       }
     }
 
@@ -147,18 +142,55 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   };
 
   const handleConstraintChange = (newConstraint: ValidationConstraint) => {
-    setFormData(prev => ({
-      ...prev,
-      validationRule: {
-        type: newConstraint,
-        // Reset constraint-specific values and clear any previous constraint values
-        ...(newConstraint === 'tolerance' && { value: 0, tolerance: 0 }),
-        ...(newConstraint === 'range' && { min: 0, max: 100 }),
-        ...(newConstraint === 'contains' && { contains: '' }),
-        ...(newConstraint === 'custom' && { customLogic: '' }),
-        // For exact constraint, no additional fields needed
-      },
-    }));
+    setFormData(prev => {
+      // Extract current value from different constraint types to reuse intelligently
+      let extractedValue: any = null;
+      
+      if (prev.validationRule.type === 'exact') {
+        extractedValue = prev.value;
+      } else if (prev.validationRule.type === 'tolerance') {
+        extractedValue = prev.validationRule.value;
+      } else if (prev.validationRule.type === 'range') {
+        // For range, use min as the extracted value if available
+        extractedValue = prev.validationRule.min;
+      }
+      
+      // Convert extracted value to number if needed for numeric constraints
+      const numericValue = extractedValue !== null && !isNaN(Number(extractedValue)) ? Number(extractedValue) : null;
+      
+      let newValidationRule: ValidationRule = { type: newConstraint };
+      
+      switch (newConstraint) {
+        case 'tolerance':
+          newValidationRule = {
+            type: 'tolerance',
+            value: numericValue !== null ? numericValue : 0,
+            tolerance: 0
+          };
+          break;
+        case 'range':
+          newValidationRule = {
+            type: 'range',
+            min: numericValue !== null ? numericValue : 0,
+            max: numericValue !== null ? numericValue + 100 : 100
+          };
+          break;
+        case 'contains':
+          newValidationRule = {
+            type: 'contains',
+            contains: extractedValue && typeof extractedValue === 'string' ? extractedValue : ''
+          };
+          break;
+        case 'exact':
+          // For exact, no additional properties needed
+          break;
+      }
+      
+      return {
+        ...prev,
+        validationRule: newValidationRule,
+      };
+    });
   };
 
   const handleConstraintValueChange = (updates: Partial<ValidationRule>) => {
@@ -266,8 +298,6 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                     `${formData.validationRule.min ?? '-∞'} to ${formData.validationRule.max ?? '∞'}` :
                   formData.validationRule.type === 'contains' ? 
                     `contains "${formData.validationRule.contains || ''}"` :
-                  formData.validationRule.type === 'custom' ? 
-                    'Custom logic' :
                     'Not specified'
                 }</span>
               </div>
