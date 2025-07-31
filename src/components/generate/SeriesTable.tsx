@@ -35,9 +35,9 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
 
   if (seriesFields.length === 0) {
     return (
-      <div className="border border-gray-200 rounded-md p-8 text-center">
-        <p className="text-gray-500 text-sm">No series-level fields defined</p>
-        <p className="text-xs text-gray-400 mt-2">
+      <div className="border border-gray-200 rounded-md p-4 text-center">
+        <p className="text-gray-500 text-xs">No series-level fields defined</p>
+        <p className="text-xs text-gray-400 mt-1">
           Convert acquisition-level fields to series-level to create varying values
         </p>
       </div>
@@ -60,31 +60,31 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 min-w-[140px]">
                 Series
               </th>
               {seriesFields.map((field) => (
                 <th 
                   key={field.tag} 
-                  className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]"
                   onMouseEnter={() => setHoveredHeader(field.tag)}
                   onMouseLeave={() => setHoveredHeader(null)}
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{field.name}</p>
-                      <p className="text-xs font-normal text-gray-400">{field.tag}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{field.name}</p>
+                      <p className="text-xs font-normal text-gray-400 font-mono">{field.tag}</p>
                     </div>
                     {isEditMode && (
-                      <div className={`flex items-center space-x-1 ${
+                      <div className={`flex items-center ml-1 ${
                         hoveredHeader === field.tag ? 'opacity-100' : 'opacity-0'
                       } transition-opacity`}>
                         <button
                           onClick={() => onFieldConvert(field.tag)}
-                          className="p-1 text-gray-400 hover:text-medical-600 transition-colors"
+                          className="p-0.5 text-gray-400 hover:text-medical-600 transition-colors"
                           title="Convert to acquisition field"
                         >
-                          <ArrowLeftRight className="h-3.5 w-3.5" />
+                          <ArrowLeftRight className="h-3 w-3" />
                         </button>
                       </div>
                     )}
@@ -92,7 +92,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 </th>
               ))}
               {isEditMode && (
-                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
                   Actions
                 </th>
               )}
@@ -108,13 +108,13 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 onMouseEnter={() => setHoveredRow(seriesIndex)}
                 onMouseLeave={() => setHoveredRow(null)}
               >
-                <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900 sticky left-0 bg-inherit">
+                <td className="px-2 py-1.5 whitespace-nowrap font-medium text-gray-900 sticky left-0 bg-inherit min-w-[140px]">
                   {isEditMode && onSeriesNameUpdate ? (
                     <input
                       type="text"
                       value={ser.name}
                       onChange={(e) => onSeriesNameUpdate(seriesIndex, e.target.value)}
-                      className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-medical-500 rounded px-1 py-0.5 -mx-1 -my-0.5"
+                      className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-medical-500 rounded px-1 py-0.5 -mx-1 -my-0.5 text-xs w-full"
                       onBlur={(e) => {
                         if (!e.target.value.trim()) {
                           onSeriesNameUpdate(seriesIndex, `Series ${seriesIndex + 1}`);
@@ -122,7 +122,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       }}
                     />
                   ) : (
-                    ser.name
+                    <span className="text-xs">{ser.name}</span>
                   )}
                 </td>
                 {seriesFields.map((field) => {
@@ -130,51 +130,51 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                   const isIncomplete = incompleteFields.has(seriesFieldKey);
                   
                   return (
-                    <td key={field.tag} className={`px-3 py-2 whitespace-nowrap ${
+                    <td key={field.tag} className={`px-2 py-1.5 ${
                       isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''
                     }`}>
                       <div
                         className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
                         onClick={() => isEditMode && setEditingCell({ seriesIndex, fieldTag: field.tag })}
                       >
-                      <div>
-                        <p className="text-sm text-gray-900">
-                          {ser.fields[field.tag] ? formatSeriesFieldValue(ser.fields[field.tag]) : '-'}
-                        </p>
-                        {isEditMode && ser.fields[field.tag] && (
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {(() => {
-                              const fieldValue = ser.fields[field.tag];
-                              if (typeof fieldValue === 'object' && fieldValue !== null && 'dataType' in fieldValue) {
-                                // Use individual series value's dataType and constraint
-                                return formatFieldTypeInfo(
-                                  fieldValue.dataType || field.dataType || 'string',
-                                  fieldValue.validationRule
-                                );
-                              } else {
-                                // Fallback to field-level info for legacy values
-                                return formatFieldTypeInfo(field.dataType || 'string');
-                              }
-                            })()}
+                        <div>
+                          <p className="text-xs text-gray-900 break-words">
+                            {ser.fields[field.tag] ? formatSeriesFieldValue(ser.fields[field.tag]) : '-'}
                           </p>
-                        )}
+                          {isEditMode && ser.fields[field.tag] && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {(() => {
+                                const fieldValue = ser.fields[field.tag];
+                                if (typeof fieldValue === 'object' && fieldValue !== null && 'dataType' in fieldValue) {
+                                  // Use individual series value's dataType and constraint
+                                  return formatFieldTypeInfo(
+                                    fieldValue.dataType || field.dataType || 'string',
+                                    fieldValue.validationRule
+                                  );
+                                } else {
+                                  // Fallback to field-level info for legacy values
+                                  return formatFieldTypeInfo(field.dataType || 'string');
+                                }
+                              })()}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
                   );
                 })}
                 {isEditMode && (
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-2 py-1.5 text-right">
                     <div className={`${
                       hoveredRow === seriesIndex ? 'opacity-100' : 'opacity-0'
                     } transition-opacity`}>
                       <button
                         onClick={() => onSeriesDelete(seriesIndex)}
-                        className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+                        className="p-0.5 text-gray-600 hover:text-red-600 transition-colors"
                         title="Delete series"
                         disabled={displaySeries.length <= 2}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
                   </td>
@@ -187,12 +187,12 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
       
       {/* Add Series Button */}
       {isEditMode && (
-        <div className="bg-gray-50 px-3 py-2 border-t border-gray-200">
+        <div className="bg-gray-50 px-2 py-1.5 border-t border-gray-200">
           <button
             onClick={onSeriesAdd}
-            className="inline-flex items-center px-3 py-1.5 text-sm text-medical-600 hover:text-medical-700 hover:bg-medical-50 rounded transition-colors"
+            className="inline-flex items-center px-2 py-1 text-xs text-medical-600 hover:text-medical-700 hover:bg-medical-50 rounded transition-colors"
           >
-            <Plus className="h-4 w-4 mr-1" />
+            <Plus className="h-3 w-3 mr-1" />
             Add Series
           </button>
         </div>

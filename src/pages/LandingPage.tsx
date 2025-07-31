@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, CheckCircle } from 'lucide-react';
+import { FileText, CheckCircle, Code } from 'lucide-react';
 import PublicReports from '../components/common/PublicReports';
 
 const LandingPage: React.FC = () => {
@@ -28,14 +28,14 @@ const LandingPage: React.FC = () => {
           </p>
 
           {/* Feature Cards */}
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-16">
+          <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto mb-16">
             <Link 
               to="/generate-template" 
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-8 border-2 border-transparent hover:border-medical-200"
+              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-2 border-transparent hover:border-medical-200"
             >
-              <FileText className="h-12 w-12 text-medical-600 mx-auto mb-4" />
-              <h3 className="text-2xl font-semibold text-gray-900 mb-4">Generate Template</h3>
-              <p className="text-gray-600">
+              <FileText className="h-10 w-10 text-medical-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">Generate Template</h3>
+              <p className="text-gray-600 text-sm">
                 Create DICOM compliance templates from your reference datasets. 
                 Upload files, select validation fields, and generate reusable schemas.
               </p>
@@ -43,13 +43,25 @@ const LandingPage: React.FC = () => {
 
             <Link 
               to="/check-compliance" 
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-8 border-2 border-transparent hover:border-medical-200"
+              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-2 border-transparent hover:border-medical-200"
             >
-              <CheckCircle className="h-12 w-12 text-medical-600 mx-auto mb-4" />
-              <h3 className="text-2xl font-semibold text-gray-900 mb-4">Check Compliance</h3>
-              <p className="text-gray-600">
+              <CheckCircle className="h-10 w-10 text-medical-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">Check Compliance</h3>
+              <p className="text-gray-600 text-sm">
                 Validate DICOM files against existing templates. 
                 Get detailed compliance reports and identify data issues.
+              </p>
+            </Link>
+
+            <Link 
+              to="/python-schema-builder" 
+              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-2 border-transparent hover:border-medical-200"
+            >
+              <Code className="h-10 w-10 text-medical-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">Python Schema Builder</h3>
+              <p className="text-gray-600 text-sm">
+                Build advanced Python validation schemas using pre-built functions. 
+                Create complex validation logic with a visual interface.
               </p>
             </Link>
           </div>

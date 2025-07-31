@@ -1036,6 +1036,11 @@ dicompare = DicompareAPI()
     return pyodide.runPython(code);
   }
 
+  async loadPackage(packages: string | string[]): Promise<void> {
+    const pyodide = await this.initialize();
+    return pyodide.loadPackage(packages);
+  }
+
   async runPythonAsync(code: string): Promise<any> {
     const pyodide = await this.initialize();
     return await pyodide.runPython(code);

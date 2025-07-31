@@ -28,6 +28,25 @@ const BuildSchema: React.FC = () => {
 
   // Validation logic for field completeness
   const isFieldValueValid = (field: any) => {
+    // Handle series field values that might be SeriesFieldValue objects
+    if (typeof field === 'object' && field !== null && 'validationRule' in field) {
+      const rule = field.validationRule;
+      // For non-exact validation rules, check if the rule has the required value
+      if (rule && rule.type !== 'exact') {
+        if (rule.type === 'contains' && rule.contains) return true;
+        if (rule.type === 'range' && rule.min !== undefined && rule.max !== undefined) return true;
+        if (rule.type === 'tolerance' && rule.value !== undefined && rule.tolerance !== undefined) return true;
+        if (rule.type === 'custom' && rule.customLogic) return true;
+        return false;
+      }
+      // For exact validation, check the value
+      if (!field.value && field.value !== 0) return false;
+      if (typeof field.value === 'string' && field.value.trim() === '') return false;
+      if (Array.isArray(field.value) && field.value.length === 0) return false;
+      return true;
+    }
+    
+    // Handle regular field objects
     if (!field.value && field.value !== 0) return false; // Empty or null/undefined
     if (typeof field.value === 'string' && field.value.trim() === '') return false; // Empty string
     if (Array.isArray(field.value) && field.value.length === 0) return false; // Empty array
@@ -45,21 +64,23 @@ const BuildSchema: React.FC = () => {
         }
       });
       
-      // Check series-level fields
-      acquisition.seriesFields.forEach(field => {
-        if (!isFieldValueValid(field)) {
-          incompleteFields.add(`${acquisition.id}-${field.tag}`);
+      // Check series field values only if there are series-level fields
+      if (acquisition.seriesFields.length > 0) {
+        // Ensure we check at least 2 series (matching SeriesTable display logic)
+        const minSeriesCount = Math.max(2, acquisition.series?.length || 0);
+        
+        for (let seriesIndex = 0; seriesIndex < minSeriesCount; seriesIndex++) {
+          const series = acquisition.series?.[seriesIndex];
+          
+          acquisition.seriesFields.forEach(field => {
+            const fieldValue = series?.fields?.[field.tag];
+            // If the field doesn't exist in this series, it's incomplete
+            if (fieldValue === undefined || !isFieldValueValid(fieldValue)) {
+              incompleteFields.add(`${acquisition.id}-series-${seriesIndex}-${field.tag}`);
+            }
+          });
         }
-      });
-      
-      // Check series field values
-      acquisition.series?.forEach((series, seriesIndex) => {
-        Object.entries(series.fields || {}).forEach(([fieldTag, fieldValue]) => {
-          if (!isFieldValueValid(fieldValue)) {
-            incompleteFields.add(`${acquisition.id}-series-${seriesIndex}-${fieldTag}`);
-          }
-        });
-      });
+      }
     });
     
     return incompleteFields;
@@ -172,93 +193,91 @@ const BuildSchema: React.FC = () => {
     navigate('/generate-template/enter-metadata');
   };
 
-  if (acquisitions.length === 0) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Build Schema - Step 1</h2>
-          <p className="text-gray-600">
-            Upload DICOM files to automatically extract metadata and create acquisition templates. 
-            You can also manually add acquisitions if needed.
-          </p>
-        </div>
-
-        {/* Upload Area */}
-        <div
-          className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-medical-400 transition-colors"
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-        >
-          <Upload className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Upload DICOM Files</h3>
-          <p className="text-gray-600 mb-6">
-            Drag and drop DICOM files or folders here, or click to browse
-          </p>
-          
+  // Component to render upload card (consistent formatting for both empty and additional upload states)
+  const renderUploadCard = (isAdditional: boolean = false) => (
+    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6">
+      <div
+        className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-medical-400 transition-colors"
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        <Upload className="h-8 w-8 text-gray-400 mx-auto mb-3" />
+        <h3 className="text-sm font-semibold text-gray-900 mb-2">
+          {isAdditional ? 'Upload More DICOMs' : 'Upload DICOM Files'}
+        </h3>
+        <p className="text-xs text-gray-600 mb-4">
+          {isAdditional ? 'Add more DICOM files or folders' : 'Drag and drop DICOM files or folders here'}
+        </p>
+        
+        <div className="space-y-3">
           <input
             type="file"
             multiple
             webkitdirectory=""
             className="hidden"
-            id="file-upload"
+            id={isAdditional ? "file-upload-extra" : "file-upload"}
             onChange={(e) => handleFileUpload(e.target.files)}
           />
           <label
-            htmlFor="file-upload"
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-medical-600 hover:bg-medical-700 cursor-pointer"
+            htmlFor={isAdditional ? "file-upload-extra" : "file-upload"}
+            className="inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-medical-600 hover:bg-medical-700 cursor-pointer"
           >
-            <Upload className="h-5 w-5 mr-2" />
+            <Upload className="h-4 w-4 mr-2" />
             Browse Files
           </label>
 
-          {isUploading && (
-            <div className="mt-6">
-              <div className="flex items-center mb-2">
-                <Loader2 className="h-4 w-4 animate-spin text-medical-600 mr-2" />
-                <span className="text-sm font-medium text-gray-700">{uploadStatus}</span>
-              </div>
-              <div className="bg-gray-200 rounded-full h-3">
-                <div 
-                  className="bg-medical-600 h-3 rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                {Math.round(uploadProgress)}% complete
-                {uploadProgress >= 40 && uploadProgress < 70 && !dicompareAPI.isInitialized() && 
-                  " • First-time setup may take up to 30 seconds"
-                }
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Manual Add Option */}
-        <div className="mt-8 text-center">
-          <p className="text-gray-600 mb-4">Or create an acquisition manually</p>
           <button
             onClick={addNewAcquisition}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="inline-flex items-center justify-center w-full px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add New Acquisition
           </button>
         </div>
+
+        {isUploading && (
+          <div className="mt-4">
+            <div className="flex items-center justify-center mb-2">
+              <Loader2 className="h-4 w-4 animate-spin text-medical-600 mr-2" />
+              <span className="text-sm font-medium text-gray-700">{uploadStatus}</span>
+            </div>
+            <div className="bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-medical-600 h-2 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              {Math.round(uploadProgress)}% complete
+              {uploadProgress >= 40 && uploadProgress < 70 && !dicompareAPI.isInitialized() && 
+                " • First-time setup may take up to 30 seconds"
+              }
+            </p>
+          </div>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-4">Build Schema - Step 1</h2>
         <p className="text-gray-600">
-          Review detected acquisitions and configure which DICOM fields to include in your validation template.
+          {acquisitions.length > 0 ? (
+            'Review detected acquisitions and configure which DICOM fields to include in your validation template.'
+          ) : (
+            'Upload DICOM files to automatically extract metadata and create acquisition templates, or manually add acquisitions.'
+          )}
         </p>
       </div>
 
       {/* Acquisitions Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+        {/* Show placeholder card when no acquisitions exist */}
+        {acquisitions.length === 0 && renderUploadCard(false)}
+        
+        {/* Show existing acquisitions */}
         {acquisitions.map((acquisition) => (
           <AcquisitionTable
             key={acquisition.id}
@@ -277,17 +296,9 @@ const BuildSchema: React.FC = () => {
             onSeriesNameUpdate={(seriesIndex, name) => updateSeriesName(acquisition.id, seriesIndex, name)}
           />
         ))}
-      </div>
 
-      {/* Add New Acquisition Button */}
-      <div className="mt-6 flex justify-center">
-        <button
-          onClick={addNewAcquisition}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add New Acquisition
-        </button>
+        {/* Always show upload card for additional DICOMs/acquisitions */}
+        {acquisitions.length > 0 && renderUploadCard(true)}
       </div>
 
       {/* Continue Button */}

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import GenerateTemplate from './pages/GenerateTemplate';
 import CheckCompliance from './pages/CheckCompliance';
+import PythonSchemaBuilder from './pages/PythonSchemaBuilder';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/generate-template/*" element={<GenerateTemplate />} />
           <Route path="/check-compliance/*" element={<CheckCompliance />} />
+          <Route path="/python-schema-builder" element={<PythonSchemaBuilder />} />
         </Routes>
       </div>
     </Router>
