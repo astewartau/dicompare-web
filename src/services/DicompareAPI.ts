@@ -841,97 +841,240 @@ json.dumps(formatted_result)
   async getExampleDicomDataForUI(): Promise<UIAcquisition[]> {
     await this.ensureInitialized();
     
-    const result = await pyodideManager.runPython(`
+    // Generate real DICOM test data using dicompare's test factory
+    // This will create actual DICOM files that can be processed through the normal pipeline
+    // and create the required DataFrame for validation
+    const result = await pyodideManager.runPythonAsync(`
 import json
 
 try:
-    # Use real dicompare test fixtures from dicompare/tests/fixtures/
-    # For now, create example data that represents what the real fixtures would provide
+    # Import the dicompare test factory
+    from dicompare.tests.test_dicom_factory import DicomTestFactory
     
-    result = [
-        {
-            "id": "example_t1",
-            "protocolName": "T1_MPRAGE_Example",
-            "seriesDescription": "T1 MPRAGE Sagittal (Example)",
-            "totalFiles": 192,
-            "acquisitionFields": [
-                {
-                    "tag": "0008,0060",
-                    "name": "Modality",
-                    "value": "MR",
-                    "vr": "CS",
-                    "level": "acquisition",
-                    "dataType": "string",
-                    "consistency": "constant"
-                },
-                {
-                    "tag": "0018,0080",
-                    "name": "RepetitionTime",
-                    "value": 2000,
-                    "vr": "DS",
-                    "level": "acquisition",
-                    "dataType": "number",
-                    "consistency": "constant"
-                },
-                {
-                    "tag": "0018,0081",
-                    "name": "EchoTime",
-                    "value": 3.25,
-                    "vr": "DS",
-                    "level": "acquisition",
-                    "dataType": "number",
-                    "consistency": "constant"
-                }
-            ],
-            "seriesFields": [],
-            "series": [],
-            "metadata": {
-                "source": "dicompare_example_data",
-                "sequence_type": "structural_t1",
-                "using_real_fixtures": True
-            }
-        },
-        {
-            "id": "example_bold",
-            "protocolName": "BOLD_Example",
-            "seriesDescription": "BOLD resting state (Example)",
-            "totalFiles": 240,
-            "acquisitionFields": [
-                {
-                    "tag": "0008,0060",
-                    "name": "Modality",
-                    "value": "MR",
-                    "vr": "CS",
-                    "level": "acquisition",
-                    "dataType": "string",
-                    "consistency": "constant"
-                },
-                {
-                    "tag": "0018,0080",
-                    "name": "RepetitionTime",
-                    "value": 800,
-                    "vr": "DS",
-                    "level": "acquisition",
-                    "dataType": "number",
-                    "consistency": "constant"
-                }
-            ],
-            "seriesFields": [],
-            "series": [],
-            "metadata": {
-                "source": "dicompare_example_data",
-                "sequence_type": "functional_bold",
-                "using_real_fixtures": True
-            }
-        }
-    ]
+    # Create test factory instance (uses in-memory storage)
+    factory = DicomTestFactory()
     
-except Exception as e:
-    # Fallback example data
+    # Generate T1 MPRAGE acquisition (5 slices for quick processing)
+    print("Generating T1 MPRAGE test DICOMs...")
+    t1_paths, t1_bytes = factory.create_t1_mprage(num_slices=5)
+    
+    # Generate BOLD fMRI acquisition (3 echo times for multi-echo BOLD)
+    print("Generating BOLD fMRI test DICOMs...")
+    bold_paths, bold_bytes = factory.create_bold_fmri(num_echo_times=3)
+    
+    # Debug: Check what fields are actually in the generated DICOMs
+    print("\\nDebugging DICOM field content...")
+    if bold_bytes:
+        sample_file = list(bold_bytes.keys())[0]
+        sample_bytes = bold_bytes[sample_file]
+        import pydicom
+        from io import BytesIO
+        ds = pydicom.dcmread(BytesIO(sample_bytes), force=True)
+        print(f"Sample DICOM fields in {sample_file}:")
+        print(f"  SeriesDescription: {getattr(ds, 'SeriesDescription', 'MISSING')}")
+        print(f"  EchoTime: {getattr(ds, 'EchoTime', 'MISSING')}")
+        print(f"  AcquisitionMatrix: {getattr(ds, 'AcquisitionMatrix', 'MISSING')}")
+        print(f"  Available tags: {len(ds)} total fields")
+        print(f"  Has AcquisitionMatrix: {hasattr(ds, 'AcquisitionMatrix')}")
+        if hasattr(ds, 'AcquisitionMatrix'):
+            print(f"  AcquisitionMatrix value: {ds.AcquisitionMatrix}")
+            print(f"  AcquisitionMatrix type: {type(ds.AcquisitionMatrix)}")
+    print("")
+    
+    # Generate T2 FLAIR acquisition (4 slices for quick processing)
+    print("Generating T2 FLAIR test DICOMs...")
+    t2_paths, t2_bytes = factory.create_t2_flair(num_slices=4)
+    
+    # Combine all generated DICOM bytes
+    all_dicom_bytes = {}
+    all_dicom_bytes.update(t1_bytes)
+    all_dicom_bytes.update(bold_bytes)
+    all_dicom_bytes.update(t2_bytes)
+    
+    print(f"Generated {len(all_dicom_bytes)} test DICOM files")
+    
+    # Now process these through the normal dicompare pipeline
+    # This will create the proper DataFrame and cache it for validation
+    from dicompare.web_utils import analyze_dicom_files_for_web
+    result = await analyze_dicom_files_for_web(all_dicom_bytes, None)
+    
+    if result.get("status") == "error":
+        raise Exception(f"Analysis failed: {result.get('message', 'Unknown error')}")
+    
+    # Also cache the DataFrame for validation (same as analyzeFilesForUI does)
+    import pandas as pd
+    from dicompare import async_load_dicom_session, assign_acquisition_and_run_numbers
+    
+    # Load session to create DataFrame
+    session_df = await async_load_dicom_session(dicom_bytes=all_dicom_bytes)
+    session_df = assign_acquisition_and_run_numbers(session_df)
+    
+    # Cache the session DataFrame globally for validation use
+    globals()['cached_session_df'] = session_df
+    print(f"✅ Cached example session DataFrame with {len(session_df)} instances for validation")
+    
+    # Convert the web result to UI format (similar to analyzeFilesForUI)
+    from dicompare.tags import get_tag_info, determine_field_type_from_values
+    from dicompare import DEFAULT_DICOM_FIELDS
+    from pydicom.datadict import dictionary_VR
+    
+    def _get_vr_for_field(field_name: str) -> str:
+        try:
+            tag_info = get_tag_info(field_name)
+            if tag_info["tag"]:
+                tag_str = tag_info["tag"].strip("()")
+                tag_parts = tag_str.split(",")
+                tag_tuple = (int(tag_parts[0], 16), int(tag_parts[1], 16))
+                if tag_tuple in dictionary_VR:
+                    return dictionary_VR[tag_tuple]
+        except:
+            pass
+        return 'LO'
+    
+    acquisitions = []
+    web_acquisitions = result.get("acquisitions", {})
+    
+    for acq_name, acq_data in web_acquisitions.items():
+        # Get acquisition DataFrame for field analysis
+        acq_df = session_df[session_df['Acquisition'] == acq_name] if 'Acquisition' in session_df.columns else session_df
+        
+        # Extract fields
+        acquisition_fields = []
+        series_fields = []
+        
+        has_multiple_series = 'Series' in acq_df.columns and acq_df['Series'].nunique() > 1
+        
+        for field in DEFAULT_DICOM_FIELDS:
+            if field in acq_df.columns:
+                unique_vals = acq_df[field].dropna().unique()
+                all_vals = acq_df[field].unique()  # Include NaN values for debugging
+                tag_info = get_tag_info(field)
+                data_type = determine_field_type_from_values(field, acq_df[field])
+                
+                # Debug AcquisitionMatrix specifically
+                if field == "AcquisitionMatrix":
+                    print(f"\\nDEBUG {field}:")
+                    print(f"  Column exists: {field in acq_df.columns}")
+                    print(f"  All values: {list(all_vals)}")
+                    print(f"  Unique non-NaN values: {list(unique_vals)}")
+                    print(f"  Value counts: {acq_df[field].value_counts(dropna=False)}")
+                    print(f"  Has multiple series: {has_multiple_series}")
+                    print(f"  Unique value count: {len(unique_vals)}")
+                
+                # Skip fields that have no actual data (all NaN/missing)
+                if len(unique_vals) == 0:
+                    print(f"  Skipping {field} - all values are NaN/missing")
+                    continue
+                
+                if not has_multiple_series or len(unique_vals) == 1:
+                    # Acquisition-level field
+                    value = unique_vals[0]
+                    if hasattr(value, 'item'):
+                        value = value.item()
+                    elif pd.isna(value):
+                        value = None
+                    else:
+                        if isinstance(value, (list, tuple)):
+                            value = list(value)
+                        else:
+                            value = str(value) if not isinstance(value, (int, float, bool)) else value
+                    
+                    acquisition_fields.append({
+                        "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field}",
+                        "name": field,
+                        "value": value,
+                        "vr": _get_vr_for_field(field),
+                        "level": "acquisition",
+                        "dataType": data_type,
+                        "consistency": "constant"
+                    })
+                else:
+                    # Series-level field
+                    values_list = []
+                    for val in unique_vals:
+                        if hasattr(val, 'item'):
+                            val = val.item()
+                        elif pd.isna(val):
+                            val = None
+                        else:
+                            if isinstance(val, (list, tuple)):
+                                val = list(val)
+                            else:
+                                val = str(val) if not isinstance(val, (int, float, bool)) else val
+                        values_list.append(val)
+                    
+                    series_fields.append({
+                        "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field}",
+                        "name": field,
+                        "values": values_list,
+                        "vr": _get_vr_for_field(field),
+                        "level": "series",
+                        "dataType": data_type,
+                        "consistency": "varying"
+                    })
+        
+        # Build series data
+        series = []
+        if 'Series' in acq_df.columns and len(series_fields) > 0:
+            unique_series = acq_df['Series'].unique()
+            for series_name in unique_series:
+                series_data = acq_df[acq_df['Series'] == series_name]
+                
+                series_fields_dict = {}
+                for series_field in series_fields:
+                    field_name = series_field['name']
+                    tag = series_field['tag']
+                    
+                    if field_name in series_data.columns:
+                        field_values = series_data[field_name].dropna().unique()
+                        if len(field_values) > 0:
+                            value = field_values[0]
+                            if hasattr(value, 'item'):
+                                value = value.item()
+                            elif not pd.isna(value):
+                                if isinstance(value, (list, tuple)):
+                                    value = list(value)
+                                else:
+                                    value = str(value) if not isinstance(value, (int, float, bool)) else value
+                            series_fields_dict[tag] = value
+                
+                clean_name = series_name.split('_Series_')[-1] if '_Series_' in series_name else f"Series_{len(series) + 1}"
+                series.append({
+                    "name": f"Series_{clean_name}",
+                    "fields": series_fields_dict
+                })
+        
+        # Get series description
+        series_desc = str(acq_df['SeriesDescription'].iloc[0]) if 'SeriesDescription' in acq_df.columns and not acq_df['SeriesDescription'].empty else str(acq_name)
+        
+        acquisitions.append({
+            "id": f"example_{acq_name.lower().replace(' ', '_')}",
+            "protocolName": str(acq_name),
+            "seriesDescription": series_desc,
+            "totalFiles": len(acq_df),
+            "acquisitionFields": acquisition_fields,
+            "seriesFields": series_fields,
+            "series": series,
+            "metadata": {
+                "source": "dicompare_test_factory",
+                "generated": True,
+                "cached_for_validation": True
+            }
+        })
+    
+    from dicompare.serialization import make_json_serializable
+    serializable_acquisitions = make_json_serializable(acquisitions)
+    return json.dumps(serializable_acquisitions)
+    
+except ImportError as e:
+    print(f"Warning: Could not import test factory: {e}")
+    print("Falling back to simple mock data without DataFrame caching")
+    
+    # Fallback to simple mock data if test factory not available
     result = [{
         "id": "example_fallback",
-        "protocolName": "Example Protocol",
-        "seriesDescription": "Example Series",
+        "protocolName": "Example T1 (No Validation)",
+        "seriesDescription": "Mock data - validation not available",
         "totalFiles": 10,
         "acquisitionFields": [
             {
@@ -942,14 +1085,43 @@ except Exception as e:
                 "level": "acquisition",
                 "dataType": "string",
                 "consistency": "constant"
+            },
+            {
+                "tag": "0018,0080",
+                "name": "RepetitionTime",
+                "value": 2000,
+                "vr": "DS",
+                "level": "acquisition",
+                "dataType": "number",
+                "consistency": "constant"
             }
         ],
         "seriesFields": [],
         "series": [],
+        "metadata": {
+            "error": str(e),
+            "note": "Test factory not available - validation will not work with this data"
+        }
+    }]
+    return json.dumps(result)
+    
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    print(f"Error generating example data: {e}")
+    
+    # Fallback on any error
+    result = [{
+        "id": "example_error",
+        "protocolName": "Error Loading Example",
+        "seriesDescription": f"Failed to generate: {str(e)}",
+        "totalFiles": 0,
+        "acquisitionFields": [],
+        "seriesFields": [],
+        "series": [],
         "metadata": {"error": str(e)}
     }]
-
-json.dumps(result)
+    return json.dumps(result)
     `);
     
     const acquisitions = JSON.parse(result);
@@ -1245,8 +1417,24 @@ try:
         else:
             series_desc = str(acq_name)
         
+        # Generate ID based on acquisition name for better readability
+        # Clean the acquisition name for use as ID
+        base_id = str(acq_name).replace(' ', '_').replace('-', '_').replace('/', '_')
+        base_id = ''.join(c for c in base_id if c.isalnum() or c == '_')
+        
+        # Check if this ID already exists in current acquisitions
+        existing_ids = [acq["id"] for acq in acquisitions]
+        if base_id not in existing_ids:
+            unique_id = base_id
+        else:
+            # Find next available number suffix
+            counter = 2
+            while f"{base_id}_{counter}" in existing_ids:
+                counter += 1
+            unique_id = f"{base_id}_{counter}"
+        
         acquisitions.append({
-            "id": f"acq_{len(acquisitions) + 1:03d}",
+            "id": unique_id,
             "protocolName": str(acq_name),
             "seriesDescription": series_desc,
             "totalFiles": len(acq_df),

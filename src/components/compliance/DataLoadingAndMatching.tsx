@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Database, Loader, CheckCircle, FileText, Code, Link2, Plus, X, Trash2 } from 'lucide-react';
+import { Upload, Database, Loader, CheckCircle, FileText, Code, Link2, Plus, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Acquisition, ProcessingProgress, Template, DicomField, Series } from '../../types';
 import { dicompareAPI, AnalysisResult } from '../../services/DicompareAPI';
 import { useSchemaContext } from '../../contexts/SchemaContext';
@@ -32,6 +32,7 @@ const DataLoadingAndMatching: React.FC = () => {
   const [apiError, setApiError] = useState<string | null>(null);
   const [preSelectedSchemaId, setPreSelectedSchemaId] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
 
   // Load example schemas automatically on component mount
   const loadExampleSchemas = async () => {
@@ -88,12 +89,46 @@ const DataLoadingAndMatching: React.FC = () => {
         });
       });
 
-      setLoadedData(result || []);
+      // Append new acquisitions to existing ones instead of replacing
+      const newAcquisitions = result || [];
+      
+      // Check for ID conflicts with existing acquisitions and resolve them
+      const existingIds = new Set((loadedData || []).map(acq => acq.id));
+      const resolvedAcquisitions = newAcquisitions.map(acq => {
+        if (!existingIds.has(acq.id)) {
+          return acq; // No conflict
+        }
+        
+        // Find next available ID with suffix
+        let counter = 2;
+        let newId = `${acq.id}_${counter}`;
+        while (existingIds.has(newId)) {
+          counter++;
+          newId = `${acq.id}_${counter}`;
+        }
+        
+        console.log(`Resolved ID conflict: ${acq.id} → ${newId}`);
+        return { ...acq, id: newId };
+      });
+      
+      setLoadedData(prev => [...(prev || []), ...resolvedAcquisitions]);
       setApiError(null);
+      
+      // Auto-pair preselected schema with newly uploaded acquisitions
+      if (preSelectedSchemaId && resolvedAcquisitions && resolvedAcquisitions.length > 0) {
+        console.log(`Auto-pairing preselected schema ${preSelectedSchemaId} with ${resolvedAcquisitions.length} new acquisitions`);
+        const newPairings: Record<string, string> = {};
+        resolvedAcquisitions.forEach(acquisition => {
+          newPairings[acquisition.id] = preSelectedSchemaId;
+        });
+        setPairings(prev => ({ ...prev, ...newPairings }));
+        // Clear preselection since it's now been used
+        setPreSelectedSchemaId(null);
+      }
     } catch (error) {
       console.error('Failed to load DICOM data:', error);
       setApiError(`Failed to process DICOM data: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setLoadedData([]); // Ensure loadedData is always an array
+      // Don't clear existing data on error - keep what was already loaded
     }
     
     setIsProcessing(false);
@@ -116,6 +151,18 @@ const DataLoadingAndMatching: React.FC = () => {
       // Load only DICOM data when user clicks "Load Example Data"
       const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
       setLoadedData(acquisitions);
+      
+      // Auto-pair preselected schema with example data acquisitions
+      if (preSelectedSchemaId && acquisitions && acquisitions.length > 0) {
+        console.log(`Auto-pairing preselected schema ${preSelectedSchemaId} with ${acquisitions.length} example acquisitions`);
+        const newPairings: Record<string, string> = {};
+        acquisitions.forEach(acquisition => {
+          newPairings[acquisition.id] = preSelectedSchemaId;
+        });
+        setPairings(prev => ({ ...prev, ...newPairings }));
+        // Clear preselection since it's now been used
+        setPreSelectedSchemaId(null);
+      }
       
       setShowExampleData(true);
     } catch (error) {
@@ -324,43 +371,40 @@ const DataLoadingAndMatching: React.FC = () => {
     return Object.keys(pairings).length;
   };
 
-  if (isProcessing) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Loading DICOM Data</h2>
-          <p className="text-gray-600">
-            Processing your DICOM files and extracting metadata...
-          </p>
-        </div>
+  const toggleSchemaCollapse = (acquisitionId: string) => {
+    setCollapsedSchemas(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(acquisitionId)) {
+        newSet.delete(acquisitionId);
+      } else {
+        newSet.add(acquisitionId);
+      }
+      return newSet;
+    });
+  };
 
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <div className="text-center">
-            <Loader className="h-16 w-16 text-medical-600 mx-auto mb-6 animate-spin" />
-            
-            {progress && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  {progress.currentOperation}
-                </h3>
-                
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-medical-600 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${progress.percentage}%` }}
-                  />
-                </div>
-                
-                <p className="text-sm text-gray-600">
-                  {Math.round(progress.percentage)}% complete
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleDeleteAcquisition = (acquisitionId: string) => {
+    // Remove the acquisition from loadedData
+    setLoadedData(prev => prev?.filter(acq => acq.id !== acquisitionId) || []);
+    
+    // Remove any pairing for this acquisition
+    setPairings(prev => {
+      const newPairings = { ...prev };
+      delete newPairings[acquisitionId];
+      return newPairings;
+    });
+    
+    // Remove from collapsed state if it was collapsed
+    setCollapsedSchemas(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(acquisitionId);
+      return newSet;
+    });
+    
+    console.log(`Deleted acquisition ${acquisitionId}`);
+  };
+
+  // Remove the full-screen loading overlay - handle loading state in upload areas instead
 
   // Component to render upload area that looks like an acquisition card
   const renderUploadArea = (isExtra: boolean = false) => (
@@ -370,29 +414,57 @@ const DataLoadingAndMatching: React.FC = () => {
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          {isExtra ? 'Upload More DICOM Files' : 'Upload DICOM Files'}
-        </h3>
-        <p className="text-gray-600 mb-4">
-          Drag and drop DICOM files or folders here, or click to browse
-        </p>
-        
-        <input
-          type="file"
-          multiple
-          webkitdirectory=""
-          className="hidden"
-          id={isExtra ? "file-upload-extra" : "file-upload"}
-          onChange={(e) => handleFileUpload(e.target.files)}
-        />
-        <label
-          htmlFor={isExtra ? "file-upload-extra" : "file-upload"}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-medical-600 hover:bg-medical-700 cursor-pointer"
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          Browse Files
-        </label>
+        {isProcessing ? (
+          // Show loading state
+          <>
+            <Loader className="h-12 w-12 text-medical-600 mx-auto mb-4 animate-spin" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Processing DICOM Files</h3>
+            <p className="text-gray-600 mb-4">
+              {progress?.currentOperation || 'Processing your files...'}
+            </p>
+            
+            {progress && (
+              <div className="space-y-3 mb-4">
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-medical-600 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${progress.percentage}%` }}
+                  />
+                </div>
+                <p className="text-sm text-gray-600">
+                  {Math.round(progress.percentage)}% complete
+                </p>
+              </div>
+            )}
+          </>
+        ) : (
+          // Show normal upload interface
+          <>
+            <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {isExtra ? 'Upload More DICOM Files' : 'Upload DICOM Files'}
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Drag and drop DICOM files or folders here, or click to browse
+            </p>
+            
+            <input
+              type="file"
+              multiple
+              webkitdirectory=""
+              className="hidden"
+              id={isExtra ? "file-upload-extra" : "file-upload"}
+              onChange={(e) => handleFileUpload(e.target.files)}
+            />
+            <label
+              htmlFor={isExtra ? "file-upload-extra" : "file-upload"}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-medical-600 hover:bg-medical-700 cursor-pointer"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Browse Files
+            </label>
+          </>
+        )}
       </div>
     </div>
   );
@@ -458,7 +530,7 @@ const DataLoadingAndMatching: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea()}
             {preSelectedSchemaId ? (
-              // Show schema details when one is selected for upload area
+              // Show schema details when one is selected for upload area - using same structure as paired schema
               <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit">
                 {/* Template Header */}
                 <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
@@ -469,31 +541,42 @@ const DataLoadingAndMatching: React.FC = () => {
                       </h3>
                       <p className="text-xs text-gray-600 truncate">Schema Requirements</p>
                     </div>
-                    <button
-                      onClick={() => setPreSelectedSchemaId(null)}
-                      className="p-1 text-gray-600 hover:text-red-600 transition-colors"
-                      title="Deselect schema"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
+                      <button
+                        onClick={() => setPreSelectedSchemaId(null)}
+                        className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+                        title="Deselect schema"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => toggleSchemaCollapse('preselected')}
+                        className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
+                        title={collapsedSchemas.has('preselected') ? 'Expand' : 'Collapse'}
+                      >
+                        {collapsedSchemas.has('preselected') ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-1 text-xs text-gray-500">
                     v{getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.version || '1.0.0'} • {getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.authors?.join(', ') || 'Example Schema'}
                   </div>
                 </div>
 
-                {/* Schema Preview */}
-                <div className="p-3 space-y-3">
-                  <div>
-                    <ComplianceFieldTable
-                      fields={[]} // Empty fields for schema-only display
-                      acquisition={{} as Acquisition} // Empty acquisition object
-                      schemaFields={[]} // Not used anymore, Python API handles schema internally
-                      schemaId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[0] : preSelectedSchemaId}
-                      acquisitionId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[1] : undefined}
-                    />
+                {/* Schema Preview - Collapsible */}
+                {!collapsedSchemas.has('preselected') && (
+                  <div className="p-3 space-y-3">
+                    <div>
+                      <ComplianceFieldTable
+                        fields={[]} // Empty fields for schema-only display
+                        acquisition={{} as Acquisition} // Empty acquisition object
+                        schemaFields={[]} // Not used anymore, Python API handles schema internally
+                        schemaId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[0] : preSelectedSchemaId}
+                        acquisitionId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[1] : undefined}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ) : (
               <SchemaSelectionCard
@@ -522,22 +605,22 @@ const DataLoadingAndMatching: React.FC = () => {
               <div className="relative">
                 <AcquisitionTable
                   acquisition={acquisition}
-                  isEditMode={false}
-                  onUpdate={() => {}}
-                  onDelete={() => {}}
-                  onFieldUpdate={() => {}}
-                  onFieldConvert={() => {}}
-                  onFieldDelete={() => {}}
-                  onFieldAdd={() => {}}
-                  onSeriesUpdate={() => {}}
-                  onSeriesAdd={() => {}}
-                  onSeriesDelete={() => {}}
-                  onSeriesNameUpdate={() => {}}
+                  isEditMode={true} // Enable edit mode to show delete button
+                  onUpdate={() => {}} // Not needed for compliance mode
+                  onDelete={() => handleDeleteAcquisition(acquisition.id)}
+                  onFieldUpdate={() => {}} // Not needed for compliance mode
+                  onFieldConvert={() => {}} // Not needed for compliance mode
+                  onFieldDelete={() => {}} // Not needed for compliance mode
+                  onFieldAdd={() => {}} // Not needed for compliance mode
+                  onSeriesUpdate={() => {}} // Not needed for compliance mode
+                  onSeriesAdd={() => {}} // Not needed for compliance mode
+                  onSeriesDelete={() => {}} // Not needed for compliance mode
+                  onSeriesNameUpdate={() => {}} // Not needed for compliance mode
                 />
                 
                 {/* Pairing Status Badge */}
                 {pairedTemplate && (
-                  <div className="absolute top-2 right-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium flex items-center">
+                  <div className="absolute top-2 right-10 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium flex items-center">
                     <CheckCircle className="h-4 w-4 mr-1" />
                     Paired
                   </div>
@@ -555,31 +638,42 @@ const DataLoadingAndMatching: React.FC = () => {
                         <h3 className="text-sm font-semibold text-gray-900 truncate">{pairedTemplate.name}</h3>
                         <p className="text-xs text-gray-600 truncate">Schema Requirements</p>
                       </div>
-                      <button
-                        onClick={() => unpairAcquisition(acquisition.id)}
-                        className="p-1 text-gray-600 hover:text-red-600 transition-colors"
-                        title="Unpair template"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
+                      <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
+                        <button
+                          onClick={() => unpairAcquisition(acquisition.id)}
+                          className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+                          title="Unpair template"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => toggleSchemaCollapse(acquisition.id)}
+                          className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
+                          title={collapsedSchemas.has(acquisition.id) ? 'Expand' : 'Collapse'}
+                        >
+                          {collapsedSchemas.has(acquisition.id) ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+                        </button>
+                      </div>
                     </div>
                     <div className="mt-1 text-xs text-gray-500">
                       v{pairedTemplate.version || '1.0.0'} • {pairedTemplate.authors?.join(', ') || 'Example Schema'}
                     </div>
                   </div>
 
-                  {/* Schema Pairing */}
-                  <div className="p-3 space-y-3">
-                    <div>
-                      <ComplianceFieldTable
-                        fields={acquisition.acquisitionFields}
-                        acquisition={acquisition}
-                        schemaFields={[]}
-                        schemaId={pairedTemplate.id}
-                        acquisitionId={pairedTemplate.acquisitionIndex}
-                      />
+                  {/* Schema Pairing - Collapsible */}
+                  {!collapsedSchemas.has(acquisition.id) && (
+                    <div className="p-3 space-y-3">
+                      <div>
+                        <ComplianceFieldTable
+                          fields={acquisition.acquisitionFields}
+                          acquisition={acquisition}
+                          schemaFields={[]}
+                          schemaId={pairedTemplate.id}
+                          acquisitionId={pairedTemplate.acquisitionIndex}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 // Show template selection when not paired
@@ -601,7 +695,7 @@ const DataLoadingAndMatching: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea(true)}
             {preSelectedSchemaId ? (
-              // Show schema details when one is selected for upload area
+              // Show schema details when one is selected for upload area - using same structure as paired schema
               <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit">
                 {/* Template Header */}
                 <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
@@ -612,31 +706,42 @@ const DataLoadingAndMatching: React.FC = () => {
                       </h3>
                       <p className="text-xs text-gray-600 truncate">Schema Requirements</p>
                     </div>
-                    <button
-                      onClick={() => setPreSelectedSchemaId(null)}
-                      className="p-1 text-gray-600 hover:text-red-600 transition-colors"
-                      title="Deselect schema"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
+                      <button
+                        onClick={() => setPreSelectedSchemaId(null)}
+                        className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+                        title="Deselect schema"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => toggleSchemaCollapse('preselected_bottom')}
+                        className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
+                        title={collapsedSchemas.has('preselected_bottom') ? 'Expand' : 'Collapse'}
+                      >
+                        {collapsedSchemas.has('preselected_bottom') ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-1 text-xs text-gray-500">
                     v{getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.version || '1.0.0'} • {getAllAvailableSchemas().find(s => s.id === preSelectedSchemaId)?.authors?.join(', ') || 'Example Schema'}
                   </div>
                 </div>
 
-                {/* Schema Preview */}
-                <div className="p-3 space-y-3">
-                  <div>
-                    <ComplianceFieldTable
-                      fields={[]} // Empty fields for schema-only display
-                      acquisition={{} as Acquisition} // Empty acquisition object
-                      schemaFields={[]} // Not used anymore, Python API handles schema internally
-                      schemaId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[0] : preSelectedSchemaId}
-                      acquisitionId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[1] : undefined}
-                    />
+                {/* Schema Preview - Collapsible */}
+                {!collapsedSchemas.has('preselected_bottom') && (
+                  <div className="p-3 space-y-3">
+                    <div>
+                      <ComplianceFieldTable
+                        fields={[]} // Empty fields for schema-only display
+                        acquisition={{} as Acquisition} // Empty acquisition object
+                        schemaFields={[]} // Not used anymore, Python API handles schema internally
+                        schemaId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[0] : preSelectedSchemaId}
+                        acquisitionId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[1] : undefined}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ) : (
               <SchemaSelectionCard
