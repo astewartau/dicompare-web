@@ -27,11 +27,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
 
   if (fields.length === 0) {
-    return (
-      <div className="border border-gray-200 rounded-md p-4 text-center">
-        <p className="text-gray-500 text-xs">No acquisition-level fields defined</p>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -83,6 +79,9 @@ const FieldTable: React.FC<FieldTableProps> = ({
                       <p className="text-xs text-gray-500 mt-0.5">
                         {formatFieldTypeInfo(field.dataType, field.validationRule)}
                       </p>
+                    )}
+                    {!isEditMode && (
+                      <p className="text-xs mt-0.5 invisible">&nbsp;</p>
                     )}
                   </div>
                 </td>

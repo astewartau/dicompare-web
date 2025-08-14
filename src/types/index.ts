@@ -7,6 +7,7 @@ export interface DicomField {
   level: 'acquisition' | 'series';
   dataType?: FieldDataType;
   validationRule?: ValidationRule;
+  seriesName?: string; // For series-level fields, which series they belong to
 }
 
 // Enhanced field types for validation

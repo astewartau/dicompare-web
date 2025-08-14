@@ -24,11 +24,15 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   const [formData, setFormData] = useState({
     name: field.name,
     dataType: isSeriesValue ? 
-      (typeof value === 'object' && value?.dataType ? value.dataType : (field.dataType || 'string')) :
+      (typeof value === 'object' && value?.dataType ? value.dataType : 
+        // Auto-detect list type if value is an array and field type allows it
+        (Array.isArray(value) && field.dataType?.startsWith('list_') ? field.dataType : 
+          (Array.isArray(value) ? 'list_string' : (field.dataType || 'string')))) :
       (field.dataType || 'string') as FieldDataType,
     value: isSeriesValue ? 
       (typeof value === 'object' && value?.value !== undefined ? value.value : (value || '')) : 
-      field.value,
+      // For acquisition fields, check if field.values exists (varying field) and use it for list types
+      (field.values && (field.dataType === 'list_string' || field.dataType === 'list_number') ? field.values : field.value),
     validationRule: isSeriesValue ?
       (typeof value === 'object' && value?.validationRule ? value.validationRule : { type: 'exact' as ValidationConstraint }) :
       (field.validationRule || { type: 'exact' as ValidationConstraint }),

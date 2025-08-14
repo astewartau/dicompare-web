@@ -158,6 +158,9 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                               })()}
                             </p>
                           )}
+                          {!isEditMode && (
+                            <p className="text-xs mt-0.5 invisible">&nbsp;</p>
+                          )}
                         </div>
                       </div>
                     </td>

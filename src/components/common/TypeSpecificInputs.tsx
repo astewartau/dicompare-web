@@ -21,6 +21,7 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
   const [stringListInput, setStringListInput] = useState('');
   const [numberListInput, setNumberListInput] = useState('');
   const [jsonError, setJsonError] = useState('');
+  const [initialized, setInitialized] = useState(false);
 
   const handleStringListChange = (input: string) => {
     setStringListInput(input);
@@ -63,19 +64,68 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
     }
   };
 
+  // Reset initialization flag when dataType or value changes
+  React.useEffect(() => {
+    setInitialized(false);
+  }, [dataType, value]);
+
   // Initialize string list display
   React.useEffect(() => {
-    if (dataType === 'list_string' && Array.isArray(value) && stringListInput === '') {
-      setStringListInput(value.join(', '));
+    if (dataType === 'list_string' && !initialized) {
+      if (Array.isArray(value)) {
+        setStringListInput(value.join(', '));
+      } else if (value) {
+        // If value is a string that looks like a comma-separated list, convert it
+        const stringValue = String(value);
+        if (stringValue.includes(',')) {
+          // Parse as comma-separated and rejoin with spaces
+          const parsedValues = stringValue.split(',').map(v => v.trim()).filter(v => v.length > 0);
+          setStringListInput(parsedValues.join(', '));
+          // Also update the actual value to be an array
+          onChange(parsedValues);
+        } else {
+          setStringListInput(stringValue);
+        }
+      } else {
+        setStringListInput('');
+      }
+      setInitialized(true);
     }
-  }, [dataType, value, stringListInput]);
+  }, [dataType, value, initialized]);
 
   // Initialize number list display
   React.useEffect(() => {
-    if (dataType === 'list_number' && Array.isArray(value) && numberListInput === '') {
-      setNumberListInput(value.join(', '));
+    if (dataType === 'list_number' && !initialized) {
+      if (Array.isArray(value)) {
+        setNumberListInput(value.join(', '));
+      } else if (value) {
+        // If value is a string that looks like a comma-separated list, convert it
+        const stringValue = String(value);
+        if (stringValue.includes(',')) {
+          // Parse as comma-separated and rejoin with spaces
+          const parsedValues = stringValue.split(',').map(v => v.trim()).filter(v => v.length > 0);
+          setNumberListInput(parsedValues.join(', '));
+          // Convert to numbers and update the actual value
+          try {
+            const numberValues = parsedValues.map(v => {
+              const num = parseFloat(v);
+              if (isNaN(num)) throw new Error(`Invalid number: ${v}`);
+              return num;
+            });
+            onChange(numberValues);
+          } catch (error) {
+            // Keep as string if parsing fails
+            setNumberListInput(stringValue);
+          }
+        } else {
+          setNumberListInput(stringValue);
+        }
+      } else {
+        setNumberListInput('');
+      }
+      setInitialized(true);
     }
-  }, [dataType, value, numberListInput]);
+  }, [dataType, value, initialized]);
 
   switch (dataType) {
     case 'string':

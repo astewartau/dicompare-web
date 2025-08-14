@@ -2,9 +2,18 @@ import React, { createContext, useContext, useState, useCallback, ReactNode } fr
 import { Acquisition, DicomField, Series } from '../types';
 import { searchDicomFields, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
 
+interface TemplateMetadata {
+  name: string;
+  description: string;
+  authors: string[];
+  version: string;
+}
+
 interface AcquisitionContextType {
   acquisitions: Acquisition[];
   setAcquisitions: (acquisitions: Acquisition[]) => void;
+  templateMetadata: TemplateMetadata | null;
+  setTemplateMetadata: (metadata: TemplateMetadata) => void;
   updateAcquisition: (id: string, updates: Partial<Acquisition>) => void;
   deleteAcquisition: (id: string) => void;
   addNewAcquisition: () => void;
@@ -26,6 +35,7 @@ interface AcquisitionProviderProps {
 
 export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ children }) => {
   const [acquisitions, setAcquisitions] = useState<Acquisition[]>([]);
+  const [templateMetadata, setTemplateMetadata] = useState<TemplateMetadata | null>(null);
 
   const updateAcquisition = useCallback((id: string, updates: Partial<Acquisition>) => {
     setAcquisitions(prev => prev.map(acq => 
@@ -249,6 +259,8 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const value: AcquisitionContextType = {
     acquisitions,
     setAcquisitions,
+    templateMetadata,
+    setTemplateMetadata,
     updateAcquisition,
     deleteAcquisition,
     addNewAcquisition,

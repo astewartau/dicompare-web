@@ -1,16 +1,18 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 
 interface SchemaUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUploadComplete?: (schemaId: string) => void;
+  preloadedFile?: File | null;
 }
 
 export const SchemaUploadModal: React.FC<SchemaUploadModalProps> = ({ 
   isOpen, 
   onClose, 
-  onUploadComplete 
+  onUploadComplete,
+  preloadedFile 
 }) => {
   const { uploadSchema } = useSchemaContext();
   const [dragActive, setDragActive] = useState(false);
@@ -55,6 +57,11 @@ export const SchemaUploadModal: React.FC<SchemaUploadModalProps> = ({
       return;
     }
 
+    // Pre-fill form from schema content if it's a JSON file
+    if (file.name.endsWith('.json')) {
+      await prefillFromSchema(file);
+    }
+
     setUploading(true);
     setError(null);
     setUploadProgress(0);
@@ -93,6 +100,38 @@ export const SchemaUploadModal: React.FC<SchemaUploadModalProps> = ({
     setFormData({ title: '', description: '', authors: '' });
     setError(null);
     setUploadProgress(0);
+  };
+
+  // Pre-fill form when a file is provided (but don't auto-upload)
+  useEffect(() => {
+    if (preloadedFile && isOpen) {
+      prefillFromSchema(preloadedFile);
+    }
+  }, [preloadedFile, isOpen]);
+
+  // Pre-fill form data from schema content
+  const prefillFromSchema = async (file: File) => {
+    try {
+      const content = await file.text();
+      const schemaData = JSON.parse(content);
+      
+      // Extract metadata from schema if available
+      const template = schemaData.template || schemaData;
+      const metadata = {
+        title: template.name || file.name.replace('.json', ''),
+        description: template.description || '',
+        authors: template.authors ? template.authors.join(', ') : ''
+      };
+      
+      setFormData(metadata);
+    } catch (error) {
+      console.error('Failed to extract schema metadata:', error);
+      // Fall back to filename
+      setFormData(prev => ({
+        ...prev,
+        title: file.name.replace('.json', '')
+      }));
+    }
   };
 
   const handleClose = () => {
@@ -171,7 +210,9 @@ export const SchemaUploadModal: React.FC<SchemaUploadModalProps> = ({
             className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
               dragActive 
                 ? 'border-blue-400 bg-blue-50' 
-                : 'border-gray-300 hover:border-gray-400'
+                : preloadedFile 
+                  ? 'border-green-400 bg-green-50' 
+                  : 'border-gray-300 hover:border-gray-400'
             } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -197,6 +238,16 @@ export const SchemaUploadModal: React.FC<SchemaUploadModalProps> = ({
                   ></div>
                 </div>
               </div>
+            ) : preloadedFile ? (
+              <div className="space-y-2">
+                <div className="text-4xl">✅</div>
+                <p className="text-sm text-gray-900 font-medium">
+                  {preloadedFile.name}
+                </p>
+                <p className="text-xs text-gray-600">
+                  File ready for upload. Review the details above and click Upload to proceed.
+                </p>
+              </div>
             ) : (
               <div className="space-y-2">
                 <div className="text-4xl">📄</div>
@@ -219,6 +270,19 @@ export const SchemaUploadModal: React.FC<SchemaUploadModalProps> = ({
           >
             Cancel
           </button>
+          {(preloadedFile || formData.title) && (
+            <button
+              onClick={() => {
+                if (preloadedFile) {
+                  handleFileUpload(preloadedFile);
+                }
+              }}
+              disabled={uploading || !preloadedFile}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploading ? 'Uploading...' : 'Upload Schema'}
+            </button>
+          )}
         </div>
       </div>
     </div>

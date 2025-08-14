@@ -4,6 +4,7 @@ import { DicomField, Acquisition, SchemaField } from '../../types';
 import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 import { ComplianceFieldResult } from '../../types/schema';
 import { dicompareAPI, FieldInfo } from '../../services/DicompareAPI';
+import { useSchemaContext } from '../../contexts/SchemaContext';
 
 /**
  * ComplianceFieldTable - UI PROTOTYPE ONLY
@@ -18,13 +19,15 @@ interface ComplianceFieldTableProps {
   acquisition: Acquisition;
   schemaFields: SchemaField[];
   schemaId?: string;
+  acquisitionId?: string;
 }
 
 const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   fields,
   acquisition,
   schemaFields,
-  schemaId
+  schemaId,
+  acquisitionId
 }) => {
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [expandedCompliance, setExpandedCompliance] = useState<boolean>(false);
@@ -32,6 +35,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [loadedSchemaFields, setLoadedSchemaFields] = useState<DicomField[]>([]);
+
+  const { getSchemaContent } = useSchemaContext();
 
   // Load schema fields from API
   const loadSchemaFields = async () => {
@@ -41,8 +46,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     setError(null);
 
     try {
-      // Get schema fields from Python API
-      const apiFields: FieldInfo[] = await dicompareAPI.getSchemaFields(schemaId);
+      // Get schema fields from Python API, passing getSchemaContent for uploaded schemas
+      const apiFields: FieldInfo[] = await dicompareAPI.getSchemaFields(schemaId, getSchemaContent, acquisitionId);
       
       // Convert API format to DicomField format
       const schemaFields: DicomField[] = apiFields.map(field => ({
@@ -53,7 +58,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
         level: field.level,
         dataType: field.data_type,
         validationRule: field.validation_rule || { type: 'exact' as const },
-        consistency: field.consistency
+        consistency: field.consistency,
+        seriesName: field.seriesName // Pass through the series name
       }));
 
       setLoadedSchemaFields(schemaFields);
@@ -66,7 +72,7 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     }
   };
 
-  // Mock compliance validation - UI prototype only
+  // Real compliance validation using dicompare
   const performComplianceCheck = async () => {
     if (!schemaId || fields.length === 0) return;
 
@@ -74,41 +80,29 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     setError(null);
 
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Use real dicompare validation against the selected schema
+      const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
+        acquisition,
+        schemaId,
+        getSchemaContent
+      );
 
-      // Generate mock compliance results for UI demonstration
-      const mockResults: ComplianceFieldResult[] = fields.map((field, index) => {
-        // Mock different compliance statuses for demonstration
-        const rand = Math.random();
-        let status: 'pass' | 'fail' | 'warning';
-        let message: string;
-        
-        if (rand < 0.7) {
-          status = 'pass';
-          message = 'Field meets requirements';
-        } else if (rand < 0.9) {
-          status = 'warning';
-          message = 'Field value should be verified';
-        } else {
-          status = 'fail';
-          message = 'Field does not meet requirements';
-        }
+      // Convert validation results to UI format
+      const complianceResults: ComplianceFieldResult[] = validationResults.map(result => ({
+        fieldPath: result.fieldPath,
+        fieldName: result.fieldName,
+        status: result.status,
+        message: result.message,
+        actualValue: result.actualValue,
+        expectedValue: result.expectedValue,
+        validationType: result.validationType,
+        seriesName: result.seriesName
+      }));
 
-        return {
-          fieldPath: field.tag,
-          fieldName: field.name,
-          status,
-          message,
-          actualValue: field.value,
-          expectedValue: status === 'fail' ? 'Expected value differs' : undefined
-        };
-      });
-
-      setComplianceResults(mockResults);
+      setComplianceResults(complianceResults);
     } catch (err) {
-      console.error('Mock validation error:', err);
-      setError('Mock validation failed');
+      console.error('Compliance validation error:', err);
+      setError(`Validation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setComplianceResults([]);
     } finally {
       setIsLoading(false);
@@ -117,10 +111,10 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
 
   // Load schema fields when we have a schema (always load for display)
   useEffect(() => {
-    if (schemaId && loadedSchemaFields.length === 0 && !isLoading && !error) {
+    if (schemaId && !isLoading && !error) {
       loadSchemaFields();
     }
-  }, [schemaId]); // Trigger when schema changes
+  }, [schemaId, acquisitionId]); // Trigger when schema or acquisition changes
 
   // Only validate when compliance summary is expanded
   useEffect(() => {
@@ -131,7 +125,10 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
 
   // Find compliance result for a specific field
   const getFieldComplianceResult = (field: DicomField): ComplianceFieldResult => {
-    const result = complianceResults.find(r => r.fieldPath === field.tag);
+    // Match by field name since that's what the validation results use
+    const result = complianceResults.find(r => 
+      r.fieldPath === field.name || r.fieldName === field.name
+    );
     return result || {
       fieldPath: field.tag,
       fieldName: field.name,
@@ -139,6 +136,23 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
       message: schemaId ? 'Click "Compliance Summary" to validate' : 'No schema selected',
       actualValue: field.value
     };
+  };
+
+  // Find compliance result for a series field with series context
+  const getSeriesFieldComplianceResult = (field: DicomField, seriesName: string): ComplianceFieldResult => {
+    // First try to find series-specific result
+    const seriesResult = complianceResults.find(r => 
+      r.validationType === 'series' &&
+      (r.fieldPath === field.name || r.fieldName === field.name) &&
+      r.seriesName === seriesName
+    );
+    
+    if (seriesResult) {
+      return seriesResult;
+    }
+    
+    // Fall back to acquisition-level result if no series result found
+    return getFieldComplianceResult(field);
   };
 
   const getStatusIcon = (status: ComplianceFieldResult['status']) => {
@@ -176,13 +190,16 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   const compliance = getComplianceStats();
   const compliancePercentage = compliance.percentage;
 
-  // Always display schema fields when available
-  const fieldsToDisplay = loadedSchemaFields.length > 0 ? loadedSchemaFields : fields;
+  // Separate acquisition-level and series-level fields
+  const allFields = loadedSchemaFields.length > 0 ? loadedSchemaFields : fields;
+  const acquisitionLevelFields = allFields.filter(field => field.level === 'acquisition');
+  const seriesLevelFields = allFields.filter(field => field.level === 'series');
+  
   const isSchemaOnlyMode = fields.length === 0 && loadedSchemaFields.length > 0;
   const hasAcquisitionData = fields.length > 0;
 
 
-  if (fieldsToDisplay.length === 0 && !isLoading) {
+  if (allFields.length === 0 && !isLoading) {
     return (
       <div className="border border-gray-200 rounded-md p-4 text-center">
         <p className="text-gray-500 text-xs">
@@ -201,8 +218,10 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     );
   }
 
-  return (
-    <div className="space-y-2">
+  const renderFieldTable = (fieldsToRender: DicomField[], title: string) => {
+    if (fieldsToRender.length === 0) return null;
+
+    return (
       <div className="border border-gray-200 rounded-md overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -221,14 +240,14 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {fieldsToDisplay.map((field, index) => {
+            {fieldsToRender.map((field, index) => {
               const complianceResult = getFieldComplianceResult(field);
               
               return (
                 <tr
-                  key={field.tag}
+                  key={`${title}-${field.tag}-${index}`}
                   className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
-                  onMouseEnter={() => setHoveredRow(field.tag)}
+                  onMouseEnter={() => setHoveredRow(`${title}-${field.tag}-${index}`)}
                   onMouseLeave={() => setHoveredRow(null)}
                 >
                   <td className="px-2 py-1.5 whitespace-nowrap">
@@ -263,6 +282,110 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
           </tbody>
         </table>
       </div>
+    );
+  };
+
+  const renderSeriesFieldTable = (fieldsToRender: DicomField[], title: string) => {
+    if (fieldsToRender.length === 0) return null;
+
+    // Group series fields by series and field using the actual seriesName from the field
+    const seriesData: Record<string, Record<string, DicomField>> = {};
+    
+    fieldsToRender.forEach((field, index) => {
+      // Use the actual series name from the field, or fallback to a generated name
+      const seriesName = field.seriesName || `Series_${index + 1}`;
+      
+      if (!seriesData[seriesName]) {
+        seriesData[seriesName] = {};
+      }
+      
+      seriesData[seriesName][field.name] = field;
+    });
+
+    // Get all unique field names for column headers
+    const allFieldNames = [...new Set(fieldsToRender.map(f => f.name))];
+    const seriesNames = Object.keys(seriesData).sort(); // Sort series names for consistent order
+
+    return (
+      <div className="border border-gray-200 rounded-md overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 min-w-[140px]">
+                Series
+              </th>
+              {allFieldNames.map(fieldName => {
+                // Get the field to access its tag
+                const field = fieldsToRender.find(f => f.name === fieldName);
+                return (
+                  <th key={fieldName} className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{fieldName}</p>
+                      {field && <p className="text-xs font-normal text-gray-400 font-mono">{field.tag}</p>}
+                    </div>
+                  </th>
+                );
+              })}
+              {hasAcquisitionData && (
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  Status
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {seriesNames.map((seriesName, index) => (
+              <tr
+                key={seriesName}
+                className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+              >
+                <td className="px-2 py-1.5 whitespace-nowrap font-medium text-gray-900 sticky left-0 bg-inherit min-w-[140px]">
+                  <span className="text-xs">{seriesName}</span>
+                </td>
+                {allFieldNames.map(fieldName => {
+                  const field = seriesData[seriesName][fieldName];
+                  return (
+                    <td key={`${seriesName}-${fieldName}`} className="px-2 py-1.5">
+                      {field ? (
+                        <div>
+                          <p className="text-xs text-gray-900 break-words">{formatFieldValue(field)}</p>
+                          {field.dataType && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {formatFieldTypeInfo(field.dataType, field.validationRule)}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400">-</p>
+                      )}
+                    </td>
+                  );
+                })}
+                {hasAcquisitionData && (
+                  <td className="px-2 py-1.5 text-center">
+                    {/* For now, show the status of the first field in this series */}
+                    {allFieldNames.length > 0 && seriesData[seriesName][allFieldNames[0]] && (
+                      <div 
+                        className="inline-flex items-center justify-center cursor-help"
+                        title={getSeriesFieldComplianceResult(seriesData[seriesName][allFieldNames[0]], seriesName).message}
+                      >
+                        {getStatusIcon(getSeriesFieldComplianceResult(seriesData[seriesName][allFieldNames[0]], seriesName).status)}
+                      </div>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      {acquisitionLevelFields.length > 0 && renderFieldTable(acquisitionLevelFields, "Acquisition-Level Fields")}
+      {seriesLevelFields.length > 0 && renderSeriesFieldTable(seriesLevelFields, "Series-Level Fields")}
 
       {/* Compliance Summary - only show when we have acquisition data to validate */}
       {hasAcquisitionData && (
@@ -346,11 +469,11 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
                   </div>
                 )}
                 
-                {complianceResults.map(result => {
+                {complianceResults.map((result, index) => {
                   if (result.status === 'pass') return null;
                   
                   return (
-                    <div key={result.fieldPath} className={`flex items-start space-x-2 p-2 rounded text-xs ${
+                    <div key={`${result.fieldPath}-${index}`} className={`flex items-start space-x-2 p-2 rounded text-xs ${
                       result.status === 'fail' ? 'bg-red-50' :
                       result.status === 'warning' ? 'bg-yellow-50' :
                       'bg-gray-50'

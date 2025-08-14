@@ -2,6 +2,7 @@
 
 export interface PyodideInstance {
   runPython: (code: string) => any;
+  runPythonAsync: (code: string) => Promise<any>;
   globals: {
     get: (name: string) => any;
     set: (name: string, value: any) => void;
@@ -46,14 +47,47 @@ class PyodideManager {
     const loadTime = Date.now() - startTime;
     console.log(`🐍 Pyodide loaded in ${loadTime}ms`);
 
-    // Install and load the mock dicompare package
-    await this.setupMockDicompare(pyodide);
+    // Install and load the real dicompare package
+    await this.setupRealDicompare(pyodide);
 
     return pyodide;
   }
 
+  private async setupRealDicompare(pyodide: PyodideInstance): Promise<void> {
+    console.log('📦 Installing real dicompare package...');
+    
+    try {
+      // Install the real dicompare wheel from local CORS server
+      await pyodide.loadPackage(['micropip']);
+      
+      await pyodide.runPythonAsync(`
+import micropip
+
+# Install dicompare from local wheel
+await micropip.install('http://localhost:8000/dist/dicompare-0.1.28-py3-none-any.whl')
+
+# Import the real dicompare modules
+import dicompare
+import dicompare.web_utils
+import dicompare.compliance
+import dicompare.generate_schema
+import dicompare.io
+import json
+from typing import List, Dict, Any
+
+print("✅ Successfully imported real dicompare modules")
+      `);
+
+      console.log('✅ Real dicompare package installed and imported');
+      
+    } catch (error) {
+      console.error('❌ Failed to install real dicompare, falling back to mock:', error);
+      await this.setupMockDicompare(pyodide);
+    }
+  }
+
   private async setupMockDicompare(pyodide: PyodideInstance): Promise<void> {
-    console.log('📦 Setting up mock dicompare API...');
+    console.log('📦 Setting up mock dicompare API as fallback...');
     
     // Create the mock dicompare module in Python
     pyodide.runPython(`
@@ -371,7 +405,7 @@ class DicompareAPI:
             }
         }
     
-    def analyze_dicom_files(self, file_paths: List[str]) -> Dict:
+    def analyze_dicom_files(self, files: List[Dict[str, Any]]) -> Dict:
         """Mock file analysis - returns comprehensive realistic acquisition data"""
         # Return all 5 acquisitions from the original mock data
         return {
@@ -621,6 +655,102 @@ class DicompareAPI:
         
         return results
     
+    def analyze_dicom_files_for_web(self, files_data: List[Dict]) -> Dict:
+        """
+        Simulate dicompare.web_utils.analyze_dicom_files_for_web()
+        This is the main function that caches DataFrame internally
+        Returns web-optimized format directly (no intermediate calls)
+        """
+        # Direct implementation - simulates cached DataFrame processing
+        return {
+            "acquisitions": [
+                {
+                    "id": "acq_001",
+                    "protocol_name": "T1_MPRAGE", 
+                    "series_description": "T1 MPRAGE SAG ISO",
+                    "total_files": len(files_data),
+                    "acquisition_fields": [
+                        {
+                            "tag": "0008,0060",
+                            "name": "Modality",
+                            "value": "MR",
+                            "vr": "CS",
+                            "level": "acquisition",
+                            "data_type": "string",
+                            "consistency": "constant"
+                        }
+                    ],
+                    "series_fields": [
+                        {
+                            "tag": "0018,0080",
+                            "name": "RepetitionTime", 
+                            "values": [2000, 2100],
+                            "vr": "DS",
+                            "level": "series",
+                            "data_type": "number",
+                            "consistency": "varying"
+                        }
+                    ],
+                    "series": [
+                        {"name": "Series_001", "instance_count": len(files_data), "field_values": {"0018,0080": 2000}}
+                    ],
+                    "metadata": {"analysis_timestamp": "2024-01-15T10:30:00Z"}
+                }
+            ],
+            "summary": {
+                "total_files": len(files_data),
+                "total_acquisitions": 1,
+                "common_fields": ["0008,0060"],
+                "suggested_validation_fields": ["0008,0060", "0018,0080"]
+            }
+        }
+    
+    def check_session_compliance_with_json_schema(self, dicom_data: Dict, schema_content: str, format: str = 'json') -> Dict:
+        """
+        Simulate dicompare.compliance.check_session_compliance_with_json_schema()
+        Step 1 of the two-step compliance process
+        """
+        # Raw compliance results (before web formatting)
+        return {
+            "schema_id": "test_schema",
+            "raw_results": [
+                {
+                    "acquisition_id": "acq_001", 
+                    "status": "pass",
+                    "field_checks": [
+                        {"field": "0008,0060", "expected": "MR", "actual": "MR", "status": "pass"}
+                    ]
+                }
+            ]
+        }
+    
+    def format_compliance_results_for_web(self, raw_results: Dict) -> Dict:
+        """
+        Simulate dicompare.web_utils.format_compliance_results_for_web()
+        Step 2 of the two-step compliance process - formats for web display
+        """
+        return {
+            "compliance_report": {
+                "schemaId": "test_schema",
+                "timestamp": "2024-01-15T10:30:00Z",
+                "overallStatus": "pass",
+                "fieldResults": [],
+                "summary": {
+                    "total": 1,
+                    "passed": 1,
+                    "failed": 0,
+                    "warnings": 0
+                }
+            }
+        }
+    
+    def create_json_schema(self, acquisitions: List[Dict], metadata: Dict) -> Dict:
+        """
+        Simulate dicompare.generate_schema.create_json_schema()
+        Uses cached DataFrame for efficient template generation
+        """
+        return self.generate_validation_template(acquisitions, metadata)
+
     def generate_validation_template(self, acquisitions: List[Dict], metadata: Dict) -> Dict:
         """Return static validation template for UI testing"""
         return {
@@ -649,60 +779,132 @@ class DicompareAPI:
         }
     
     def parse_schema(self, schema_content: str, format: str = 'json') -> Dict:
-        """Return static parsed schema for UI testing"""
-        return {
-            "parsed_schema": {
+        """
+        Parse uploaded schema file and extract detailed validation rules.
+        Error handling wrapper matching info_for_react_dev.md specification.
+        """
+        try:
+            if format != "json":
+                return {"error": f"Unsupported format: {format}"}
+            
+            # Check if this is a request for one of our example schemas by ID
+            example_schemas = {
+            "t1_mprage": {
+                "title": "T1 MPRAGE Validation Schema",
+                "version": "1.0.0",
+                "description": "Standard structural T1-weighted MPRAGE validation template",
+                "acquisitions": [
+                    {
+                        "id": "t1_mprage",
+                        "protocol_name": "T1 MPRAGE",
+                        "acquisition_fields": [
+                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                            {"tag": "0018,0024", "name": "SequenceName", "value": "tfl3d1", "required": True},
+                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 2000, "required": True},
+                            {"tag": "0018,0081", "name": "EchoTime", "value": 3.25, "required": True},
+                            {"tag": "0018,1314", "name": "FlipAngle", "value": 9, "required": True}
+                        ]
+                    }
+                ]
+            },
+            "bold_fmri": {
+                "title": "BOLD fMRI Validation Schema",
+                "version": "1.0.0",
+                "description": "Validation schema for BOLD functional MRI acquisitions",
+                "acquisitions": [
+                    {
+                        "id": "bold_fmri",
+                        "protocol_name": "BOLD fMRI",
+                        "acquisition_fields": [
+                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                            {"tag": "0018,0024", "name": "SequenceName", "value": "epfid2d1_64", "required": True},
+                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 800, "required": True},
+                            {"tag": "0018,0081", "name": "EchoTime", "value": 37, "required": True},
+                            {"tag": "0019,1028", "name": "MultibandFactor", "value": 8, "required": True}
+                        ]
+                    }
+                ]
+            },
+            "diffusion_tensor": {
+                "title": "DTI Validation Schema",
+                "version": "1.0.0",
+                "description": "Validation schema for 30-direction DTI acquisitions",
+                "acquisitions": [
+                    {
+                        "id": "dti_30dir",
+                        "protocol_name": "DTI 30 Directions",
+                        "acquisition_fields": [
+                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                            {"tag": "0018,0024", "name": "SequenceName", "value": "ep2d_diff", "required": True},
+                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 8400, "required": True}
+                        ],
+                        "series_fields": [
+                            {"tag": "0018,9087", "name": "DiffusionBValue", "values": [0, 1000], "required": True}
+                        ]
+                    }
+                ]
+            }
+        }
+        
+            # Check if schema_content is one of our example schema IDs
+            schema_data = example_schemas.get(schema_content)
+            if not schema_data:
+                # Default fallback for unknown schemas
+                schema_data = {
                 "title": "Mock Validation Schema",
                 "version": "1.0.0",
                 "description": "Static mock schema for UI development",
-                "acquisitions": [
-                    {
-                        "id": "mock_acq",
-                        "protocol_name": "Mock Protocol",
-                        "acquisition_fields": [
-                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
-                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 2000, "required": True}
-                        ]
-                    }
-                ],
-                "validation_rules": [
-                    {
-                        "fieldPath": "0008,0060",
+                    "acquisitions": [
+                        {
+                            "id": "mock_acq",
+                            "protocol_name": "Mock Protocol",
+                            "acquisition_fields": [
+                                {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
+                                {"tag": "0018,0080", "name": "RepetitionTime", "value": 2000, "required": True}
+                            ]
+                        }
+                    ]
+                }
+            
+            # Convert to the expected parsed schema format
+            fields = []
+            validation_rules = []
+            
+            for acq in schema_data["acquisitions"]:
+                for field in acq.get("acquisition_fields", []):
+                    fields.append({
+                        "path": field["tag"],
+                        "tag": field["tag"],
+                        "name": field["name"],
+                        "required": field.get("required", True),
+                        "dataType": "string" if field["tag"] in ["0008,0060", "0018,0024"] else "number"
+                    })
+                    validation_rules.append({
+                        "fieldPath": field["tag"],
                         "type": "exact",
-                        "value": "MR",
-                        "message": "Modality must be MR"
-                    },
-                    {
-                        "fieldPath": "0018,0080", 
-                        "type": "tolerance",
-                        "value": 2000,
-                        "tolerance": 50,
-                        "message": "RepetitionTime must be 2000 ±50ms"
+                        "value": field["value"],
+                        "message": f"{field['name']} must be {field['value']}"
+                    })
+            
+            return {
+                "parsed_schema": {
+                    "title": schema_data["title"],
+                    "version": schema_data["version"],
+                    "description": schema_data["description"],
+                    "acquisitions": schema_data["acquisitions"],
+                    "validation_rules": validation_rules,
+                    "fields": fields,
+                    "metadata": {
+                        "total_acquisitions": len(schema_data["acquisitions"]),
+                        "total_rules": len(validation_rules),
+                        "total_fields": len(fields)
                     }
-                ],
-                "fields": [
-                    {
-                        "path": "0008,0060",
-                        "tag": "0008,0060", 
-                        "name": "Modality",
-                        "required": True,
-                        "dataType": "string"
-                    },
-                    {
-                        "path": "0018,0080",
-                        "tag": "0018,0080",
-                        "name": "RepetitionTime", 
-                        "required": True,
-                        "dataType": "number"
-                    }
-                ],
-                "metadata": {
-                    "total_acquisitions": 1,
-                    "total_rules": 2,
-                    "total_fields": 2
                 }
             }
-        }
+        except json.JSONDecodeError as e:
+            return {"error": f"Invalid JSON format: {str(e)}"}
+        except Exception as e:
+            return {"error": f"Schema parsing failed: {str(e)}"}
     
     def validate_compliance(self, dicom_data: Dict, schema_content: str, format: str = 'json') -> Dict:
         """Return static compliance results for UI testing"""
@@ -754,84 +956,56 @@ class DicompareAPI:
             }
         }
     
-    def get_example_schemas(self) -> List[Dict]:
-        """Return pre-loaded example schemas for demo purposes"""
-        return [
-            {
-                "id": "t1_mprage_schema",
-                "name": "T1 MPRAGE Validation Schema",
-                "description": "Standard structural T1-weighted MPRAGE validation template",
-                "category": "Structural MRI",
-                "content": json.dumps({
-                    "title": "T1 MPRAGE Validation Schema",
-                    "version": "1.0.0",
-                    "description": "Validation schema for T1-weighted MPRAGE acquisitions",
-                    "acquisitions": [{
-                        "id": "t1_mprage",
-                        "protocol_name": "T1_MPRAGE",
-                        "acquisition_fields": [
-                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
-                            {"tag": "0018,0024", "name": "SequenceName", "value": "tfl3d1", "required": True},
-                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 2000, "tolerance": 100, "required": True},
-                            {"tag": "0018,0081", "name": "EchoTime", "value": 3.25, "tolerance": 0.5, "required": True},
-                            {"tag": "0018,1314", "name": "FlipAngle", "value": 9, "tolerance": 1, "required": True}
-                        ]
-                    }]
-                }),
-                "format": "json"
-            },
-            {
-                "id": "bold_fmri_schema",
-                "name": "BOLD fMRI Validation Schema",
-                "description": "Validation schema for BOLD functional MRI acquisitions",
-                "category": "Functional MRI",
-                "content": json.dumps({
-                    "title": "BOLD fMRI Validation Schema",
-                    "version": "1.0.0", 
-                    "description": "Validation schema for BOLD fMRI acquisitions with multiband",
-                    "acquisitions": [{
-                        "id": "bold_fmri",
-                        "protocol_name": "BOLD_fMRI",
-                        "acquisition_fields": [
-                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
-                            {"tag": "0018,0024", "name": "SequenceName", "value": "epfid2d1_64", "required": True},
-                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 800, "tolerance": 50, "required": True},
-                            {"tag": "0018,0081", "name": "EchoTime", "value": 37, "tolerance": 2, "required": True},
-                            {"tag": "0019,1028", "name": "MultibandFactor", "value": 8, "required": True}
-                        ]
-                    }]
-                }),
-                "format": "json"
-            },
-            {
-                "id": "dti_schema",
-                "name": "DTI Validation Schema",
-                "description": "Validation schema for Diffusion Tensor Imaging",
-                "category": "Diffusion MRI",
-                "content": json.dumps({
-                    "title": "DTI Validation Schema",
-                    "version": "1.0.0",
-                    "description": "Validation schema for 30-direction DTI acquisitions",
-                    "acquisitions": [{
-                        "id": "dti_30dir",
-                        "protocol_name": "DTI_30dir",
-                        "acquisition_fields": [
-                            {"tag": "0008,0060", "name": "Modality", "value": "MR", "required": True},
-                            {"tag": "0018,0024", "name": "SequenceName", "value": "ep2d_diff", "required": True},
-                            {"tag": "0018,0080", "name": "RepetitionTime", "value": 8400, "tolerance": 200, "required": True}
-                        ],
-                        "series_fields": [
-                            {"tag": "0018,9087", "name": "DiffusionBValue", "values": [0, 1000], "required": True}
-                        ]
-                    }]
-                }),
-                "format": "json"
-            }
-        ]
     
     def get_example_dicom_data(self) -> Dict:
         """Return example DICOM data (same as analyze_dicom_files for consistency)"""
         return self.analyze_dicom_files([])
+    
+    def analyze_files_for_ui(self, files: List[Dict[str, Any]]) -> List[Dict]:
+        """UI wrapper that returns flattened acquisition data in camelCase"""
+        result = self.analyze_dicom_files(files)
+        return self._convert_to_ui_format(result["acquisitions"])
+    
+    def get_example_dicom_data_for_ui(self) -> List[Dict]:
+        """UI wrapper that returns example data in camelCase format"""
+        result = self.get_example_dicom_data()
+        return self._convert_to_ui_format(result["acquisitions"])
+    
+    def _convert_to_ui_format(self, acquisitions: List[Dict]) -> List[Dict]:
+        """Convert snake_case API format to camelCase UI format"""
+        ui_acquisitions = []
+        for acq in acquisitions:
+            ui_acq = {
+                "id": acq["id"],
+                "protocolName": acq["protocol_name"],
+                "seriesDescription": acq["series_description"],
+                "totalFiles": acq["total_files"],
+                "acquisitionFields": [self._convert_field_to_ui(field) for field in acq["acquisition_fields"]],
+                "seriesFields": [self._convert_field_to_ui(field) for field in acq["series_fields"]],
+                "series": [{"name": s["name"], "fields": s["field_values"]} for s in acq["series"]],
+                "metadata": acq["metadata"]
+            }
+            ui_acquisitions.append(ui_acq)
+        return ui_acquisitions
+    
+    def _convert_field_to_ui(self, field: Dict) -> Dict:
+        """Convert field from snake_case to camelCase"""
+        ui_field = {
+            "tag": field["tag"],
+            "name": field["name"],
+            "vr": field["vr"],
+            "level": field["level"],
+            "dataType": field["data_type"]
+        }
+        
+        if "value" in field:
+            ui_field["value"] = field["value"]
+        if "values" in field:
+            ui_field["values"] = field["values"]
+        if "consistency" in field:
+            ui_field["consistency"] = field["consistency"]
+            
+        return ui_field
     
     def get_schema_fields(self, schema_id: str) -> List[Dict]:
         """Return static schema fields for UI testing"""
@@ -881,7 +1055,22 @@ dicompare = DicompareAPI()
 
   async runPythonAsync(code: string): Promise<any> {
     const pyodide = await this.initialize();
-    return await pyodide.runPython(code);
+    // For async Python code, we need to wrap it in an async function and use runPythonAsync
+    const wrappedCode = `
+import asyncio
+
+async def __main__():
+${code.split('\n').map(line => '    ' + line).join('\n')}
+
+# Run the async function
+await __main__()
+    `;
+    return await pyodide.runPythonAsync(wrappedCode);
+  }
+
+  async setPythonGlobal(name: string, value: any): Promise<void> {
+    const pyodide = await this.initialize();
+    pyodide.globals.set(name, value);
   }
 }
 

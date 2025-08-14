@@ -1,11 +1,42 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, FileText, Code, Eye, ArrowLeft } from 'lucide-react';
-import { mockTemplates } from '../../data/mockData';
+import { Download, FileText, Code, Eye, ArrowLeft, Loader2 } from 'lucide-react';
+import { useAcquisitions } from '../../contexts/AcquisitionContext';
+import { dicompareAPI } from '../../services/DicompareAPI';
 
 const DownloadSchema: React.FC = () => {
   const navigate = useNavigate();
-  const template = mockTemplates[0]; // Using mock template
+  const { acquisitions, templateMetadata } = useAcquisitions();
+  const [template, setTemplate] = useState<any>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Generate template when component mounts
+  useEffect(() => {
+    const generateTemplate = async () => {
+      if (!templateMetadata || acquisitions.length === 0) {
+        setError('Missing template metadata or acquisitions. Please go back and complete the previous steps.');
+        return;
+      }
+
+      setIsGenerating(true);
+      try {
+        console.log('Generating template with acquisitions:', acquisitions);
+        console.log('Template metadata:', templateMetadata);
+        
+        const generatedTemplate = await dicompareAPI.generateTemplate(acquisitions, templateMetadata);
+        setTemplate(generatedTemplate);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to generate template:', err);
+        setError(`Failed to generate template: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } finally {
+        setIsGenerating(false);
+      }
+    };
+
+    generateTemplate();
+  }, [acquisitions, templateMetadata]);
 
   const handleDownloadJSON = () => {
     const jsonContent = JSON.stringify(template, null, 2);
@@ -13,133 +44,18 @@ const DownloadSchema: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${template.name.replace(/\s+/g, '_')}_v${template.version}.json`;
+    
+    // Use templateMetadata for filename, with fallback
+    const templateName = templateMetadata?.name || 'validation_template';
+    const version = templateMetadata?.version || '1.0';
+    a.download = `${templateName.replace(/\s+/g, '_')}_v${version}.json`;
+    
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  const handleDownloadPython = () => {
-    const pythonContent = `"""
-${template.name} - Version ${template.version}
-${template.description || ''}
-
-Authors: ${template.authors.join(', ')}
-Created: ${new Date().toISOString()}
-"""
-
-import json
-from typing import Dict, Any, List
-
-class DicomValidator:
-    def __init__(self):
-        self.template = ${JSON.stringify(template, null, 8)}
-    
-    def validate_acquisition(self, dicom_data: Dict[str, Any], acquisition_type: str) -> Dict[str, Any]:
-        """
-        Validate a DICOM acquisition against the template
-        
-        Args:
-            dicom_data: Dictionary containing DICOM metadata
-            acquisition_type: Type of acquisition to validate against
-            
-        Returns:
-            Dictionary containing validation results
-        """
-        results = {
-            'acquisition_type': acquisition_type,
-            'status': 'pass',
-            'field_results': [],
-            'errors': []
-        }
-        
-        if acquisition_type not in self.template['acquisitions']:
-            results['status'] = 'fail'
-            results['errors'].append(f"Unknown acquisition type: {acquisition_type}")
-            return results
-        
-        acquisition_config = self.template['acquisitions'][acquisition_type]
-        
-        for field_config in acquisition_config['fields']:
-            field_result = self._validate_field(dicom_data, field_config)
-            results['field_results'].append(field_result)
-            
-            if field_result['status'] == 'fail':
-                results['status'] = 'fail'
-        
-        return results
-    
-    def _validate_field(self, dicom_data: Dict[str, Any], field_config: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate a single DICOM field"""
-        tag = field_config['tag']
-        field_name = field_config['name']
-        validation_rule = field_config['validation_rule']
-        
-        result = {
-            'tag': tag,
-            'name': field_name,
-            'status': 'pass',
-            'message': 'Field validation passed'
-        }
-        
-        if tag not in dicom_data:
-            if field_config['required']:
-                result['status'] = 'fail'
-                result['message'] = f"Required field {field_name} is missing"
-            return result
-        
-        actual_value = dicom_data[tag]
-        
-        # Implement validation logic based on rule type
-        if validation_rule['type'] == 'exact':
-            if actual_value != validation_rule['value']:
-                result['status'] = 'fail'
-                result['message'] = f"Expected {validation_rule['value']}, got {actual_value}"
-        
-        elif validation_rule['type'] == 'range':
-            try:
-                val = float(actual_value)
-                if val < validation_rule['min'] or val > validation_rule['max']:
-                    result['status'] = 'fail'
-                    result['message'] = f"Value {val} outside range [{validation_rule['min']}, {validation_rule['max']}]"
-            except ValueError:
-                result['status'] = 'fail'
-                result['message'] = f"Cannot convert {actual_value} to numeric value"
-        
-        elif validation_rule['type'] == 'pattern':
-            import re
-            if not re.match(validation_rule['pattern'], str(actual_value)):
-                result['status'] = 'fail'
-                result['message'] = f"Value {actual_value} does not match pattern {validation_rule['pattern']}"
-        
-        return result
-
-# Example usage:
-if __name__ == "__main__":
-    validator = DicomValidator()
-    
-    # Example DICOM data
-    sample_data = {
-        '0008,0060': 'MR',
-        '0018,0087': '3.0',
-        '0018,0080': '2000'
-    }
-    
-    result = validator.validate_acquisition(sample_data, 't1_mprage')
-    print(json.dumps(result, indent=2))
-`;
-
-    const blob = new Blob([pythonContent], { type: 'text/python' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${template.name.replace(/\s+/g, '_')}_v${template.version}.py`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   const handleBack = () => {
     navigate('/generate-template/enter-metadata');
@@ -149,12 +65,66 @@ if __name__ == "__main__":
     navigate('/generate-template/build-schema');
   };
 
+  // Show loading state
+  if (isGenerating) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Download Schema - Step 3</h2>
+          <p className="text-gray-600">Generating your validation template...</p>
+        </div>
+        
+        <div className="bg-white rounded-lg shadow-md p-12 text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-medical-600 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Generating Template</h3>
+          <p className="text-gray-600">Using dicompare to create your validation schema...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Download Schema - Step 3</h2>
+          <p className="text-gray-600">There was an issue generating your template.</p>
+        </div>
+        
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-red-800 mb-2">Template Generation Failed</h3>
+          <p className="text-red-700 mb-4">{error}</p>
+          <div className="space-x-4">
+            <button
+              onClick={() => navigate('/generate-template/enter-metadata')}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              Back to Metadata
+            </button>
+            <button
+              onClick={() => navigate('/generate-template/build-schema')}
+              className="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50"
+            >
+              Start Over
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show success state with template
+  if (!template) {
+    return null; // Still loading or no template
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-4">Download Schema - Step 3</h2>
         <p className="text-gray-600">
-          Your template has been generated successfully. Download it in your preferred format or preview the content.
+          Your template has been generated successfully! Download it in your preferred format or preview the content.
         </p>
       </div>
 
@@ -169,95 +139,71 @@ if __name__ == "__main__":
           <div className="space-y-4">
             <div>
               <h4 className="font-medium text-gray-700">Template Name</h4>
-              <p className="text-gray-900">{template.name}</p>
+              <p className="text-gray-900">{templateMetadata?.name || 'Generated Template'}</p>
             </div>
             
             <div>
               <h4 className="font-medium text-gray-700">Version</h4>
-              <p className="text-gray-900">{template.version}</p>
+              <p className="text-gray-900">{templateMetadata?.version || '1.0'}</p>
             </div>
             
             <div>
               <h4 className="font-medium text-gray-700">Authors</h4>
-              <p className="text-gray-900">{template.authors.join(', ')}</p>
+              <p className="text-gray-900">{templateMetadata?.authors?.join(', ') || 'Unknown'}</p>
             </div>
             
-            {template.description && (
+            {templateMetadata?.description && (
               <div>
                 <h4 className="font-medium text-gray-700">Description</h4>
-                <p className="text-gray-900">{template.description}</p>
+                <p className="text-gray-900">{templateMetadata.description}</p>
               </div>
             )}
             
             <div>
               <h4 className="font-medium text-gray-700">Acquisitions</h4>
               <div className="mt-2 space-y-2">
-                {Object.entries(template.acquisitions).map(([key, acquisition]) => (
-                  <div key={key} className="p-3 bg-gray-50 rounded-lg">
-                    <p className="font-medium text-gray-900">{acquisition.name}</p>
-                    <p className="text-sm text-gray-600">{acquisition.fields.length} validation fields</p>
+                {acquisitions.map((acquisition) => (
+                  <div key={acquisition.id} className="p-3 bg-gray-50 rounded-lg">
+                    <p className="font-medium text-gray-900">{acquisition.protocolName}</p>
+                    <p className="text-sm text-gray-600">
+                      {acquisition.acquisitionFields.length + acquisition.seriesFields.length} validation fields
+                    </p>
                   </div>
                 ))}
               </div>
             </div>
+            
+            {template.statistics && (
+              <div>
+                <h4 className="font-medium text-gray-700">Statistics</h4>
+                <div className="mt-2 space-y-1 text-sm text-gray-600">
+                  <p>Total acquisitions: {template.statistics.total_acquisitions}</p>
+                  <p>Total validation fields: {template.statistics.total_validation_fields}</p>
+                  <p>Estimated validation time: {template.statistics.estimated_validation_time}</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Download Options */}
-        <div className="space-y-6">
-          {/* JSON Format */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex items-center mb-4">
-              <FileText className="h-6 w-6 mr-2 text-medical-600" />
-              <h3 className="text-xl font-semibold text-gray-900">JSON Format</h3>
-            </div>
-            
-            <p className="text-gray-600 mb-4">
-              Human-readable structured format ideal for standard validation rules and straightforward field checking.
-            </p>
-            
-            <div className="space-y-3">
-              <button
-                onClick={handleDownloadJSON}
-                className="w-full flex items-center justify-center px-4 py-3 bg-medical-600 text-white rounded-lg hover:bg-medical-700"
-              >
-                <Download className="h-5 w-5 mr-2" />
-                Download JSON Template
-              </button>
-              
-              <button className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
-                <Eye className="h-5 w-5 mr-2" />
-                Preview JSON
-              </button>
-            </div>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center mb-4">
+            <FileText className="h-6 w-6 mr-2 text-medical-600" />
+            <h3 className="text-xl font-semibold text-gray-900">Download Template</h3>
           </div>
-
-          {/* Python Format */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex items-center mb-4">
-              <Code className="h-6 w-6 mr-2 text-medical-600" />
-              <h3 className="text-xl font-semibold text-gray-900">Python Format</h3>
-            </div>
-            
-            <p className="text-gray-600 mb-4">
-              Programmable format that enables complex validation logic, custom calculations, and advanced rule definitions.
-            </p>
-            
-            <div className="space-y-3">
-              <button
-                onClick={handleDownloadPython}
-                className="w-full flex items-center justify-center px-4 py-3 bg-medical-600 text-white rounded-lg hover:bg-medical-700"
-              >
-                <Download className="h-5 w-5 mr-2" />
-                Download Python Template
-              </button>
-              
-              <button className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
-                <Eye className="h-5 w-5 mr-2" />
-                Preview Python Code
-              </button>
-            </div>
-          </div>
+          
+          <p className="text-gray-600 mb-6">
+            Download your validation template as a JSON file for use with dicompare validation tools.
+          </p>
+          
+          <button
+            onClick={handleDownloadJSON}
+            className="w-full flex items-center justify-center px-6 py-4 bg-medical-600 text-white rounded-lg hover:bg-medical-700 font-medium"
+          >
+            <Download className="h-5 w-5 mr-2" />
+            Download JSON Template
+          </button>
         </div>
       </div>
 

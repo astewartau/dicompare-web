@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Tag, X, Plus } from 'lucide-react';
+import { useAcquisitions } from '../../contexts/AcquisitionContext';
 
 interface TemplateMetadata {
   name: string;
@@ -11,6 +12,8 @@ interface TemplateMetadata {
 
 const EnterMetadata: React.FC = () => {
   const navigate = useNavigate();
+  const { templateMetadata, setTemplateMetadata } = useAcquisitions();
+  
   const [metadata, setMetadata] = useState<TemplateMetadata>({
     name: '',
     description: '',
@@ -19,6 +22,13 @@ const EnterMetadata: React.FC = () => {
   });
   const [newAuthor, setNewAuthor] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Load metadata from context on mount
+  useEffect(() => {
+    if (templateMetadata) {
+      setMetadata(templateMetadata);
+    }
+  }, [templateMetadata]);
 
   const addAuthor = () => {
     if (newAuthor.trim() && !metadata.authors.includes(newAuthor.trim())) {
@@ -68,6 +78,8 @@ const EnterMetadata: React.FC = () => {
 
   const handleContinue = () => {
     if (validateForm()) {
+      // Save metadata to context before navigating
+      setTemplateMetadata(metadata);
       navigate('/generate-template/download-schema');
     }
   };

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Plus, Loader2, Database } from 'lucide-react';
 import { dicompareAPI } from '../../services/DicompareAPI';
@@ -25,6 +25,31 @@ const BuildSchema: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [isPyodideReady, setIsPyodideReady] = useState(() => dicompareAPI.isInitialized());
+
+  // Initialize Pyodide only when needed
+  const initializePyodideIfNeeded = useCallback(async () => {
+    if (dicompareAPI.isInitialized() || isPyodideReady) {
+      return true;
+    }
+
+    try {
+      setUploadStatus('Starting Python environment...');
+      // Trigger initialization by calling a simple API method
+      await dicompareAPI.getFieldInfo('0008,0060');
+      setIsPyodideReady(true);
+      setUploadStatus('Python environment ready!');
+      setTimeout(() => setUploadStatus(''), 1000);
+      console.log('✅ Pyodide initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to initialize Pyodide:', error);
+      setUploadStatus('Failed to start Python environment. Retrying...');
+      // Still set as ready to allow fallback to mock
+      setIsPyodideReady(true);
+      return false;
+    }
+  }, [isPyodideReady]);
 
   // Validation logic for field completeness
   const isFieldValueValid = (field: any) => {
@@ -95,15 +120,63 @@ const BuildSchema: React.FC = () => {
     setUploadProgress(0);
     setUploadStatus('Preparing files...');
 
+    // Initialize Pyodide if needed
+    const initSuccess = await initializePyodideIfNeeded();
+    if (!initSuccess) {
+      setIsUploading(false);
+      return;
+    }
+
     try {
-      // Convert FileList to file paths (mock)
-      const filePaths = Array.from(files).map(file => file.name);
+      // Convert FileList to file objects with binary content
+      setUploadStatus('Reading file data...');
+      const fileObjects = [];
+      const filesArray = Array.from(files);
+      
+      // Filter out directories and empty files - only process actual DICOM files
+      const actualFiles = filesArray.filter(file => {
+        // Skip directories (they have size 0 and specific type indicators)
+        if (file.size === 0) {
+          console.log(`Skipping directory or empty file: ${file.name}`);
+          return false;
+        }
+        // Skip known non-DICOM files
+        const name = file.name.toLowerCase();
+        if (name.endsWith('.txt') || name.endsWith('.json') || name.endsWith('.xml')) {
+          console.log(`Skipping non-DICOM file: ${file.name}`);
+          return false;
+        }
+        return true;
+      });
+      
+      if (actualFiles.length === 0) {
+        throw new Error('No valid DICOM files found in the uploaded content.');
+      }
+      
+      console.log(`Processing ${actualFiles.length} files out of ${filesArray.length} total items`);
+      console.log('File details:', actualFiles.map(f => ({ name: f.name, size: f.size, type: f.type })));
+      
+      for (let i = 0; i < actualFiles.length; i++) {
+        const file = actualFiles[i];
+        try {
+          setUploadStatus(`Reading file ${i + 1} of ${actualFiles.length}: ${file.name}`);
+          const content = await file.arrayBuffer();
+          fileObjects.push({
+            name: file.name,
+            content: new Uint8Array(content)
+          });
+          setUploadProgress((i + 1) / actualFiles.length * 30); // 0-30% for file reading
+        } catch (error) {
+          console.error(`Failed to read file ${file.name}:`, error);
+          throw new Error(`Failed to read file ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
       
       setUploadStatus('Processing DICOM files...');
       setUploadProgress(50);
       
       // Analyze files using the API and get UI-formatted data
-      const acquisitions = await dicompareAPI.analyzeFilesForUI(filePaths);
+      const acquisitions = await dicompareAPI.analyzeFilesForUI(fileObjects);
       
       // Convert to acquisition context format with validation rules
       const contextAcquisitions = acquisitions.map(acq => ({
@@ -120,51 +193,161 @@ const BuildSchema: React.FC = () => {
         series: acq.series.map(series => ({
           name: series.name,
           fields: Object.fromEntries(
-            Object.entries(series.fields).map(([tag, value]) => [
-              tag,
-              // If it's already an object with a value property, keep it
-              (typeof value === 'object' && value !== null && 'value' in value) ? value : {
-                value,
-                dataType: typeof value === 'number' ? 'number' : 
-                         Array.isArray(value) ? 'list_string' : 'string',
-                validationRule: { type: 'exact' }
-              }
-            ])
+            Object.entries(series.fields).map(([tag, value]) => {
+              // Find the matching seriesField to get the field name
+              const matchingField = acq.seriesFields.find(sf => sf.tag === tag);
+              const fieldName = matchingField?.name || tag;
+              
+              return [
+                tag,
+                // If it's already an object with a value property, keep it
+                (typeof value === 'object' && value !== null && 'value' in value) ? {
+                  ...value,
+                  field: fieldName  // Add field name
+                } : {
+                  value,
+                  field: fieldName,  // Add field name
+                  dataType: typeof value === 'number' ? 'number' : 
+                           Array.isArray(value) ? 'list_string' : 'string',
+                  validationRule: { type: 'exact' }
+                }
+              ];
+            })
           )
         }))
       }));
       
-      setAcquisitions(contextAcquisitions);
+      setAcquisitions(prev => [...prev, ...contextAcquisitions]);
       setUploadProgress(100);
       
       console.log('✅ Analysis complete');
       
     } catch (error) {
       console.error('❌ Upload failed:', error);
-      setUploadStatus('Upload failed. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setUploadStatus(`Upload failed: ${errorMessage}`);
+      
+      // Keep error message visible longer for user to read
+      setTimeout(() => {
+        setUploadStatus('');
+      }, 5000);
     } finally {
       setTimeout(() => {
         setIsUploading(false);
         setUploadProgress(0);
-        setUploadStatus('');
+        // Only clear status if it's not an error message
+        if (!uploadStatus.includes('failed:')) {
+          setUploadStatus('');
+        }
       }, 500);
     }
-  }, [setAcquisitions]);
+  }, [setAcquisitions, initializePyodideIfNeeded]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
-    handleFileUpload(e.dataTransfer.files);
+    
+    // Handle both files and directories from drag and drop
+    const items = Array.from(e.dataTransfer.items);
+    const files: File[] = [];
+    
+    // Process each dropped item
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry) {
+          if (entry.isDirectory) {
+            // Handle directory - recursively get all files
+            const dirFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+            files.push(...dirFiles);
+          } else {
+            // Handle single file
+            const file = item.getAsFile();
+            if (file) files.push(file);
+          }
+        } else {
+          // Fallback for browsers that don't support webkitGetAsEntry
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+    }
+    
+    if (files.length > 0) {
+      // Create a FileList-like object
+      const fileList = {
+        length: files.length,
+        item: (index: number) => files[index] || null,
+        [Symbol.iterator]: function* () {
+          for (let i = 0; i < files.length; i++) {
+            yield files[i];
+          }
+        }
+      };
+      // Add array access
+      files.forEach((file, index) => {
+        (fileList as any)[index] = file;
+      });
+      
+      handleFileUpload(fileList as FileList);
+    } else {
+      // Fallback to original behavior
+      handleFileUpload(e.dataTransfer.files);
+    }
   }, [handleFileUpload]);
+
+  // Helper function to recursively get all files from a directory
+  const getAllFilesFromDirectory = async (dirEntry: FileSystemDirectoryEntry): Promise<File[]> => {
+    const files: File[] = [];
+    
+    return new Promise((resolve) => {
+      const reader = dirEntry.createReader();
+      
+      const readEntries = () => {
+        reader.readEntries(async (entries) => {
+          if (entries.length === 0) {
+            resolve(files);
+            return;
+          }
+          
+          for (const entry of entries) {
+            if (entry.isFile) {
+              const file = await new Promise<File>((fileResolve) => {
+                (entry as FileSystemFileEntry).file(fileResolve);
+              });
+              files.push(file);
+            } else if (entry.isDirectory) {
+              const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+              files.push(...subFiles);
+            }
+          }
+          
+          // Continue reading entries (directories might have more entries than fit in one read)
+          readEntries();
+        });
+      };
+      
+      readEntries();
+    });
+  };
 
 
   const loadExampleData = async () => {
     try {
       setIsUploading(true);
       setUploadStatus('Loading example data...');
+      setUploadProgress(25);
+      
+      // Initialize Pyodide if needed
+      const initSuccess = await initializePyodideIfNeeded();
+      if (!initSuccess) {
+        setIsUploading(false);
+        return;
+      }
+      
       setUploadProgress(50);
       
       // Get example DICOM data from API in UI format
@@ -185,16 +368,26 @@ const BuildSchema: React.FC = () => {
         series: acq.series.map(series => ({
           name: series.name,
           fields: Object.fromEntries(
-            Object.entries(series.fields).map(([tag, value]) => [
-              tag,
-              // If it's already an object with a value property, keep it
-              (typeof value === 'object' && value !== null && 'value' in value) ? value : {
-                value,
-                dataType: typeof value === 'number' ? 'number' : 
-                         Array.isArray(value) ? 'list_string' : 'string',
-                validationRule: { type: 'exact' }
-              }
-            ])
+            Object.entries(series.fields).map(([tag, value]) => {
+              // Find the matching seriesField to get the field name
+              const matchingField = acq.seriesFields.find(sf => sf.tag === tag);
+              const fieldName = matchingField?.name || tag;
+              
+              return [
+                tag,
+                // If it's already an object with a value property, keep it
+                (typeof value === 'object' && value !== null && 'value' in value) ? {
+                  ...value,
+                  field: fieldName  // Add field name
+                } : {
+                  value,
+                  field: fieldName,  // Add field name
+                  dataType: typeof value === 'number' ? 'number' : 
+                           Array.isArray(value) ? 'list_string' : 'string',
+                  validationRule: { type: 'exact' }
+                }
+              ];
+            })
           )
         }))
       }));
@@ -226,7 +419,7 @@ const BuildSchema: React.FC = () => {
 
   // Component to render upload card (consistent formatting for both empty and additional upload states)
   const renderUploadCard = (isAdditional: boolean = false) => (
-    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6">
+    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6 h-fit">
       <div
         className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-medical-400 transition-colors"
         onDragOver={handleDragOver}
@@ -240,6 +433,13 @@ const BuildSchema: React.FC = () => {
           {isAdditional ? 'Add more DICOM files or folders' : 'Drag and drop DICOM files or folders here'}
         </p>
         
+        {uploadStatus.includes('Starting Python environment') && (
+          <div className="mb-4 text-xs text-amber-600 flex items-center justify-center">
+            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+            Starting Python environment...
+          </div>
+        )}
+        
         <div className="space-y-3">
           <input
             type="file"
@@ -250,8 +450,12 @@ const BuildSchema: React.FC = () => {
             onChange={(e) => handleFileUpload(e.target.files)}
           />
           <label
-            htmlFor={isAdditional ? "file-upload-extra" : "file-upload"}
-            className="inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-medical-600 hover:bg-medical-700 cursor-pointer"
+            htmlFor={!isUploading ? (isAdditional ? "file-upload-extra" : "file-upload") : ""}
+            className={`inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md ${
+              !isUploading 
+                ? 'text-white bg-medical-600 hover:bg-medical-700 cursor-pointer' 
+                : 'text-gray-400 bg-gray-300 cursor-not-allowed'
+            }`}
           >
             <Upload className="h-4 w-4 mr-2" />
             Browse Files
@@ -325,7 +529,7 @@ const BuildSchema: React.FC = () => {
       </div>
 
       {/* Acquisitions Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Show placeholder card when no acquisitions exist */}
         {acquisitions.length === 0 && renderUploadCard(false)}
         

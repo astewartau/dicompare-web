@@ -58,6 +58,10 @@ export interface ComplianceFieldResult {
   actualValue?: any;
   message?: string;
   rule?: ValidationRule;
+  
+  // Series-specific fields
+  validationType?: 'acquisition' | 'series';
+  seriesName?: string;
 }
 
 export interface SchemaTemplate {

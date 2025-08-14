@@ -31,11 +31,10 @@ const DataLoadingAndMatching: React.FC = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [preSelectedSchemaId, setPreSelectedSchemaId] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
-  // Load example schemas from Python API only when needed
-  const loadExampleSchemasIfNeeded = async () => {
-    if (availableSchemas.length > 0) return; // Already loaded
-    
+  // Load example schemas automatically on component mount
+  const loadExampleSchemas = async () => {
     try {
       setApiError(null);
       const exampleSchemas = await dicompareAPI.getExampleSchemas();
@@ -76,28 +75,25 @@ const DataLoadingAndMatching: React.FC = () => {
         currentFile: 0,
         totalFiles: files.length,
         currentOperation: 'Processing DICOM files...',
-        percentage: 50
+        percentage: 25
       });
 
-      // Use Python API to get example DICOM data (UI format)
-      const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
-      setLoadedData(acquisitions);
-      
-      // Auto-pair with pre-selected schema if one was chosen
-      if (preSelectedSchemaId && acquisitions.length > 0) {
-        const newPairings: Record<string, string> = {};
-        acquisitions.forEach(acq => {
-          newPairings[acq.id] = preSelectedSchemaId;
+      // Process real DICOM files using dicompare
+      const result = await dicompareAPI.analyzeFilesForUI(Array.from(files), (progress) => {
+        setProgress({
+          currentFile: Math.floor((progress.totalProcessed / progress.totalFiles) * files.length),
+          totalFiles: files.length,
+          currentOperation: progress.currentOperation,
+          percentage: 25 + (progress.percentage * 0.75) // Scale to 25-100%
         });
-        setPairings(prev => ({ ...prev, ...newPairings }));
-        // Clear the pre-selection since it's now paired
-        setPreSelectedSchemaId(null);
-      }
-      
+      });
+
+      setLoadedData(result || []);
       setApiError(null);
     } catch (error) {
       console.error('Failed to load DICOM data:', error);
-      setApiError('Failed to process DICOM data');
+      setApiError(`Failed to process DICOM data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setLoadedData([]); // Ensure loadedData is always an array
     }
     
     setIsProcessing(false);
@@ -117,21 +113,9 @@ const DataLoadingAndMatching: React.FC = () => {
   const loadExampleData = async () => {
     try {
       setApiError(null);
-      // Load example schemas and DICOM data when user clicks to load example data
-      await loadExampleSchemasIfNeeded();
+      // Load only DICOM data when user clicks "Load Example Data"
       const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
       setLoadedData(acquisitions);
-      
-      // Auto-pair with pre-selected schema if one was chosen
-      if (preSelectedSchemaId && acquisitions.length > 0) {
-        const newPairings: Record<string, string> = {};
-        acquisitions.forEach(acq => {
-          newPairings[acq.id] = preSelectedSchemaId;
-        });
-        setPairings(prev => ({ ...prev, ...newPairings }));
-        // Clear the pre-selection since it's now paired
-        setPreSelectedSchemaId(null);
-      }
       
       setShowExampleData(true);
     } catch (error) {
@@ -147,11 +131,14 @@ const DataLoadingAndMatching: React.FC = () => {
     setPreSelectedSchemaId(null);
   };
 
-  const handleTemplatePairing = (acquisitionId: string, templateId: string) => {
+  const handleTemplatePairing = (acquisitionId: string, templateId: string, acquisitionIndex?: string) => {
+    // Simple: just store "schemaId:acquisitionIndex" if acquisition selected, otherwise just schemaId
+    const pairingKey = acquisitionIndex ? `${templateId}:${acquisitionIndex}` : templateId;
     setPairings(prev => ({
       ...prev,
-      [acquisitionId]: templateId
+      [acquisitionId]: pairingKey
     }));
+    console.log(`Paired acquisition ${acquisitionId} with template ${templateId} acquisition ${acquisitionIndex || 'all'}`);
   };
 
   const unpairAcquisition = (acquisitionId: string) => {
@@ -192,32 +179,124 @@ const DataLoadingAndMatching: React.FC = () => {
     }
   };
 
+  const handleSchemaUpload = async (file: File) => {
+    try {
+      // Read file content to pre-fill modal
+      const content = await file.text();
+      
+      // Log the content for debugging
+      console.log('File content length:', content.length);
+      console.log('First 200 characters:', content.substring(0, 200));
+      console.log('Content around line 85:', content.split('\n').slice(80, 90).join('\n'));
+      
+      // Try to clean up the JSON content
+      let cleanContent = content.trim();
+      
+      // Remove any BOM (Byte Order Mark)
+      if (cleanContent.charCodeAt(0) === 0xFEFF) {
+        cleanContent = cleanContent.slice(1);
+      }
+      
+      // Check for common JSON issues
+      if (!cleanContent.startsWith('{') && !cleanContent.startsWith('[')) {
+        throw new Error('File does not appear to be valid JSON (does not start with { or [)');
+      }
+      
+      let schemaData;
+      try {
+        schemaData = JSON.parse(cleanContent);
+      } catch (parseError) {
+        // Try to provide more specific error information
+        const match = parseError.message.match(/at line (\d+) column (\d+)/);
+        if (match) {
+          const line = parseInt(match[1]);
+          const column = parseInt(match[2]);
+          const lines = cleanContent.split('\n');
+          const problematicLine = lines[line - 1];
+          console.error(`Parse error at line ${line}, column ${column}:`);
+          console.error(`Line content: "${problematicLine}"`);
+          console.error(`Character at error position: "${problematicLine ? problematicLine[column - 1] : 'N/A'}"`);
+          
+          throw new Error(`JSON parse error at line ${line}, column ${column}. Problematic line: "${problematicLine}"`);
+        }
+        throw parseError;
+      }
+      
+      // Validate basic structure
+      if (!schemaData || typeof schemaData !== 'object') {
+        throw new Error('Schema file must contain a valid JSON object');
+      }
+      
+      // Extract metadata from schema if available
+      const template = schemaData.template || schemaData;
+      const metadata = {
+        title: template.name || file.name.replace('.json', ''),
+        description: template.description || '',
+        authors: template.authors ? template.authors.join(', ') : ''
+      };
+      
+      setUploadedFile(file);
+      setShowUploadModal(true);
+      setApiError(null); // Clear any previous errors
+      
+      console.log('Successfully parsed schema:', metadata);
+      
+    } catch (error) {
+      console.error('Failed to parse schema file:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setApiError(`Failed to parse schema file: ${errorMessage}`);
+      
+      // Still allow upload but without pre-filling
+      setUploadedFile(file);
+      setShowUploadModal(true);
+    }
+  };
+
   const handleContinue = () => {
     // Could navigate to a report export page or stay on current page
     console.log('Analysis complete - could export report or navigate to detailed analysis');
   };
 
-  const getPairedTemplate = (acquisitionId: string): SchemaTemplate | null => {
-    const templateId = pairings[acquisitionId];
-    if (!templateId) return null;
+  const getPairedTemplate = (acquisitionId: string): (SchemaTemplate & { acquisitionIndex?: string }) | null => {
+    const pairingKey = pairings[acquisitionId];
+    console.log(`getPairedTemplate for acquisition ${acquisitionId}, pairingKey: ${pairingKey}`);
+    if (!pairingKey) return null;
     
-    // First check uploaded schemas
+    // Simple parsing: "schemaId:acquisitionIndex" or just "schemaId"
+    const [templateId, acquisitionIndex] = pairingKey.includes(':') ? 
+      pairingKey.split(':') : [pairingKey, undefined];
+    
+    console.log(`Parsed templateId: ${templateId}, acquisitionIndex: ${acquisitionIndex}`);
+    
+    // Find the schema
     const uploadedSchema = schemas.find(s => s.id === templateId);
     if (uploadedSchema) {
-      return {
+      const result = {
         id: uploadedSchema.id,
         name: uploadedSchema.title,
         description: uploadedSchema.description || '',
         category: 'Uploaded Schema',
-        content: '', // Will be loaded when needed
+        content: '',
         format: uploadedSchema.format,
         version: uploadedSchema.version,
-        authors: uploadedSchema.authors
+        authors: uploadedSchema.authors,
+        acquisitionIndex
       };
+      console.log(`Returning paired template:`, result);
+      return result;
     }
     
-    // Then check example schemas
-    return availableSchemas.find(t => t.id === templateId) || null;
+    const exampleSchema = availableSchemas.find(t => t.id === templateId);
+    if (exampleSchema) {
+      const result = {
+        ...exampleSchema,
+        acquisitionIndex
+      };
+      console.log(`Returning paired template:`, result);
+      return result;
+    }
+    
+    return null;
   };
 
   // Get all available schemas (uploaded + examples)
@@ -236,12 +315,10 @@ const DataLoadingAndMatching: React.FC = () => {
     return [...uploadedSchemas, ...availableSchemas];
   };
 
-  // Load schemas when DICOM data is loaded and user might need to select templates
+  // Load example schemas automatically when component mounts
   useEffect(() => {
-    if (loadedData.length > 0 && availableSchemas.length === 0) {
-      loadExampleSchemasIfNeeded();
-    }
-  }, [loadedData.length]); // Only trigger when data is first loaded
+    loadExampleSchemas();
+  }, []); // Only run once on mount
 
   const getPairedCount = () => {
     return Object.keys(pairings).length;
@@ -328,7 +405,7 @@ const DataLoadingAndMatching: React.FC = () => {
           <div>
             <h2 className="text-3xl font-bold text-gray-900 mb-2">Load & Match DICOM Data</h2>
             <p className="text-gray-600">
-              {loadedData.length > 0 ? (
+              {loadedData && loadedData.length > 0 ? (
                 <>
                   Match each acquisition with a validation template. {getPairedCount()} of {loadedData.length} acquisitions paired.
                   {showExampleData && (
@@ -356,7 +433,7 @@ const DataLoadingAndMatching: React.FC = () => {
               <Database className="h-4 w-4 mr-2" />
               Load Example Data
             </button>
-            {loadedData.length > 0 && (
+            {loadedData && loadedData.length > 0 && (
               <button
                 onClick={clearData}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
@@ -364,13 +441,6 @@ const DataLoadingAndMatching: React.FC = () => {
                 Clear Data
               </button>
             )}
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="flex items-center px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Upload Template
-            </button>
           </div>
         </div>
       </div>
@@ -384,7 +454,7 @@ const DataLoadingAndMatching: React.FC = () => {
       {/* Acquisition and Schema Cards Side by Side */}
       <div className="space-y-6">
         {/* Show upload area first if no data loaded */}
-        {loadedData.length === 0 && (
+        {(!loadedData || loadedData.length === 0) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea()}
             {preSelectedSchemaId ? (
@@ -419,7 +489,8 @@ const DataLoadingAndMatching: React.FC = () => {
                       fields={[]} // Empty fields for schema-only display
                       acquisition={{} as Acquisition} // Empty acquisition object
                       schemaFields={[]} // Not used anymore, Python API handles schema internally
-                      schemaId={preSelectedSchemaId}
+                      schemaId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[0] : preSelectedSchemaId}
+                      acquisitionId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[1] : undefined}
                     />
                   </div>
                 </div>
@@ -428,8 +499,13 @@ const DataLoadingAndMatching: React.FC = () => {
               <SchemaSelectionCard
                 schemas={getAllAvailableSchemas()}
                 selectedSchemaId={preSelectedSchemaId}
-                onSchemaSelect={setPreSelectedSchemaId}
+                onSchemaSelect={(schemaId, acquisitionIndex) => {
+                  console.log(`Pre-selecting schema ${schemaId} with acquisition ${acquisitionIndex || 'all'}`);
+                  setPreSelectedSchemaId(acquisitionIndex ? `${schemaId}:${acquisitionIndex}` : schemaId);
+                }}
                 onSchemaDelete={handleDeleteSchema}
+                onSchemaUpload={handleSchemaUpload}
+                getSchemaContent={getSchemaContent}
                 title="Select Validation Schema"
               />
             )}
@@ -437,7 +513,7 @@ const DataLoadingAndMatching: React.FC = () => {
         )}
 
         {/* Show loaded acquisitions */}
-        {loadedData.map((acquisition) => {
+        {loadedData && loadedData.map((acquisition) => {
           const pairedTemplate = getPairedTemplate(acquisition.id);
           
           return (
@@ -496,10 +572,11 @@ const DataLoadingAndMatching: React.FC = () => {
                   <div className="p-3 space-y-3">
                     <div>
                       <ComplianceFieldTable
-                        fields={acquisition.acquisitionFields} // Pass acquisition fields for compliance validation
+                        fields={acquisition.acquisitionFields}
                         acquisition={acquisition}
-                        schemaFields={[]} // Not used anymore, Python API handles schema internally
+                        schemaFields={[]}
                         schemaId={pairedTemplate.id}
+                        acquisitionId={pairedTemplate.acquisitionIndex}
                       />
                     </div>
                   </div>
@@ -508,8 +585,10 @@ const DataLoadingAndMatching: React.FC = () => {
                 // Show template selection when not paired
                 <SchemaSelectionCard
                   schemas={getAllAvailableSchemas()}
-                  onSchemaSelect={(schemaId) => handleTemplatePairing(acquisition.id, schemaId)}
+                  onSchemaSelect={(schemaId, acquisitionId) => handleTemplatePairing(acquisition.id, schemaId, acquisitionId)}
                   onSchemaDelete={handleDeleteSchema}
+                  onSchemaUpload={handleSchemaUpload}
+                  getSchemaContent={getSchemaContent}
                   title={`Select template for: ${acquisition.protocolName}`}
                 />
               )}
@@ -518,7 +597,7 @@ const DataLoadingAndMatching: React.FC = () => {
         })}
 
         {/* Always show extra upload row at the bottom when there's data */}
-        {loadedData.length > 0 && (
+        {loadedData && loadedData.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea(true)}
             {preSelectedSchemaId ? (
@@ -553,7 +632,8 @@ const DataLoadingAndMatching: React.FC = () => {
                       fields={[]} // Empty fields for schema-only display
                       acquisition={{} as Acquisition} // Empty acquisition object
                       schemaFields={[]} // Not used anymore, Python API handles schema internally
-                      schemaId={preSelectedSchemaId}
+                      schemaId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[0] : preSelectedSchemaId}
+                      acquisitionId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[1] : undefined}
                     />
                   </div>
                 </div>
@@ -564,6 +644,8 @@ const DataLoadingAndMatching: React.FC = () => {
                 selectedSchemaId={preSelectedSchemaId}
                 onSchemaSelect={setPreSelectedSchemaId}
                 onSchemaDelete={handleDeleteSchema}
+                onSchemaUpload={handleSchemaUpload}
+                getSchemaContent={getSchemaContent}
                 title="Select Validation Schema"
               />
             )}
@@ -573,10 +655,15 @@ const DataLoadingAndMatching: React.FC = () => {
 
       <SchemaUploadModal
         isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
+        onClose={() => {
+          setShowUploadModal(false);
+          setUploadedFile(null);
+        }}
         onUploadComplete={(schemaId) => {
           setShowUploadModal(false);
+          setUploadedFile(null);
         }}
+        preloadedFile={uploadedFile}
       />
 
       {/* Continue Button */}
