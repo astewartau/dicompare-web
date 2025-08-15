@@ -6,7 +6,7 @@
   "fields": ["EchoTime"],
   "requiredSystemFields": [],
   "parameters": null,
-  "implementation": "echo_times = value[\"EchoTime\"].dropna().unique()\nif len(echo_times) == 1:\n    raise ValidationError(\"Found single-echo acquisition.\")\nelif len(echo_times) < 3:\n    raise ValidationError(f\"Found {len(echo_times)} echoes, but at least 3 are recommended.\")\nreturn value",
+  "implementation": "echo_times = value[\"EchoTime\"].dropna().unique()\nif len(echo_times) == 1:\n    raise ValidationError(\"Found single-echo acquisition.\")\nelif len(echo_times) < 3:\n    raise ValidationError(f\"Found {len(echo_times)} echoes, but at least 3 are recommended.\")",
   "testCases": [
     {
       "id": "single_echo",

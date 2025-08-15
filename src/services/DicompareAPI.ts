@@ -26,6 +26,7 @@ export interface Acquisition {
 export interface FieldInfo {
   tag: string;
   name: string;
+  keyword?: string;
   value?: any;
   values?: any[];
   vr: string;
@@ -55,6 +56,10 @@ export interface ValidationResult {
   message: string;
   actualValue: any;
   expectedValue?: any;
+  // New fields for hybrid schema support
+  rule_name?: string;           // Present for rule validation results
+  validationType?: 'field' | 'rule' | 'series';  // Type of validation
+  seriesName?: string;          // For series-level validation
 }
 
 export interface FieldDictionary {
@@ -250,9 +255,284 @@ json.dumps(results)
   }
 
   /**
+   * Ensure all fields in acquisitions have keywords populated by looking up missing keywords
+   */
+  async ensureKeywordsPopulated(acquisitions: any[]): Promise<any[]> {
+    const updatedAcquisitions = await Promise.all(acquisitions.map(async (acquisition) => {
+      // Update acquisition fields
+      const updatedAcquisitionFields = await Promise.all(
+        (acquisition.acquisitionFields || []).map(async (field: any) => {
+          if (!field.keyword && field.tag) {
+            try {
+              const fieldInfo = await this.getFieldInfo(field.tag);
+              return { ...field, keyword: fieldInfo.keyword || field.name };
+            } catch (error) {
+              console.warn(`Failed to get keyword for field ${field.tag}:`, error);
+              return { ...field, keyword: field.name };
+            }
+          }
+          return field;
+        })
+      );
+
+      // Update series fields  
+      const updatedSeriesFields = await Promise.all(
+        (acquisition.seriesFields || []).map(async (field: any) => {
+          if (!field.keyword && field.tag) {
+            try {
+              const fieldInfo = await this.getFieldInfo(field.tag);
+              return { ...field, keyword: fieldInfo.keyword || field.name };
+            } catch (error) {
+              console.warn(`Failed to get keyword for field ${field.tag}:`, error);
+              return { ...field, keyword: field.name };
+            }
+          }
+          return field;
+        })
+      );
+
+      return {
+        ...acquisition,
+        acquisitionFields: updatedAcquisitionFields,
+        seriesFields: updatedSeriesFields
+      };
+    }));
+
+    return updatedAcquisitions;
+  }
+
+  /**
+   * Generate validation template from configured acquisitions using pure JavaScript.
+   * This replaces the Python-based template generation with a direct approach using form data.
+   */
+  async generateTemplateJS(acquisitions: any[], metadata: Record<string, any>): Promise<ValidationTemplate> {
+    console.log('🚀 Generating template using pure JavaScript approach');
+    
+    // Ensure all fields have keywords populated
+    const acquisitionsWithKeywords = await this.ensureKeywordsPopulated(acquisitions);
+    
+    // Transform acquisitions to dicompare format
+    const dicompareAcquisitions: Record<string, any> = {};
+    
+    acquisitionsWithKeywords.forEach(acquisition => {
+      const acquisitionName = acquisition.protocolName || acquisition.id || 'Unknown';
+      
+      // Transform acquisition fields - FIXED: Handle complex value objects
+      const acquisitionFields = acquisition.acquisitionFields?.map((field: any) => {
+        const fieldEntry: any = {
+          field: field.keyword || field.name || '', // Use keyword first, fallback to name
+          tag: field.tag
+        };
+        
+        // FIXED: Handle complex field.value objects that contain dataType/validationRule
+        let actualValue = field.value;
+        let validationRule = field.validationRule;
+        
+        // Check if field.value is a complex object with nested validation/dataType
+        if (field.value && typeof field.value === 'object' && ('validationRule' in field.value || 'dataType' in field.value)) {
+          actualValue = 'value' in field.value ? field.value.value : undefined;
+          validationRule = field.value.validationRule;
+        }
+        
+        // Apply validation rules to create flat structure
+        if (validationRule) {
+          switch (validationRule.type) {
+            case 'tolerance':
+              if (validationRule.value !== undefined && validationRule.tolerance !== undefined) {
+                fieldEntry.value = validationRule.value;
+                fieldEntry.tolerance = validationRule.tolerance;
+              } else {
+                fieldEntry.value = actualValue;
+              }
+              break;
+            case 'range':
+              if (validationRule.min !== undefined && validationRule.max !== undefined) {
+                fieldEntry.value = (validationRule.min + validationRule.max) / 2;
+                fieldEntry.tolerance = (validationRule.max - validationRule.min) / 2;
+              } else {
+                fieldEntry.value = actualValue;
+              }
+              break;
+            case 'contains':
+              if (validationRule.contains !== undefined) {
+                fieldEntry.contains = validationRule.contains;
+                // Don't include value for contains validation - remove any existing value
+                delete fieldEntry.value;
+              } else {
+                fieldEntry.value = actualValue;
+              }
+              break;
+            case 'exact':
+            default:
+              fieldEntry.value = actualValue;
+              break;
+          }
+        } else {
+          // No validation rule, just use the actual value
+          fieldEntry.value = actualValue;
+        }
+        
+        return fieldEntry;
+      }) || [];
+      
+      // Transform series data
+      const seriesData = acquisition.series?.map((series: any) => {
+        const seriesFields = acquisition.seriesFields?.map((seriesField: any) => {
+          const fieldValue = series.fields?.[seriesField.tag];
+          const fieldEntry: any = {
+            field: seriesField.keyword || seriesField.name || '',
+            tag: seriesField.tag
+          };
+          
+          // FIXED: Handle series field values with flat structure
+          // Check both fieldValue from series.fields and seriesField.value as fallback
+          const valueToProcess = fieldValue !== undefined ? fieldValue : seriesField.value;
+          
+          if (valueToProcess && typeof valueToProcess === 'object' && ('value' in valueToProcess || 'validationRule' in valueToProcess || 'dataType' in valueToProcess)) {
+            // Extract the actual value and validation rule from the value object
+            // Handle case where there's no 'value' field but there is validationRule/dataType
+            const actualValue = 'value' in valueToProcess ? valueToProcess.value : undefined;
+            const validationRule = valueToProcess.validationRule;
+            
+            if (validationRule) {
+              switch (validationRule.type) {
+                case 'tolerance':
+                  if (validationRule.value !== undefined && validationRule.tolerance !== undefined) {
+                    fieldEntry.value = validationRule.value;
+                    fieldEntry.tolerance = validationRule.tolerance;
+                  } else {
+                    fieldEntry.value = actualValue;
+                  }
+                  break;
+                case 'range':
+                  if (validationRule.min !== undefined && validationRule.max !== undefined) {
+                    fieldEntry.value = (validationRule.min + validationRule.max) / 2;
+                    fieldEntry.tolerance = (validationRule.max - validationRule.min) / 2;
+                  } else {
+                    fieldEntry.value = actualValue;
+                  }
+                  break;
+                case 'contains':
+                  if (validationRule.contains !== undefined) {
+                    fieldEntry.contains = validationRule.contains;
+                    // Don't include value for contains validation - remove any existing value
+                    delete fieldEntry.value;
+                  } else {
+                    fieldEntry.value = actualValue;
+                  }
+                  break;
+                case 'exact':
+                default:
+                  fieldEntry.value = actualValue;
+                  break;
+              }
+            } else {
+              fieldEntry.value = actualValue;
+            }
+          } else {
+            // Direct primitive value - also check for seriesField.validationRule
+            const seriesFieldValidationRule = seriesField.validationRule;
+            
+            if (seriesFieldValidationRule && valueToProcess !== undefined) {
+              // Apply series field validation rule to the primitive value
+              switch (seriesFieldValidationRule.type) {
+                case 'tolerance':
+                  if (seriesFieldValidationRule.value !== undefined && seriesFieldValidationRule.tolerance !== undefined) {
+                    fieldEntry.value = seriesFieldValidationRule.value;
+                    fieldEntry.tolerance = seriesFieldValidationRule.tolerance;
+                  } else {
+                    fieldEntry.value = valueToProcess;
+                  }
+                  break;
+                case 'range':
+                  if (seriesFieldValidationRule.min !== undefined && seriesFieldValidationRule.max !== undefined) {
+                    fieldEntry.value = (seriesFieldValidationRule.min + seriesFieldValidationRule.max) / 2;
+                    fieldEntry.tolerance = (seriesFieldValidationRule.max - seriesFieldValidationRule.min) / 2;
+                  } else {
+                    fieldEntry.value = valueToProcess;
+                  }
+                  break;
+                case 'contains':
+                  if (seriesFieldValidationRule.contains !== undefined) {
+                    fieldEntry.contains = seriesFieldValidationRule.contains;
+                    // Don't include value for contains validation
+                  } else {
+                    fieldEntry.value = valueToProcess;
+                  }
+                  break;
+                case 'exact':
+                default:
+                  fieldEntry.value = valueToProcess;
+                  break;
+              }
+            } else {
+              fieldEntry.value = valueToProcess;
+            }
+          }
+          
+          return fieldEntry;
+        }).filter((field: any) => field.value !== undefined || field.contains !== undefined || field.tolerance !== undefined) || [];
+        
+        return {
+          name: series.name,
+          fields: seriesFields
+        };
+      }) || [];
+      
+      dicompareAcquisitions[acquisitionName] = {
+        fields: acquisitionFields,
+        series: seriesData
+      };
+      
+      // Add validation rules if present - CORRECT: Use "rules" key, not "validation_functions"
+      if (acquisition.validationFunctions && acquisition.validationFunctions.length > 0) {
+        dicompareAcquisitions[acquisitionName].rules = acquisition.validationFunctions.map((func: any, index: number) => ({
+          id: func.id || `rule_${acquisitionName.toLowerCase().replace(/\s+/g, '_')}_${index}`, // REQUIRED: id field
+          name: func.customName || func.name,
+          description: func.customDescription || func.description,
+          implementation: func.customImplementation || func.implementation,
+          parameters: func.configuredParams || func.parameters || {},
+          fields: func.customFields || func.fields || []
+        }));
+      }
+    });
+    
+    // Create the template structure - CORRECT: Direct root structure without wrapper
+    const template = {
+      version: metadata.version || '1.0',
+      name: metadata.name || 'Generated Template',
+      description: metadata.description || 'Auto-generated validation template',
+      created: new Date().toISOString(),
+      authors: metadata.authors || ['Unknown'],
+      acquisitions: dicompareAcquisitions,
+      global_constraints: metadata.globalConstraints || {}
+    };
+    
+    // Calculate statistics
+    const totalAcquisitions = acquisitionsWithKeywords.length;
+    const totalValidationFields = acquisitionsWithKeywords.reduce((total, acq) => {
+      return total + (acq.acquisitionFields?.length || 0) + (acq.seriesFields?.length || 0);
+    }, 0);
+    
+    // Return the template directly without wrapper, but keep statistics for UI
+    const result = {
+      ...template,  // Spread template directly at root level
+      statistics: {
+        total_acquisitions: totalAcquisitions,
+        total_validation_fields: totalValidationFields,
+        estimated_validation_time: `${Math.ceil(totalValidationFields * 0.1)}s`
+      }
+    };
+    
+    console.log('✅ Template generated successfully using JavaScript:', result);
+    return result;
+  }
+
+  /**
    * Generate validation template from configured acquisitions.
    * Uses the real dicompare.generate_schema.create_json_schema() function.
    * Uses cached DataFrame for efficient template generation.
+   * @deprecated Use generateTemplateJS instead for better keyword handling
    */
   async generateTemplate(acquisitions: any[], metadata: Record<string, any>): Promise<ValidationTemplate> {
     await this.ensureInitialized();
@@ -290,7 +570,7 @@ try:
         dicompare_fields = []
         for field in acq.get("acquisitionFields", []):
             dicompare_field = {
-                "field": field.get("name", ""),
+                "field": field.get("keyword", field.get("name", "")),
                 "value": field.get("value", ""),
                 "tag": field.get("tag", "")  # Preserve DICOM tag
             }
@@ -340,7 +620,7 @@ try:
             for series_field in acq.get("seriesFields", []):
                 tag = series_field.get("tag", "")
                 series_field_metadata[tag] = {
-                    "field": series_field.get("name", ""),
+                    "field": series_field.get("keyword", series_field.get("name", "")),
                     "value": series_field.get("value", ""),
                     "tag": tag
                 }
@@ -414,9 +694,38 @@ try:
                     "fields": series_fields
                 })
         
+        # Transform validation functions to dicompare rules format
+        dicompare_rules = []
+        if "validationFunctions" in acq and acq["validationFunctions"]:
+            for func in acq["validationFunctions"]:
+                rule = {
+                    "id": func.get("id", ""),
+                    "name": func.get("customName") or func.get("name", ""),
+                    "description": func.get("customDescription") or func.get("description", ""),
+                    "category": func.get("category", "Custom"),
+                    "fields": func.get("customFields") or func.get("fields", []),
+                    "implementation": func.get("customImplementation") or func.get("implementation", ""),
+                    "enabledSystemFields": func.get("enabledSystemFields", [])
+                }
+                
+                # Include test cases if present
+                if "customTestCases" in func and func["customTestCases"]:
+                    rule["testCases"] = func["customTestCases"]
+                elif "testCases" in func and func["testCases"]:
+                    rule["testCases"] = func["testCases"]
+                
+                # Include parameters if present
+                if "parameters" in func and func["parameters"]:
+                    rule["parameters"] = func["parameters"]
+                if "configuredParams" in func and func["configuredParams"]:
+                    rule["configuredParams"] = func["configuredParams"]
+                
+                dicompare_rules.append(rule)
+        
         dicompare_acquisitions[acq_name] = {
             "fields": dicompare_fields,
-            "series": dicompare_series
+            "series": dicompare_series,
+            "rules": dicompare_rules
         }
     
     # Create the final schema structure that dicompare expects
@@ -645,7 +954,8 @@ json.dumps(formatted_result)
   }
 
   /**
-   * Get schema field requirements for a specific schema (frontend-only implementation)
+   * Get schema field requirements for a specific schema (pure JavaScript implementation)
+   * No Python dependency - directly parses the uploaded JSON schema
    * Note: This method needs access to SchemaContext to get uploaded schema content
    */
   async getSchemaFields(schemaId: string, getSchemaContent?: (id: string) => Promise<string | null>, acquisitionId?: string): Promise<FieldInfo[]> {
@@ -668,48 +978,96 @@ json.dumps(formatted_result)
         schemaContent = await schemaResponse.text();
       }
 
-      const schema = JSON.parse(schemaContent);
-
-      // Extract fields from the template format
+      console.log(`=== PURE JS SCHEMA LOADING ===`);
+      console.log(`Schema content length: ${schemaContent.length}`);
+      console.log(`Schema content (first 200 chars): ${schemaContent.substring(0, 200)}`);
+      
+      // Parse schema JSON directly in JavaScript
+      const parsedSchema = JSON.parse(schemaContent);
+      console.log(`Parsed schema name: ${parsedSchema.name || 'Unknown'}`);
+      console.log(`Parsed schema acquisitions: ${Object.keys(parsedSchema.acquisitions || {})}`);
+      
+      // Extract fields from the schema structure
       const fieldInfos: FieldInfo[] = [];
-
-      // Parse dicompare format: acquisitions as dictionary
-      const acquisitions = Object.entries(schema.acquisitions).map(([name, data]: [string, any]) => ({
-        protocolName: name,
-        fields: data.fields || [],
-        series: data.series || []
-      }));
+      const acquisitionsData = parsedSchema.acquisitions || {};
       
       // Filter to single acquisition if acquisitionId is provided
-      let targetAcquisitions = acquisitions;
-      console.log(`getSchemaFields called with schemaId: ${schemaId}, acquisitionId: ${acquisitionId}`);
-      console.log(`Total acquisitions found: ${acquisitions.length}`);
-      
+      let targetAcquisitions = Object.entries(acquisitionsData);
       if (acquisitionId) {
         const index = parseInt(acquisitionId);
-        console.log(`Attempting to filter to acquisition index: ${index}`);
-        if (!isNaN(index) && index >= 0 && index < acquisitions.length) {
-          targetAcquisitions = [acquisitions[index]];
-          console.log(`✅ Filtered to single acquisition:`, acquisitions[index].protocolName);
+        console.log(`Filtering to acquisition index: ${index}`);
+        if (!isNaN(index) && index >= 0 && index < targetAcquisitions.length) {
+          targetAcquisitions = [targetAcquisitions[index]];
+          console.log(`✅ Filtered to single acquisition: ${targetAcquisitions[0][0]}`);
         } else {
           console.log(`❌ Invalid acquisition index: ${index}, showing all acquisitions`);
         }
       } else {
-        console.log(`No acquisitionId provided, showing all ${acquisitions.length} acquisitions`);
+        console.log(`No acquisitionId provided, showing all ${targetAcquisitions.length} acquisitions`);
       }
       
-      for (const acquisition of targetAcquisitions) {
-        // Process acquisition fields from dicompare format (array of field objects)
-        const acquisitionFieldsArray = acquisition.fields || [];
-        for (const field of acquisitionFieldsArray) {
-          if (typeof field === 'object' && field !== null) {
+      for (const [acqName, acqData] of targetAcquisitions) {
+        console.log(`Processing acquisition: ${acqName}`);
+        
+        // Process acquisition-level fields
+        const acqFields = (acqData as any).fields || [];
+        for (const field of acqFields) {
+          // Determine data type from value
+          let dataType: 'string' | 'number' | 'list_string' | 'list_number' | 'json' = 'string';
+          if (typeof field.value === 'number') {
+            dataType = 'number';
+          } else if (Array.isArray(field.value)) {
+            dataType = field.value.every((v: any) => typeof v === 'number') ? 'list_number' : 'list_string';
+          }
+          
+          // Determine validation rule from field properties
+          let validationRule: any = { type: 'exact' };
+          if (field.tolerance !== undefined) {
+            validationRule = {
+              type: 'tolerance',
+              value: field.value,
+              tolerance: field.tolerance
+            };
+          } else if (field.contains !== undefined) {
+            validationRule = {
+              type: 'contains',
+              contains: field.contains
+            };
+          } else if (field.value !== undefined) {
+            validationRule = {
+              type: 'exact',
+              value: field.value
+            };
+          }
+          
+          fieldInfos.push({
+            tag: field.tag || '',
+            name: field.field || '',
+            value: field.value,
+            vr: '', // Will be looked up if needed
+            level: 'acquisition' as const,
+            data_type: dataType,
+            validation_rule: validationRule
+          });
+          
+          console.log(`  Added acquisition field: ${field.field} = ${field.value}`);
+        }
+        
+        // Process series-level fields
+        const seriesData = (acqData as any).series || [];
+        for (const series of seriesData) {
+          const seriesName = series.name || 'Unknown Series';
+          const seriesFields = series.fields || [];
+          for (const field of seriesFields) {
             // Determine data type from value
-            let dataType = 'string';
+            let dataType: 'string' | 'number' | 'list_string' | 'list_number' | 'json' = 'string';
             if (typeof field.value === 'number') {
               dataType = 'number';
+            } else if (Array.isArray(field.value)) {
+              dataType = field.value.every((v: any) => typeof v === 'number') ? 'list_number' : 'list_string';
             }
             
-            // Determine validation rule from dicompare format
+            // Determine validation rule from field properties
             let validationRule: any = { type: 'exact' };
             if (field.tolerance !== undefined) {
               validationRule = {
@@ -733,65 +1091,33 @@ json.dumps(formatted_result)
               tag: field.tag || '',
               name: field.field || '',
               value: field.value,
-              vr: field.vr || '',
-              level: 'acquisition' as const,
+              vr: '', // Will be looked up if needed
+              level: 'series' as const,
               data_type: dataType,
-              consistency: 'constant',
-              validation_rule: validationRule
+              validation_rule: validationRule,
+              seriesName: seriesName
             });
-          }
-        }
-
-        // Process series data (if any)
-        const series = acquisition.series || [];
-        for (const seriesData of series) {
-          const seriesName = seriesData.name || 'Unknown Series';
-          const seriesFieldsArray = seriesData.fields || [];
-          for (const field of seriesFieldsArray) {
-            if (typeof field === 'object' && field !== null) {
-              // Determine data type from value
-              let dataType = 'string';
-              if (typeof field.value === 'number') {
-                dataType = 'number';
-              }
-              
-              // Determine validation rule from dicompare format
-              let validationRule: any = { type: 'exact' };
-              if (field.tolerance !== undefined) {
-                validationRule = {
-                  type: 'tolerance',
-                  value: field.value,
-                  tolerance: field.tolerance
-                };
-              } else if (field.contains !== undefined) {
-                validationRule = {
-                  type: 'contains',
-                  contains: field.contains
-                };
-              } else if (field.value !== undefined) {
-                validationRule = {
-                  type: 'exact',
-                  value: field.value
-                };
-              }
-              
-              fieldInfos.push({
-                tag: field.tag || '',
-                name: field.field || '',
-                value: field.value,
-                vr: field.vr || '',
-                level: 'series' as const,
-                data_type: dataType,
-                consistency: 'constant',
-                validation_rule: validationRule,
-                seriesName: seriesName
-              });
-            }
+            
+            console.log(`  Added series field: ${field.field} = ${field.value} (series: ${seriesName})`);
           }
         }
       }
 
-      console.log(`✅ Loaded ${fieldInfos.length} schema fields for ${schemaId} (frontend-only)`);
+      // Also extract validation rules for the UI (but don't use them for validation yet)
+      const validationRules: any[] = [];
+      for (const [acqName, acqData] of targetAcquisitions) {
+        const rules = (acqData as any).rules || [];
+        validationRules.push(...rules);
+      }
+      
+      // Store validation rules in a way that ComplianceFieldTable can access them
+      if (validationRules.length > 0) {
+        console.log(`Found ${validationRules.length} validation rules in schema`);
+        // We'll need to pass these to the UI component
+        (fieldInfos as any).validationRules = validationRules;
+      }
+
+      console.log(`✅ Loaded ${fieldInfos.length} schema fields and ${validationRules.length} validation rules for ${schemaId} (pure JavaScript)`);
       return fieldInfos;
       
     } catch (error) {
@@ -812,6 +1138,7 @@ json.dumps(formatted_result)
       acquisitionFields: apiAcquisition.acquisition_fields?.map((field): DicomField => ({
         tag: field.tag,
         name: field.name,
+        keyword: field.keyword,
         value: field.value,
         vr: field.vr,
         level: field.level,
@@ -821,6 +1148,7 @@ json.dumps(formatted_result)
       seriesFields: apiAcquisition.series_fields?.map((field): DicomField => ({
         tag: field.tag,
         name: field.name,
+        keyword: field.keyword,
         values: field.values,
         vr: field.vr,
         level: field.level,
@@ -982,6 +1310,7 @@ try:
                     acquisition_fields.append({
                         "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field}",
                         "name": field,
+                        "keyword": tag_info.get("keyword", field),
                         "value": value,
                         "vr": _get_vr_for_field(field),
                         "level": "acquisition",
@@ -1006,6 +1335,7 @@ try:
                     series_fields.append({
                         "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field}",
                         "name": field,
+                        "keyword": tag_info.get("keyword", field),
                         "values": values_list,
                         "vr": _get_vr_for_field(field),
                         "level": "series",
@@ -1320,6 +1650,7 @@ try:
             if field in acq_df.columns:
                 unique_vals = acq_df[field].dropna().unique()
                 tag_info = get_tag_info(field)
+                print(f"🔍 DEBUG Field analysis for '{field}': tag_info = {tag_info}")
                 data_type = determine_field_type_from_values(field, acq_df[field])
                 
                 # Use dicompare's series detection to classify fields
@@ -1340,6 +1671,7 @@ try:
                     acquisition_fields.append({
                         "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field}",
                         "name": field,
+                        "keyword": tag_info.get("keyword", field),
                         "value": value,
                         "vr": _get_vr_for_field(field),
                         "level": "acquisition",
@@ -1365,6 +1697,7 @@ try:
                     series_fields.append({
                         "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field}",
                         "name": field,
+                        "keyword": tag_info.get("keyword", field),
                         "values": values_list,
                         "vr": _get_vr_for_field(field),
                         "level": "series", 
@@ -1577,10 +1910,16 @@ try:
         with open(temp_schema_path, 'w') as f:
             f.write(schema_content)
         
-        # Load the schema using dicompare's function
-        print("Loading schema with dicompare...")
-        fields, schema_data = dicompare.load_json_schema(temp_schema_path)
-        print(f"Schema loaded: {len(fields) if fields else 0} fields")
+        # Load the schema using new hybrid schema function
+        print("Loading hybrid schema with dicompare...")
+        try:
+            fields, schema_data, validation_rules = dicompare.load_hybrid_schema(temp_schema_path)
+            print(f"Hybrid schema loaded: {len(fields) if fields else 0} fields, {len(validation_rules) if validation_rules else 0} rules")
+        except Exception as e:
+            print(f"Hybrid schema loading failed, falling back to legacy: {e}")
+            fields, schema_data = dicompare.load_json_schema(temp_schema_path)
+            validation_rules = None
+            print(f"Legacy schema loaded: {len(fields) if fields else 0} fields")
         
         # Create session mapping - map schema acquisition names to actual acquisition names
         # From UI: we know this acquisition (acq_data['id']) should map to the schema
@@ -1654,13 +1993,24 @@ try:
                 print(f"    Series count: {len(acq_data.get('series', []))}")
                 break  # Just show first acquisition for debugging
             
-            # Call dicompare validation with correct schema format
-            print("Calling dicompare.check_session_compliance_with_json_schema...")
-            compliance_results = dicompare.check_session_compliance_with_json_schema(
-                in_session=session_df,
-                schema_session=schema_data,  # Use schema directly (already in correct format)
-                session_map=session_map
-            )
+            # Call dicompare validation using new hybrid compliance function
+            print("Calling dicompare.check_session_compliance with hybrid support...")
+            try:
+                compliance_results = dicompare.check_session_compliance(
+                    in_session=session_df,
+                    schema_data=schema_data,
+                    session_map=session_map,
+                    validation_rules=validation_rules
+                )
+                print(f"Hybrid validation complete: {len(compliance_results)} results")
+            except Exception as e:
+                print(f"Hybrid validation failed, falling back to legacy: {e}")
+                compliance_results = dicompare.check_session_compliance_with_json_schema(
+                    in_session=session_df,
+                    schema_session=schema_data,
+                    session_map=session_map
+                )
+                print(f"Legacy validation complete: {len(compliance_results)} results")
             
             print(f"Dicompare validation complete: {len(compliance_results)} results")
             
@@ -1672,15 +2022,26 @@ try:
                 # Check if this is a series-level validation
                 is_series = result.get('series') is not None
                 
+                # Check if this is a rule validation result (has rule_name)
+                rule_name = result.get('rule_name')
+                is_rule = rule_name is not None
+                
                 validation_result = {
                     'fieldPath': result.get('field', ''),
                     'fieldName': result.get('field', ''),
                     'status': status,
                     'message': result.get('message', ''),
-                    'actualValue': result.get('actual_values', [None])[0] if result.get('actual_values') else None,
-                    'expectedValue': result.get('expected_value') if status == 'fail' else None,
-                    'validationType': 'series' if is_series else 'acquisition'
+                    'actualValue': result.get('value') if is_rule else (result.get('actual_values', [None])[0] if result.get('actual_values') else None),
+                    'expectedValue': result.get('expected') if not is_rule else None,
+                    'validationType': 'rule' if is_rule else ('series' if is_series else 'field')
                 }
+                
+                # Add rule information for rule validation results
+                if is_rule:
+                    validation_result['rule_name'] = rule_name
+                    # For rules, the value might be a complex structure
+                    validation_result['actualValue'] = result.get('value', None)
+                    validation_result['expectedValue'] = result.get('expected', '')
                 
                 # Add series information for series-level validations
                 if is_series:

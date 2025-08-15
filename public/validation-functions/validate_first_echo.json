@@ -6,7 +6,7 @@
   "fields": ["EchoTime"],
   "requiredSystemFields": [],
   "parameters": null,
-  "implementation": "first_echo_time = value[\"EchoTime\"].min()\nif first_echo_time > 10:\n    raise ValidationError(f\"The first TE is overly long. Found {first_echo_time} ms.\")\nreturn value",
+  "implementation": "first_echo_time = value[\"EchoTime\"].min()\nif first_echo_time > 10:\n    raise ValidationError(f\"The first TE is overly long. Found {first_echo_time} ms.\")",
   "testCases": [
     {
       "id": "short_first_echo",

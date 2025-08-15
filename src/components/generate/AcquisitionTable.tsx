@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { Edit2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-import { Acquisition, DicomField } from '../../types';
+import { Edit2, Trash2, ChevronDown, ChevronUp, Code } from 'lucide-react';
+import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import FieldTable from './FieldTable';
 import SeriesTable from './SeriesTable';
 import DicomFieldSelector from '../common/DicomFieldSelector';
+import ValidationFunctionLibraryModal from '../validation/ValidationFunctionLibraryModal';
+import ValidationFunctionEditorModal from '../validation/ValidationFunctionEditorModal';
+import { ValidationFunction } from '../validation/ValidationFunctionLibraryModal';
 
 interface AcquisitionTableProps {
   acquisition: Acquisition;
@@ -19,6 +22,10 @@ interface AcquisitionTableProps {
   onSeriesAdd: () => void;
   onSeriesDelete: (seriesIndex: number) => void;
   onSeriesNameUpdate: (seriesIndex: number, name: string) => void;
+  // New validation function handlers
+  onValidationFunctionAdd?: (func: SelectedValidationFunction) => void;
+  onValidationFunctionUpdate?: (index: number, func: SelectedValidationFunction) => void;
+  onValidationFunctionDelete?: (index: number) => void;
 }
 
 const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
@@ -35,10 +42,82 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   onSeriesAdd,
   onSeriesDelete,
   onSeriesNameUpdate,
+  onValidationFunctionAdd,
+  onValidationFunctionUpdate,
+  onValidationFunctionDelete,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [showValidationLibrary, setShowValidationLibrary] = useState(false);
+  const [showValidationEditor, setShowValidationEditor] = useState(false);
+  const [editingValidationIndex, setEditingValidationIndex] = useState<number | null>(null);
 
   const hasSeriesFields = acquisition.seriesFields && acquisition.seriesFields.length > 0;
+  const validationFunctions = acquisition.validationFunctions || [];
+
+  // Validation function handlers
+  const handleValidationFunctionSelect = (func: ValidationFunction) => {
+    const selectedFunc: SelectedValidationFunction = {
+      ...func,
+      customName: func.name,
+      customDescription: func.description,
+      customFields: [...func.fields],
+      customImplementation: func.implementation,
+      customTestCases: func.testCases || [],
+      enabledSystemFields: func.requiredSystemFields || []
+    };
+    
+    if (onValidationFunctionAdd) {
+      onValidationFunctionAdd(selectedFunc);
+    }
+    setShowValidationLibrary(false);
+  };
+
+  const handleValidationFunctionEdit = (index: number) => {
+    setEditingValidationIndex(index);
+    setShowValidationEditor(true);
+  };
+
+  const handleValidationFunctionSave = (func: SelectedValidationFunction) => {
+    if (editingValidationIndex !== null && onValidationFunctionUpdate) {
+      onValidationFunctionUpdate(editingValidationIndex, func);
+    }
+    setShowValidationEditor(false);
+    setEditingValidationIndex(null);
+  };
+
+  const handleValidationFunctionDelete = (index: number) => {
+    if (onValidationFunctionDelete) {
+      onValidationFunctionDelete(index);
+    }
+  };
+
+  const handleCreateNewValidationFunction = () => {
+    const newFunction: SelectedValidationFunction = {
+      id: `custom_${Date.now()}`,
+      name: 'New Validation Function',
+      description: 'Custom validation function',
+      category: 'Custom',
+      fields: ['FieldName'],
+      implementation: `# Custom validation logic\n# Access field data with value["FieldName"]\n# Raise ValidationError for failures\n# Function should not return anything`,
+      customName: 'New Validation Function',
+      customDescription: 'Custom validation function',
+      customFields: ['FieldName'],
+      customImplementation: `# Custom validation logic\n# Access field data with value["FieldName"]\n# Raise ValidationError for failures\n# Function should not return anything`,
+      customTestCases: [],
+      enabledSystemFields: []
+    };
+    
+    if (onValidationFunctionAdd) {
+      onValidationFunctionAdd(newFunction);
+    }
+    setShowValidationLibrary(false);
+    
+    // Open the editor for the newly created function
+    setTimeout(() => {
+      setEditingValidationIndex(validationFunctions.length);
+      setShowValidationEditor(true);
+    }, 100);
+  };
 
   return (
     <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit">
@@ -104,19 +183,84 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       {/* Compact Body Content */}
       {isExpanded && (
         <div className="p-3 space-y-3">
-          {/* Acquisition-Level Fields */}
-          <div>
-            {/* Compact field selector */}
-            {isEditMode && (
-              <div className="mb-2">
+          {/* Validation Functions */}
+          {isEditMode && (
+            <div>
+              <div className="flex items-center space-x-2 mb-2">
                 <DicomFieldSelector
                   selectedFields={[]}
                   onFieldsChange={(fields) => onFieldAdd(fields)}
                   placeholder="Add DICOM fields..."
-                  className="w-full text-sm"
+                  className="flex-1 text-sm"
                 />
+                <button
+                  onClick={() => setShowValidationLibrary(true)}
+                  className="flex items-center px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 flex-shrink-0"
+                >
+                  <Code className="h-4 w-4 mr-1" />
+                  Add Validator Function
+                </button>
               </div>
-            )}
+              
+              {/* Validation Functions Table */}
+              {validationFunctions.length > 0 && (
+                <div className="mb-3">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Validator Rules</h4>
+                  <div className="border border-gray-200 rounded-md overflow-hidden">
+                    <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                      <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-700">
+                        <div className="col-span-4">Name</div>
+                        <div className="col-span-6">Description</div>
+                        <div className="col-span-2 text-right">Actions</div>
+                      </div>
+                    </div>
+                    <div className="divide-y divide-gray-200">
+                      {validationFunctions.map((func, index) => (
+                        <div key={`${func.id}-${index}`} className="px-3 py-2 hover:bg-gray-50">
+                          <div className="grid grid-cols-12 gap-2 items-center">
+                            <div className="col-span-4">
+                              <div className="text-sm font-medium text-gray-900">{func.customName || func.name}</div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {(func.customFields || func.fields).map(field => (
+                                  <span key={field} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                    {field}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="col-span-6">
+                              <div className="text-sm text-gray-600">{func.customDescription || func.description}</div>
+                            </div>
+                            <div className="col-span-2 text-right">
+                              <div className="flex items-center justify-end space-x-1">
+                                <button
+                                  onClick={() => handleValidationFunctionEdit(index)}
+                                  className="p-1 text-gray-400 hover:text-blue-600"
+                                  title="Edit function"
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleValidationFunctionDelete(index)}
+                                  className="p-1 text-gray-400 hover:text-red-600"
+                                  title="Remove function"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Acquisition-Level Fields */}
+          <div>
             
             <FieldTable
               fields={acquisition.acquisitionFields}
@@ -148,6 +292,25 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           )}
         </div>
       )}
+      
+      {/* Validation Function Library Modal */}
+      <ValidationFunctionLibraryModal
+        isOpen={showValidationLibrary}
+        onClose={() => setShowValidationLibrary(false)}
+        onSelectFunction={handleValidationFunctionSelect}
+        onCreateNewFunction={handleCreateNewValidationFunction}
+      />
+      
+      {/* Validation Function Editor Modal */}
+      <ValidationFunctionEditorModal
+        isOpen={showValidationEditor}
+        func={editingValidationIndex !== null ? validationFunctions[editingValidationIndex] : null}
+        onClose={() => {
+          setShowValidationEditor(false);
+          setEditingValidationIndex(null);
+        }}
+        onSave={handleValidationFunctionSave}
+      />
     </div>
   );
 };

@@ -59,9 +59,12 @@ export interface ComplianceFieldResult {
   message?: string;
   rule?: ValidationRule;
   
-  // Series-specific fields
-  validationType?: 'acquisition' | 'series';
+  // Enhanced validation type support for hybrid schemas
+  validationType?: 'field' | 'rule' | 'series';
   seriesName?: string;
+  
+  // New fields for hybrid schema rule validation
+  rule_name?: string;  // Present for rule validation results
 }
 
 export interface SchemaTemplate {

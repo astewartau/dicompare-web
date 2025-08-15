@@ -6,7 +6,7 @@
   "fields": ["MRAcquisitionType"],
   "requiredSystemFields": [],
   "parameters": null,
-  "implementation": "acquisition_type = value[\"MRAcquisitionType\"].iloc[0]  # Assuming consistent within group\nif acquisition_type != \"3D\":\n    raise ValidationError(f\"The input data is not 3D. Found {acquisition_type}.\")\nreturn value",
+  "implementation": "acquisition_type = value[\"MRAcquisitionType\"].iloc[0]  # Assuming consistent within group\nif acquisition_type != \"3D\":\n    raise ValidationError(f\"The input data is not 3D. Found {acquisition_type}.\")",
   "testCases": [
     {
       "id": "3d_acquisition",

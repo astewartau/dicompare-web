@@ -20,7 +20,10 @@ const BuildSchema: React.FC = () => {
     updateSeries,
     addSeries,
     deleteSeries,
-    updateSeriesName
+    updateSeriesName,
+    addValidationFunction,
+    updateValidationFunction,
+    deleteValidationFunction
   } = useAcquisitions();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -550,6 +553,9 @@ const BuildSchema: React.FC = () => {
             onSeriesAdd={() => addSeries(acquisition.id)}
             onSeriesDelete={(seriesIndex) => deleteSeries(acquisition.id, seriesIndex)}
             onSeriesNameUpdate={(seriesIndex, name) => updateSeriesName(acquisition.id, seriesIndex, name)}
+            onValidationFunctionAdd={(func) => addValidationFunction(acquisition.id, func)}
+            onValidationFunctionUpdate={(index, func) => updateValidationFunction(acquisition.id, index, func)}
+            onValidationFunctionDelete={(index) => deleteValidationFunction(acquisition.id, index)}
           />
         ))}
 

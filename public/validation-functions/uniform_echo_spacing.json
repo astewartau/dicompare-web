@@ -6,7 +6,7 @@
   "fields": ["EchoTime"],
   "requiredSystemFields": [],
   "parameters": null,
-  "implementation": "echo_times = value[\"EchoTime\"].dropna().sort_values()\nspacings = echo_times.diff().iloc[1:]\nif not all(abs(spacings.iloc[0] - s) < 0.01 for s in spacings):\n    raise ValidationError(f\"Echo spacing is not uniform. Found spacings: {spacings}.\")\nreturn value",
+  "implementation": "echo_times = value[\"EchoTime\"].dropna().sort_values()\nspacings = echo_times.diff().iloc[1:]\nif not all(abs(spacings.iloc[0] - s) < 0.01 for s in spacings):\n    raise ValidationError(f\"Echo spacing is not uniform. Found spacings: {spacings}.\")",
   "testCases": [
     {
       "id": "uniform_spacing",

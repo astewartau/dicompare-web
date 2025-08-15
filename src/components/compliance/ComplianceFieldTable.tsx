@@ -35,6 +35,7 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [loadedSchemaFields, setLoadedSchemaFields] = useState<DicomField[]>([]);
+  const [validationRules, setValidationRules] = useState<any[]>([]);
 
   const { getSchemaContent } = useSchemaContext();
 
@@ -63,6 +64,11 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
       }));
 
       setLoadedSchemaFields(schemaFields);
+      
+      // Extract validation rules if they exist
+      const rules = (apiFields as any).validationRules || [];
+      setValidationRules(rules);
+      console.log(`Extracted ${rules.length} validation rules from schema`);
     } catch (err) {
       console.error('Failed to load schema fields:', err);
       setError('Failed to load schema fields from API');
@@ -96,7 +102,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
         actualValue: result.actualValue,
         expectedValue: result.expectedValue,
         validationType: result.validationType,
-        seriesName: result.seriesName
+        seriesName: result.seriesName,
+        rule_name: result.rule_name // Include rule_name for rule validation results
       }));
 
       setComplianceResults(complianceResults);
@@ -382,8 +389,81 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     );
   };
 
+  const getRuleValidationResult = (rule: any): ComplianceFieldResult => {
+    // Find compliance result for this specific rule
+    const result = complianceResults.find(r => r.rule_name === rule.name);
+    
+    return result || {
+      fieldPath: rule.id,
+      fieldName: rule.name,
+      status: 'unknown',
+      message: hasAcquisitionData ? 'Click "Compliance Summary" to validate' : 'No data to validate against',
+      actualValue: null
+    };
+  };
+
+  const renderValidationRulesTable = () => {
+    if (validationRules.length === 0) return null;
+
+    return (
+      <div className="mb-3">
+        <h4 className="text-sm font-medium text-gray-900 mb-2">Validator Rules</h4>
+        <div className="border border-gray-200 rounded-md overflow-hidden">
+          <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+            <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-700">
+              <div className="col-span-3">Name</div>
+              <div className="col-span-5">Description</div>
+              <div className="col-span-3">Fields</div>
+              {hasAcquisitionData && (
+                <div className="col-span-1 text-center">Status</div>
+              )}
+            </div>
+          </div>
+          <div className="divide-y divide-gray-200">
+            {validationRules.map((rule, index) => {
+              const ruleResult = getRuleValidationResult(rule);
+              
+              return (
+                <div key={`${rule.id}-${index}`} className="px-3 py-2 hover:bg-gray-50">
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    <div className="col-span-3">
+                      <div className="text-sm font-medium text-gray-900">{rule.name}</div>
+                    </div>
+                    <div className="col-span-5">
+                      <div className="text-sm text-gray-600">{rule.description}</div>
+                    </div>
+                    <div className="col-span-3">
+                      <div className="flex flex-wrap gap-1">
+                        {(rule.fields || []).map((field: string) => (
+                          <span key={field} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                            {field}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    {hasAcquisitionData && (
+                      <div className="col-span-1 text-center">
+                        <div 
+                          className="inline-flex items-center justify-center cursor-help"
+                          title={ruleResult.message}
+                        >
+                          {getStatusIcon(ruleResult.status)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-3">
+      {renderValidationRulesTable()}
       {acquisitionLevelFields.length > 0 && renderFieldTable(acquisitionLevelFields, "Acquisition-Level Fields")}
       {seriesLevelFields.length > 0 && renderSeriesFieldTable(seriesLevelFields, "Series-Level Fields")}
 

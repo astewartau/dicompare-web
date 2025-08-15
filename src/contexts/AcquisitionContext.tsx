@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Acquisition, DicomField, Series } from '../types';
+import { Acquisition, DicomField, Series, SelectedValidationFunction } from '../types';
 import { searchDicomFields, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
 
 interface TemplateMetadata {
@@ -25,6 +25,10 @@ interface AcquisitionContextType {
   addSeries: (acquisitionId: string) => void;
   deleteSeries: (acquisitionId: string, seriesIndex: number) => void;
   updateSeriesName: (acquisitionId: string, seriesIndex: number, name: string) => void;
+  // Validation function methods
+  addValidationFunction: (acquisitionId: string, func: SelectedValidationFunction) => void;
+  updateValidationFunction: (acquisitionId: string, index: number, func: SelectedValidationFunction) => void;
+  deleteValidationFunction: (acquisitionId: string, index: number) => void;
 }
 
 const AcquisitionContext = createContext<AcquisitionContextType | undefined>(undefined);
@@ -154,6 +158,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
         
         const vr = fieldDef?.vr || fieldDef?.valueRepresentation || 'UN';
         const name = fieldDef?.name || tag;
+        const keyword = fieldDef?.keyword || name;
         const dataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
         const validationRule = fieldDef ? {
           type: suggestValidationConstraint(fieldDef)
@@ -162,6 +167,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
         return {
           tag,
           name,
+          keyword,
           value: '',
           vr,
           level: 'acquisition' as const,
@@ -173,6 +179,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
         return {
           tag,
           name: tag,
+          keyword: tag,
           value: '',
           vr: 'UN',
           level: 'acquisition' as const,
@@ -256,6 +263,40 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
     }));
   }, []);
 
+  // Validation function handlers
+  const addValidationFunction = useCallback((acquisitionId: string, func: SelectedValidationFunction) => {
+    setAcquisitions(prev => prev.map(acq => 
+      acq.id === acquisitionId ? {
+        ...acq,
+        validationFunctions: [...(acq.validationFunctions || []), func]
+      } : acq
+    ));
+  }, []);
+
+  const updateValidationFunction = useCallback((acquisitionId: string, index: number, func: SelectedValidationFunction) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedFunctions = [...(acq.validationFunctions || [])];
+      if (updatedFunctions[index]) {
+        updatedFunctions[index] = func;
+      }
+      
+      return { ...acq, validationFunctions: updatedFunctions };
+    }));
+  }, []);
+
+  const deleteValidationFunction = useCallback((acquisitionId: string, index: number) => {
+    setAcquisitions(prev => prev.map(acq => {
+      if (acq.id !== acquisitionId) return acq;
+      
+      const updatedFunctions = [...(acq.validationFunctions || [])];
+      updatedFunctions.splice(index, 1);
+      
+      return { ...acq, validationFunctions: updatedFunctions };
+    }));
+  }, []);
+
   const value: AcquisitionContextType = {
     acquisitions,
     setAcquisitions,
@@ -271,7 +312,10 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
     updateSeries,
     addSeries,
     deleteSeries,
-    updateSeriesName
+    updateSeriesName,
+    addValidationFunction,
+    updateValidationFunction,
+    deleteValidationFunction
   };
 
   return (

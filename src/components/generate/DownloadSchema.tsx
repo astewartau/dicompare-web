@@ -24,7 +24,7 @@ const DownloadSchema: React.FC = () => {
         console.log('Generating template with acquisitions:', acquisitions);
         console.log('Template metadata:', templateMetadata);
         
-        const generatedTemplate = await dicompareAPI.generateTemplate(acquisitions, templateMetadata);
+        const generatedTemplate = await dicompareAPI.generateTemplateJS(acquisitions, templateMetadata);
         setTemplate(generatedTemplate);
         setError(null);
       } catch (err) {
@@ -39,7 +39,9 @@ const DownloadSchema: React.FC = () => {
   }, [acquisitions, templateMetadata]);
 
   const handleDownloadJSON = () => {
-    const jsonContent = JSON.stringify(template, null, 2);
+    // Separate the template schema from statistics for download
+    const { statistics, ...templateSchema } = template;
+    const jsonContent = JSON.stringify(templateSchema, null, 2);
     const blob = new Blob([jsonContent], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -167,6 +169,11 @@ const DownloadSchema: React.FC = () => {
                     <p className="font-medium text-gray-900">{acquisition.protocolName}</p>
                     <p className="text-sm text-gray-600">
                       {acquisition.acquisitionFields.length + acquisition.seriesFields.length} validation fields
+                      {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                        <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+                          {acquisition.validationFunctions.length} validator {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
+                        </span>
+                      )}
                     </p>
                   </div>
                 ))}
@@ -216,7 +223,10 @@ const DownloadSchema: React.FC = () => {
         
         <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
           <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-            {JSON.stringify(template, null, 2)}
+            {template ? JSON.stringify((() => {
+              const { statistics, ...templateSchema } = template;
+              return templateSchema;
+            })(), null, 2) : 'Loading...'}
           </pre>
         </div>
       </div>

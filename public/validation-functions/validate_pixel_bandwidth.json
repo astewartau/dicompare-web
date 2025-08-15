@@ -6,7 +6,7 @@
   "fields": ["PixelBandwidth", "MagneticFieldStrength"],
   "requiredSystemFields": [],
   "parameters": null,
-  "implementation": "pixel_bandwidth = value[\"PixelBandwidth\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\n\nif field_strength == 3.0 and pixel_bandwidth > 220:\n    raise ValidationError(f\"PixelBandwidth should be ≤220 Hz/pixel at 3T. Found {pixel_bandwidth} Hz/pixel.\")\nelif field_strength != 3.0:\n    raise ValidationError(\"PixelBandwidth recommendations are not available for this field strength.\")\nreturn value",
+  "implementation": "pixel_bandwidth = value[\"PixelBandwidth\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\n\nif field_strength == 3.0 and pixel_bandwidth > 220:\n    raise ValidationError(f\"PixelBandwidth should be ≤220 Hz/pixel at 3T. Found {pixel_bandwidth} Hz/pixel.\")\nelif field_strength != 3.0:\n    raise ValidationError(\"PixelBandwidth recommendations are not available for this field strength.\")",
   "testCases": [
     {
       "id": "acceptable_bandwidth",

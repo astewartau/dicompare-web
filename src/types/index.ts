@@ -2,6 +2,7 @@
 export interface DicomField {
   tag: string;
   name: string;
+  keyword?: string; // DICOM keyword (e.g., "PatientName")
   value: string | number | string[] | number[] | any;
   vr: string; // Value Representation
   level: 'acquisition' | 'series';
@@ -27,6 +28,29 @@ export interface Series {
   fields: { [fieldTag: string]: any | SeriesFieldValue };
 }
 
+// Validation Functions Types (imported from validation components)
+export interface ValidationFunction {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  fields: string[];
+  parameters?: Record<string, any>;
+  implementation: string;
+  testCases?: any[];
+  requiredSystemFields?: string[];
+}
+
+export interface SelectedValidationFunction extends ValidationFunction {
+  configuredParams?: Record<string, any>;
+  customImplementation?: string;
+  customName?: string;
+  customDescription?: string;
+  customFields?: string[];
+  customTestCases?: any[];
+  enabledSystemFields?: string[];
+}
+
 // Acquisition Types
 export interface Acquisition {
   id: string;
@@ -36,6 +60,7 @@ export interface Acquisition {
   acquisitionFields: DicomField[];
   seriesFields: DicomField[];
   series?: Series[];
+  validationFunctions?: SelectedValidationFunction[]; // Add validation functions to acquisitions
   metadata: {
     manufacturer?: string;
     magneticFieldStrength?: string;

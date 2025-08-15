@@ -6,7 +6,7 @@
   "fields": ["PixelSpacing", "SliceThickness"],
   "requiredSystemFields": [],
   "parameters": null,
-  "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\nslice_thickness = value[\"SliceThickness\"].iloc[0]\nvoxel_size_mm3 = math.prod(list(pixel_spacing) + [slice_thickness])\n\nif voxel_size_mm3 > 1:\n    raise ValidationError(f\"Voxel size should be ≤1 mm³. Got {voxel_size_mm3:.2f} mm³.\")\n\nreturn value",
+  "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\nslice_thickness = value[\"SliceThickness\"].iloc[0]\nvoxel_size_mm3 = math.prod(list(pixel_spacing) + [slice_thickness])\n\nif voxel_size_mm3 > 1:\n    raise ValidationError(f\"Voxel size should be ≤1 mm³. Got {voxel_size_mm3:.2f} mm³.\")\n",
   "testCases": [
     {
       "id": "small_voxels",

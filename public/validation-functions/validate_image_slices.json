@@ -6,7 +6,7 @@
   "fields": ["ImageType", "EchoTime"],
   "requiredSystemFields": ["Count"],
   "parameters": null,
-  "implementation": "num_slices = value['Count']\nif not all(num_slices == num_slices.iloc[0]):\n    raise ValidationError(f\"Magnitude and phase images do not have the same number of slices. Found {list(num_slices)}.\")\nreturn value",
+  "implementation": "num_slices = value['Count']\nif not all(num_slices == num_slices.iloc[0]):\n    raise ValidationError(f\"Magnitude and phase images do not have the same number of slices. Found {list(num_slices)}.\")",
   "testCases": [
     {
       "id": "matching_slices",
