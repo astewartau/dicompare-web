@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Upload, Database, Loader, CheckCircle, FileText, Code, Link2, Plus, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Acquisition, ProcessingProgress, Template, DicomField, Series } from '../../types';
 import { dicompareAPI, AnalysisResult } from '../../services/DicompareAPI';
+import { processUploadedFiles } from '../../utils/fileUploadUtils';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { SchemaUploadModal } from '../schema/SchemaUploadModal';
 import { SchemaTemplate } from '../../types/schema';
@@ -33,6 +34,7 @@ const DataLoadingAndMatching: React.FC = () => {
   const [preSelectedSchemaId, setPreSelectedSchemaId] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Load example schemas automatically on component mount
   const loadExampleSchemas = async () => {
@@ -72,21 +74,60 @@ const DataLoadingAndMatching: React.FC = () => {
     });
 
     try {
-      setProgress({
-        currentFile: 0,
-        totalFiles: files.length,
-        currentOperation: 'Processing DICOM files...',
-        percentage: 25
+      // Process uploaded files with proper filtering (same as Generate Template)
+      setProgress(prev => ({ 
+        ...prev!, 
+        currentOperation: 'Reading file data...',
+        percentage: prev?.percentage || 0
+      }));
+      
+      const fileObjects = await processUploadedFiles(files, (fileProgress) => {
+        setProgress(prev => ({
+          ...prev!,
+          currentOperation: `Reading file ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.fileName}`,
+          percentage: (fileProgress.current / fileProgress.total) * 25 // 0-25% for file reading
+        }));
       });
 
       // Process real DICOM files using dicompare
-      const result = await dicompareAPI.analyzeFilesForUI(Array.from(files), (progress) => {
-        setProgress({
-          currentFile: Math.floor((progress.totalProcessed / progress.totalFiles) * files.length),
-          totalFiles: files.length,
-          currentOperation: progress.currentOperation,
-          percentage: 25 + (progress.percentage * 0.75) // Scale to 25-100%
-        });
+      const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
+        console.log('🔄 Check Compliance JavaScript received progress:', progress);
+        
+        try {
+          // Convert Proxy object to plain object if needed (same as Generate Template)
+          const progressObj = progress.toJs ? progress.toJs() : progress;
+          const percentage = progressObj.percentage || 0;
+          const operation = progressObj.currentOperation || 'Processing...';
+          const totalProcessed = progressObj.totalProcessed || 0;
+          const totalFiles = progressObj.totalFiles || files.length;
+          
+          // Scale progress to account for file reading phase (25-90% range, same as Generate Template)
+          const scaledPercentage = 25 + (percentage * 0.65); // Scale to 25-90%
+          
+          setProgress({
+            currentFile: Math.floor((totalProcessed / totalFiles) * files.length),
+            totalFiles: files.length,
+            currentOperation: operation,
+            percentage: scaledPercentage
+          });
+          
+          console.log('🔄 Check Compliance set progress to:', scaledPercentage + '%', 'operation:', operation);
+        } catch (error) {
+          console.error('❌ Critical error in Check Compliance progress callback:', error);
+          console.error('❌ Progress object type:', typeof progress);
+          console.error('❌ Progress object:', progress);
+          
+          // Don't mask the error - let it propagate but provide minimal fallback
+          setProgress({
+            currentFile: 0,
+            totalFiles: files.length,
+            currentOperation: `Error in progress callback: ${error.message}`,
+            percentage: 25 // Only as emergency fallback after logging the error
+          });
+          
+          // Re-throw to ensure we catch these critical issues
+          throw new Error(`Progress callback failed: ${error.message}`);
+        }
       });
 
       // Append new acquisitions to existing ones instead of replacing
@@ -137,11 +178,103 @@ const DataLoadingAndMatching: React.FC = () => {
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragOver(true);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    handleFileUpload(e.dataTransfer.files);
+    // Only set to false if we're leaving the drop zone entirely
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  // Helper function to recursively get all files from a directory
+  const getAllFilesFromDirectory = async (dirEntry: FileSystemDirectoryEntry): Promise<File[]> => {
+    const files: File[] = [];
+    
+    return new Promise((resolve) => {
+      const reader = dirEntry.createReader();
+      
+      const readEntries = () => {
+        reader.readEntries(async (entries) => {
+          if (entries.length === 0) {
+            resolve(files);
+            return;
+          }
+          
+          for (const entry of entries) {
+            if (entry.isFile) {
+              const file = await new Promise<File>((fileResolve) => {
+                (entry as FileSystemFileEntry).file(fileResolve);
+              });
+              files.push(file);
+            } else if (entry.isDirectory) {
+              const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+              files.push(...subFiles);
+            }
+          }
+          
+          // Continue reading entries (directories might have more entries than fit in one read)
+          readEntries();
+        });
+      };
+      
+      readEntries();
+    });
+  };
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    // Handle both files and directories from drag and drop
+    const items = Array.from(e.dataTransfer.items);
+    const files: File[] = [];
+    
+    // Process each dropped item
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry) {
+          if (entry.isDirectory) {
+            // Handle directory - recursively get all files
+            const dirFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+            files.push(...dirFiles);
+          } else {
+            // Handle single file
+            const file = item.getAsFile();
+            if (file) files.push(file);
+          }
+        } else {
+          // Fallback for browsers that don't support webkitGetAsEntry
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+    }
+    
+    if (files.length > 0) {
+      // Create a FileList-like object
+      const fileList = {
+        length: files.length,
+        item: (index: number) => files[index] || null,
+        [Symbol.iterator]: function* () {
+          for (let i = 0; i < files.length; i++) {
+            yield files[i];
+          }
+        }
+      };
+      // Add array access
+      files.forEach((file, index) => {
+        (fileList as any)[index] = file;
+      });
+      
+      await handleFileUpload(fileList as FileList);
+    } else {
+      // Fallback to original behavior if no files were processed
+      await handleFileUpload(e.dataTransfer.files);
+    }
   }, [handleFileUpload]);
 
 
@@ -410,8 +543,13 @@ const DataLoadingAndMatching: React.FC = () => {
   const renderUploadArea = (isExtra: boolean = false) => (
     <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6">
       <div
-        className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-medical-400 transition-colors"
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          isDragOver 
+            ? 'border-medical-500 bg-medical-50' 
+            : 'border-gray-300 hover:border-medical-400'
+        }`}
         onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {isProcessing ? (
@@ -420,7 +558,7 @@ const DataLoadingAndMatching: React.FC = () => {
             <Loader className="h-12 w-12 text-medical-600 mx-auto mb-4 animate-spin" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Processing DICOM Files</h3>
             <p className="text-gray-600 mb-4">
-              {progress?.currentOperation || 'Processing your files...'}
+              {progress.currentOperation}
             </p>
             
             {progress && (

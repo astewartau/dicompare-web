@@ -6,6 +6,7 @@ import SeriesTable from './SeriesTable';
 import DicomFieldSelector from '../common/DicomFieldSelector';
 import ValidationFunctionLibraryModal from '../validation/ValidationFunctionLibraryModal';
 import ValidationFunctionEditorModal from '../validation/ValidationFunctionEditorModal';
+import FieldConversionModal from './FieldConversionModal';
 import { ValidationFunction } from '../validation/ValidationFunctionLibraryModal';
 
 interface AcquisitionTableProps {
@@ -15,7 +16,7 @@ interface AcquisitionTableProps {
   onUpdate: (field: keyof Acquisition, value: any) => void;
   onDelete: () => void;
   onFieldUpdate: (fieldTag: string, updates: Partial<DicomField>) => void;
-  onFieldConvert: (fieldTag: string, toLevel: 'acquisition' | 'series') => void;
+  onFieldConvert: (fieldTag: string, toLevel: 'acquisition' | 'series', mode?: 'separate-series' | 'single-series') => void;
   onFieldDelete: (fieldTag: string) => void;
   onFieldAdd: (fields: string[]) => void;
   onSeriesUpdate: (seriesIndex: number, fieldTag: string, value: any) => void;
@@ -50,6 +51,8 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [showValidationLibrary, setShowValidationLibrary] = useState(false);
   const [showValidationEditor, setShowValidationEditor] = useState(false);
   const [editingValidationIndex, setEditingValidationIndex] = useState<number | null>(null);
+  const [showConversionModal, setShowConversionModal] = useState(false);
+  const [conversionField, setConversionField] = useState<DicomField | null>(null);
 
   const hasSeriesFields = acquisition.seriesFields && acquisition.seriesFields.length > 0;
   const validationFunctions = acquisition.validationFunctions || [];
@@ -117,6 +120,30 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       setEditingValidationIndex(validationFunctions.length);
       setShowValidationEditor(true);
     }, 100);
+  };
+
+  // Enhanced field conversion handler
+  const handleFieldConvert = (fieldTag: string, toLevel: 'acquisition' | 'series') => {
+    if (toLevel === 'series') {
+      // Find the field being converted
+      const field = acquisition.acquisitionFields.find(f => f.tag === fieldTag);
+      if (field && Array.isArray(field.value)) {
+        // Field has list value - show conversion modal
+        setConversionField(field);
+        setShowConversionModal(true);
+        return;
+      }
+    }
+    
+    // For non-list fields or converting to acquisition, use existing logic
+    onFieldConvert(fieldTag, toLevel);
+  };
+
+  const handleConversionChoice = (mode: 'separate-series' | 'single-series') => {
+    if (!conversionField) return;
+    
+    // Pass the mode to the parent component - we'll need to update the interface
+    onFieldConvert(conversionField.tag, 'series', mode);
   };
 
   return (
@@ -268,7 +295,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
               incompleteFields={incompleteFields}
               acquisitionId={acquisition.id}
               onFieldUpdate={onFieldUpdate}
-              onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'series')}
+              onFieldConvert={(fieldTag) => handleFieldConvert(fieldTag, 'series')}
               onFieldDelete={onFieldDelete}
             />
           </div>
@@ -310,6 +337,18 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           setEditingValidationIndex(null);
         }}
         onSave={handleValidationFunctionSave}
+      />
+      
+      {/* Field Conversion Modal */}
+      <FieldConversionModal
+        isOpen={showConversionModal}
+        fieldName={conversionField?.name || ''}
+        fieldValue={conversionField?.value || []}
+        onClose={() => {
+          setShowConversionModal(false);
+          setConversionField(null);
+        }}
+        onConvert={handleConversionChoice}
       />
     </div>
   );

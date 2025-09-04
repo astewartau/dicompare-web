@@ -2,7 +2,8 @@
 // This maintains the clean separation between mock data and UI components
 
 import { FieldDataType } from '../types';
-import { getDataTypeFromVR, getSuggestedConstraintForVR } from '../utils/vrMapping';
+import { getDataTypeFromVR, getSuggestedConstraintForVR, getSuggestedToleranceValue } from '../utils/vrMapping';
+import { roundDicomValue } from '../utils/valueRounding';
 
 export interface DicomFieldDefinition {
   tag: string;
@@ -265,14 +266,14 @@ export const suggestDataType = (vr: string, valueMultiplicity?: string, value?: 
 };
 
 // Suggest validation constraint based on field characteristics using enhanced VR mapping
-export const suggestValidationConstraint = (field: DicomFieldDefinition, value?: any): 'exact' | 'tolerance' | 'contains' | 'range' => {
-  return getSuggestedConstraintForVR(field.vr, field.name);
+export const suggestValidationConstraint = (field: DicomFieldDefinition, value?: any, source?: 'dicom' | 'pro'): 'exact' | 'tolerance' | 'contains' | 'range' | 'contains_any' | 'contains_all' => {
+  return getSuggestedConstraintForVR(field.vr, field.name, field.tag, source);
 };
 
 // Get field suggestions with data type and constraint recommendations
 export const getEnhancedFieldSuggestions = async (partialInput: string, limit: number = 10): Promise<Array<DicomFieldDefinition & {
   suggestedDataType: FieldDataType;
-  suggestedConstraint: 'exact' | 'tolerance' | 'contains' | 'range';
+  suggestedConstraint: 'exact' | 'tolerance' | 'contains' | 'range' | 'contains_any' | 'contains_all';
 }>> => {
   const searchResults = await searchDicomFields(partialInput, limit);
   

@@ -5,6 +5,7 @@ import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatte
 import { ComplianceFieldResult } from '../../types/schema';
 import { dicompareAPI, FieldInfo } from '../../services/DicompareAPI';
 import { useSchemaContext } from '../../contexts/SchemaContext';
+import CustomTooltip from '../common/CustomTooltip';
 
 /**
  * ComplianceFieldTable - UI PROTOTYPE ONLY
@@ -47,6 +48,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     setError(null);
 
     try {
+      console.log(`Loading schema fields for schema ${schemaId} with acquisitionIndex ${acquisitionId}`);
+      
       // Get schema fields from Python API, passing getSchemaContent for uploaded schemas
       const apiFields: FieldInfo[] = await dicompareAPI.getSchemaFields(schemaId, getSchemaContent, acquisitionId);
       
@@ -86,11 +89,14 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     setError(null);
 
     try {
+      console.log(`Validating acquisition against schema ${schemaId} with acquisitionIndex ${acquisitionId}`);
+      
       // Use real dicompare validation against the selected schema
       const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
         acquisition,
         schemaId,
-        getSchemaContent
+        getSchemaContent,
+        acquisitionId
       );
 
       // Convert validation results to UI format
@@ -172,6 +178,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
         return <XCircle {...iconProps} className="h-4 w-4 text-red-600" />;
       case 'warning':
         return <AlertTriangle {...iconProps} className="h-4 w-4 text-yellow-600" />;
+      case 'na':
+        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-500" />;
       case 'unknown':
         return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-400" />;
     }
@@ -182,13 +190,13 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     const passes = complianceResults.filter(r => r.status === 'pass').length;
     const fails = complianceResults.filter(r => r.status === 'fail').length;
     const warnings = complianceResults.filter(r => r.status === 'warning').length;
-    const unknown = complianceResults.filter(r => r.status === 'unknown').length;
+    const na = complianceResults.filter(r => r.status === 'na').length;
     
     return {
       passes,
       fails,
       warnings,
-      unknown,
+      na,
       total: complianceResults.length,
       percentage: complianceResults.length > 0 ? Math.round((passes / complianceResults.length) * 100) : 0
     };
@@ -197,20 +205,24 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   const compliance = getComplianceStats();
   const compliancePercentage = compliance.percentage;
 
-  // Separate acquisition-level and series-level fields
-  const allFields = loadedSchemaFields.length > 0 ? loadedSchemaFields : fields;
-  const acquisitionLevelFields = allFields.filter(field => field.level === 'acquisition');
-  const seriesLevelFields = allFields.filter(field => field.level === 'series');
+  // IMPORTANT FIX: Only show schema-defined fields, never DICOM fields as constraints
+  // When a schema is loaded, only show fields that are actually defined in the schema
+  const schemaDefinedFields = loadedSchemaFields;
+  const acquisitionLevelFields = schemaDefinedFields.filter(field => field.level === 'acquisition');
+  const seriesLevelFields = schemaDefinedFields.filter(field => field.level === 'series');
   
   const isSchemaOnlyMode = fields.length === 0 && loadedSchemaFields.length > 0;
   const hasAcquisitionData = fields.length > 0;
 
 
-  if (allFields.length === 0 && !isLoading) {
+  // Check if we have any schema-defined fields or validation rules to display
+  const hasSchemaContent = schemaDefinedFields.length > 0 || validationRules.length > 0;
+  
+  if (!hasSchemaContent && !isLoading) {
     return (
       <div className="border border-gray-200 rounded-md p-4 text-center">
         <p className="text-gray-500 text-xs">
-          {schemaId ? 'Loading schema fields...' : 'No fields to display'}
+          {schemaId ? 'Schema contains only validation rules (no field constraints)' : 'No schema selected'}
         </p>
       </div>
     );
@@ -275,12 +287,15 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
                   </td>
                   {hasAcquisitionData && (
                     <td className="px-2 py-1.5 text-center">
-                      <div 
-                        className="inline-flex items-center justify-center cursor-help"
-                        title={complianceResult.message}
+                      <CustomTooltip 
+                        content={complianceResult.message}
+                        position="top"
+                        delay={100}
                       >
-                        {getStatusIcon(complianceResult.status)}
-                      </div>
+                        <div className="inline-flex items-center justify-center cursor-help">
+                          {getStatusIcon(complianceResult.status)}
+                        </div>
+                      </CustomTooltip>
                     </td>
                   )}
                 </tr>
@@ -372,12 +387,15 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
                   <td className="px-2 py-1.5 text-center">
                     {/* For now, show the status of the first field in this series */}
                     {allFieldNames.length > 0 && seriesData[seriesName][allFieldNames[0]] && (
-                      <div 
-                        className="inline-flex items-center justify-center cursor-help"
-                        title={getSeriesFieldComplianceResult(seriesData[seriesName][allFieldNames[0]], seriesName).message}
+                      <CustomTooltip 
+                        content={getSeriesFieldComplianceResult(seriesData[seriesName][allFieldNames[0]], seriesName).message}
+                        position="top"
+                        delay={100}
                       >
-                        {getStatusIcon(getSeriesFieldComplianceResult(seriesData[seriesName][allFieldNames[0]], seriesName).status)}
-                      </div>
+                        <div className="inline-flex items-center justify-center cursor-help">
+                          {getStatusIcon(getSeriesFieldComplianceResult(seriesData[seriesName][allFieldNames[0]], seriesName).status)}
+                        </div>
+                      </CustomTooltip>
                     )}
                   </td>
                 )}
@@ -443,12 +461,15 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
                     </div>
                     {hasAcquisitionData && (
                       <div className="col-span-1 text-center">
-                        <div 
-                          className="inline-flex items-center justify-center cursor-help"
-                          title={ruleResult.message}
+                        <CustomTooltip 
+                          content={ruleResult.message}
+                          position="top"
+                          delay={100}
                         >
-                          {getStatusIcon(ruleResult.status)}
-                        </div>
+                          <div className="inline-flex items-center justify-center cursor-help">
+                            {getStatusIcon(ruleResult.status)}
+                          </div>
+                        </CustomTooltip>
                       </div>
                     )}
                   </div>
@@ -509,7 +530,7 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
             ) : complianceResults.length > 0 ? (
               <>
                 {/* Summary Stats */}
-                <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="p-2 bg-green-50 rounded">
                     <div className="text-lg font-semibold text-green-700">{compliance.passes}</div>
                     <div className="text-xs text-green-600">Passed</div>
@@ -521,10 +542,6 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
                   <div className="p-2 bg-yellow-50 rounded">
                     <div className="text-lg font-semibold text-yellow-700">{compliance.warnings}</div>
                     <div className="text-xs text-yellow-600">Warnings</div>
-                  </div>
-                  <div className="p-2 bg-gray-50 rounded">
-                    <div className="text-lg font-semibold text-gray-700">{compliance.unknown}</div>
-                    <div className="text-xs text-gray-600">Unknown</div>
                   </div>
                 </div>
               </>
@@ -549,34 +566,119 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
                   </div>
                 )}
                 
-                {complianceResults.map((result, index) => {
-                  if (result.status === 'pass') return null;
+                {/* Group and sort results by status: fails first, then warnings, then na */}
+                {(() => {
+                  const failResults = complianceResults.filter(result => result.status === 'fail');
+                  const warningResults = complianceResults.filter(result => result.status === 'warning');
+                  const naResults = complianceResults.filter(result => result.status === 'na');
                   
                   return (
-                    <div key={`${result.fieldPath}-${index}`} className={`flex items-start space-x-2 p-2 rounded text-xs ${
-                      result.status === 'fail' ? 'bg-red-50' :
-                      result.status === 'warning' ? 'bg-yellow-50' :
-                      'bg-gray-50'
-                    }`}>
-                      {getStatusIcon(result.status)}
-                      <div className="flex-1">
-                        <div className="font-medium">{result.fieldName} ({result.fieldPath})</div>
-                        <div className="text-gray-600">{result.message}</div>
-                        {result.expectedValue && result.actualValue && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Expected: {String(result.expectedValue)} | Actual: {String(result.actualValue)}
+                    <>
+                      {/* Failed validations */}
+                      {failResults.length > 0 && (
+                        <>
+                          <div className="text-xs font-medium text-red-700 mt-2 mb-1 flex items-center">
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Failed ({failResults.length})
                           </div>
-                        )}
-                      </div>
-                    </div>
+                          {failResults.map((result, index) => (
+                            <div key={`fail-${result.fieldPath}-${index}`} className="flex items-start space-x-2 p-2 rounded text-xs bg-red-50">
+                              {getStatusIcon(result.status)}
+                              <div className="flex-1">
+                                <div className="font-medium">
+                                  {result.validationType === 'rule' && result.rule_name ? 
+                                    result.rule_name : 
+                                    result.validationType === 'series' && result.seriesName ? 
+                                      `${result.seriesName}: ${result.fieldName}` :
+                                      result.fieldName !== result.fieldPath ? 
+                                        `${result.fieldName} (${result.fieldPath})` :
+                                        result.fieldName
+                                  }
+                                </div>
+                                <div className="text-gray-600">{result.message}</div>
+                                {result.expectedValue && result.actualValue && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    <div>Expected: {String(result.expectedValue)}</div>
+                                    <div className="mt-0.5">Actual: {String(result.actualValue)}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      
+                      {/* Warning validations */}
+                      {warningResults.length > 0 && (
+                        <>
+                          <div className="text-xs font-medium text-yellow-700 mt-2 mb-1 flex items-center">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Warnings ({warningResults.length})
+                          </div>
+                          {warningResults.map((result, index) => (
+                            <div key={`warning-${result.fieldPath}-${index}`} className="flex items-start space-x-2 p-2 rounded text-xs bg-yellow-50">
+                              {getStatusIcon(result.status)}
+                              <div className="flex-1">
+                                <div className="font-medium">
+                                  {result.validationType === 'rule' && result.rule_name ? 
+                                    result.rule_name : 
+                                    result.validationType === 'series' && result.seriesName ? 
+                                      `${result.seriesName}: ${result.fieldName}` :
+                                      result.fieldName !== result.fieldPath ? 
+                                        `${result.fieldName} (${result.fieldPath})` :
+                                        result.fieldName
+                                  }
+                                </div>
+                                <div className="text-gray-600">{result.message}</div>
+                                {result.expectedValue && result.actualValue && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    <div>Expected: {String(result.expectedValue)}</div>
+                                    <div className="mt-0.5">Actual: {String(result.actualValue)}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      
+                      {/* Not applicable validations */}
+                      {naResults.length > 0 && (
+                        <>
+                          <div className="text-xs font-medium text-gray-600 mt-2 mb-1 flex items-center">
+                            <HelpCircle className="h-3 w-3 mr-1" />
+                            Not Applicable ({naResults.length})
+                          </div>
+                          {naResults.map((result, index) => (
+                            <div key={`na-${result.fieldPath}-${index}`} className="flex items-start space-x-2 p-2 rounded text-xs bg-gray-100">
+                              {getStatusIcon(result.status)}
+                              <div className="flex-1">
+                                <div className="font-medium">
+                                  {result.validationType === 'rule' && result.rule_name ? 
+                                    result.rule_name : 
+                                    result.validationType === 'series' && result.seriesName ? 
+                                      `${result.seriesName}: ${result.fieldName}` :
+                                      result.fieldName !== result.fieldPath ? 
+                                        `${result.fieldName} (${result.fieldPath})` :
+                                        result.fieldName
+                                  }
+                                </div>
+                                <div className="text-gray-600">{result.message}</div>
+                                {result.expectedValue && result.actualValue && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    <div>Expected: {String(result.expectedValue)}</div>
+                                    <div className="mt-0.5">Actual: {String(result.actualValue)}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </>
                   );
-                })}
+                })()}
                 
-                {complianceResults.length > 0 && compliance.fails === 0 && compliance.warnings === 0 && compliance.unknown === 0 && (
-                  <div className="text-center text-green-600 text-sm py-2">
-                    ✅ All fields are compliant with the schema requirements
-                  </div>
-                )}
               </div>
             )}
           </div>

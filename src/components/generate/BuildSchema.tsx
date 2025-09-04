@@ -4,6 +4,8 @@ import { Upload, Plus, Loader2, Database } from 'lucide-react';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import AcquisitionTable from './AcquisitionTable';
+import { processFieldForUI, processSeriesFieldValue } from '../../utils/fieldProcessing';
+import { processUploadedFiles } from '../../utils/fileUploadUtils';
 
 const BuildSchema: React.FC = () => {
   const navigate = useNavigate();
@@ -29,6 +31,7 @@ const BuildSchema: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const [isPyodideReady, setIsPyodideReady] = useState(() => dicompareAPI.isInitialized());
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Initialize Pyodide only when needed
   const initializePyodideIfNeeded = useCallback(async () => {
@@ -47,9 +50,8 @@ const BuildSchema: React.FC = () => {
       return true;
     } catch (error) {
       console.error('❌ Failed to initialize Pyodide:', error);
-      setUploadStatus('Failed to start Python environment. Retrying...');
-      // Still set as ready to allow fallback to mock
-      setIsPyodideReady(true);
+      setUploadStatus('Failed to start Python environment');
+      setIsPyodideReady(false);
       return false;
     }
   }, [isPyodideReady]);
@@ -64,6 +66,8 @@ const BuildSchema: React.FC = () => {
         if (rule.type === 'contains' && rule.contains) return true;
         if (rule.type === 'range' && rule.min !== undefined && rule.max !== undefined) return true;
         if (rule.type === 'tolerance' && rule.value !== undefined && rule.tolerance !== undefined) return true;
+        if (rule.type === 'contains_any' && rule.contains_any && rule.contains_any.length > 0) return true;
+        if (rule.type === 'contains_all' && rule.contains_all && rule.contains_all.length > 0) return true;
         return false;
       }
       // For exact validation, check the value
@@ -131,67 +135,37 @@ const BuildSchema: React.FC = () => {
     }
 
     try {
-      // Convert FileList to file objects with binary content
+      // Process uploaded files with proper filtering using shared utility
       setUploadStatus('Reading file data...');
-      const fileObjects = [];
-      const filesArray = Array.from(files);
       
-      // Filter out directories and empty files - only process actual DICOM files
-      const actualFiles = filesArray.filter(file => {
-        // Skip directories (they have size 0 and specific type indicators)
-        if (file.size === 0) {
-          console.log(`Skipping directory or empty file: ${file.name}`);
-          return false;
-        }
-        // Skip known non-DICOM files
-        const name = file.name.toLowerCase();
-        if (name.endsWith('.txt') || name.endsWith('.json') || name.endsWith('.xml')) {
-          console.log(`Skipping non-DICOM file: ${file.name}`);
-          return false;
-        }
-        return true;
+      const fileObjects = await processUploadedFiles(files, (fileProgress) => {
+        setUploadStatus(`Reading file ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.fileName}`);
+        setUploadProgress((fileProgress.current / fileProgress.total) * 30); // 0-30% for file reading
       });
       
-      if (actualFiles.length === 0) {
-        throw new Error('No valid DICOM files found in the uploaded content.');
-      }
-      
-      console.log(`Processing ${actualFiles.length} files out of ${filesArray.length} total items`);
-      console.log('File details:', actualFiles.map(f => ({ name: f.name, size: f.size, type: f.type })));
-      
-      for (let i = 0; i < actualFiles.length; i++) {
-        const file = actualFiles[i];
-        try {
-          setUploadStatus(`Reading file ${i + 1} of ${actualFiles.length}: ${file.name}`);
-          const content = await file.arrayBuffer();
-          fileObjects.push({
-            name: file.name,
-            content: new Uint8Array(content)
-          });
-          setUploadProgress((i + 1) / actualFiles.length * 30); // 0-30% for file reading
-        } catch (error) {
-          console.error(`Failed to read file ${file.name}:`, error);
-          throw new Error(`Failed to read file ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      }
-      
       setUploadStatus('Processing DICOM files...');
-      setUploadProgress(50);
       
-      // Analyze files using the API and get UI-formatted data
-      const acquisitions = await dicompareAPI.analyzeFilesForUI(fileObjects);
+      // Analyze files using the API and get UI-formatted data with progress callback
+      const acquisitions = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
+        console.log('🔄 Generate Template JavaScript received progress:', progress);
+        
+        // Convert Proxy object to plain object if needed
+        const progressObj = progress.toJs ? progress.toJs() : progress;
+        const percentage = progressObj.percentage || 0;
+        const operation = progressObj.currentOperation || 'Processing...';
+        
+        setUploadProgress(30 + (percentage * 0.6)); // Scale to 30-90%
+        setUploadStatus(operation);
+        console.log('🔄 Generate Template set progress to:', 30 + (percentage * 0.6) + '%');
+      });
       
-      // Convert to acquisition context format with validation rules
+      // Convert to acquisition context format with validation rules and value rounding
       const contextAcquisitions = acquisitions.map(acq => ({
         ...acq,
-        acquisitionFields: acq.acquisitionFields.map(field => ({
+        acquisitionFields: acq.acquisitionFields.map(field => processFieldForUI(field)),
+        seriesFields: acq.seriesFields.map(field => processFieldForUI({
           ...field,
-          validationRule: { type: 'exact' as const }
-        })),
-        seriesFields: acq.seriesFields.map(field => ({
-          ...field,
-          value: field.values?.[0] || field.value,
-          validationRule: { type: 'exact' as const }
+          value: field.values?.[0] || field.value
         })),
         series: acq.series.map(series => ({
           name: series.name,
@@ -203,17 +177,20 @@ const BuildSchema: React.FC = () => {
               
               return [
                 tag,
-                // If it's already an object with a value property, keep it
-                (typeof value === 'object' && value !== null && 'value' in value) ? {
-                  ...value,
-                  field: fieldName  // Add field name
-                } : {
-                  value,
-                  field: fieldName,  // Add field name
-                  dataType: typeof value === 'number' ? 'number' : 
-                           Array.isArray(value) ? 'list_string' : 'string',
-                  validationRule: { type: 'exact' }
-                }
+                // Process the series field value with rounding and appropriate validation rules
+                processSeriesFieldValue(
+                  (typeof value === 'object' && value !== null && 'value' in value) ? {
+                    ...value,
+                    field: fieldName  // Add field name
+                  } : {
+                    value,
+                    field: fieldName,  // Add field name
+                    dataType: typeof value === 'number' ? 'number' : 
+                             Array.isArray(value) ? 'list_string' : 'string'
+                  },
+                  fieldName,
+                  tag
+                )
               ];
             })
           )
@@ -246,12 +223,85 @@ const BuildSchema: React.FC = () => {
     }
   }, [setAcquisitions, initializePyodideIfNeeded]);
 
+  const handleProFileUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    
+    // Validate file extension
+    if (!file.name.toLowerCase().endsWith('.pro')) {
+      setUploadStatus('Please select a Siemens protocol file (.pro)');
+      setTimeout(() => setUploadStatus(''), 3000);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadStatus('Processing Siemens protocol file...');
+
+    // Initialize Pyodide if needed
+    const initSuccess = await initializePyodideIfNeeded();
+    if (!initSuccess) {
+      setIsUploading(false);
+      return;
+    }
+
+    try {
+      setUploadProgress(30);
+      
+      // Read file content
+      const fileContent = await file.arrayBuffer();
+      setUploadProgress(60);
+      
+      // Process via API
+      const acquisition = await dicompareAPI.loadProFile(new Uint8Array(fileContent), file.name);
+      
+      // Add validation rules and round values for fields
+      const processedAcquisition = {
+        ...acquisition,
+        acquisitionFields: acquisition.acquisitionFields.map(field => processFieldForUI(field, 'pro'))
+      };
+      
+      setAcquisitions(prev => [...prev, processedAcquisition]);
+      setUploadProgress(100);
+      
+      console.log('✅ Protocol file uploaded successfully');
+      
+    } catch (error) {
+      console.error('❌ Protocol file upload failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setUploadStatus(`Upload failed: ${errorMessage}`);
+      
+      setTimeout(() => {
+        setUploadStatus('');
+      }, 5000);
+    } finally {
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        if (!uploadStatus.includes('failed:')) {
+          setUploadStatus('');
+        }
+      }, 500);
+    }
+  }, [setAcquisitions, initializePyodideIfNeeded]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    // Only set to false if we're leaving the drop zone entirely
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragOver(false);
     
     // Handle both files and directories from drag and drop
     const items = Array.from(e.dataTransfer.items);
@@ -280,27 +330,70 @@ const BuildSchema: React.FC = () => {
     }
     
     if (files.length > 0) {
-      // Create a FileList-like object
-      const fileList = {
-        length: files.length,
-        item: (index: number) => files[index] || null,
-        [Symbol.iterator]: function* () {
-          for (let i = 0; i < files.length; i++) {
-            yield files[i];
-          }
-        }
-      };
-      // Add array access
-      files.forEach((file, index) => {
-        (fileList as any)[index] = file;
-      });
+      // Separate .pro files from DICOM files
+      const proFiles = files.filter(file => file.name.toLowerCase().endsWith('.pro'));
+      const dicomFiles = files.filter(file => !file.name.toLowerCase().endsWith('.pro'));
       
-      handleFileUpload(fileList as FileList);
+      // Handle .pro files first
+      for (const proFile of proFiles) {
+        const proFileList = {
+          length: 1,
+          item: () => proFile,
+          0: proFile,
+          [Symbol.iterator]: function* () {
+            yield proFile;
+          }
+        };
+        await handleProFileUpload(proFileList as FileList);
+      }
+      
+      // Handle DICOM files if any
+      if (dicomFiles.length > 0) {
+        const fileList = {
+          length: dicomFiles.length,
+          item: (index: number) => dicomFiles[index] || null,
+          [Symbol.iterator]: function* () {
+            for (let i = 0; i < dicomFiles.length; i++) {
+              yield dicomFiles[i];
+            }
+          }
+        };
+        // Add array access
+        dicomFiles.forEach((file, index) => {
+          (fileList as any)[index] = file;
+        });
+        
+        await handleFileUpload(fileList as FileList);
+      }
     } else {
       // Fallback to original behavior
-      handleFileUpload(e.dataTransfer.files);
+      const allFiles = Array.from(e.dataTransfer.files);
+      const proFiles = allFiles.filter(file => file.name.toLowerCase().endsWith('.pro'));
+      const dicomFiles = allFiles.filter(file => !file.name.toLowerCase().endsWith('.pro'));
+      
+      // Handle .pro files
+      for (const proFile of proFiles) {
+        const proFileList = {
+          length: 1,
+          item: () => proFile,
+          0: proFile
+        } as FileList;
+        await handleProFileUpload(proFileList);
+      }
+      
+      // Handle DICOM files
+      if (dicomFiles.length > 0) {
+        const dicomFileList = {
+          length: dicomFiles.length,
+          item: (index: number) => dicomFiles[index] || null
+        } as FileList;
+        dicomFiles.forEach((file, index) => {
+          (dicomFileList as any)[index] = file;
+        });
+        await handleFileUpload(dicomFileList);
+      }
     }
-  }, [handleFileUpload]);
+  }, [handleFileUpload, handleProFileUpload]);
 
   // Helper function to recursively get all files from a directory
   const getAllFilesFromDirectory = async (dirEntry: FileSystemDirectoryEntry): Promise<File[]> => {
@@ -356,17 +449,13 @@ const BuildSchema: React.FC = () => {
       // Get example DICOM data from API in UI format
       const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
       
-      // Convert to acquisition context format with validation rules
+      // Convert to acquisition context format with validation rules and value rounding
       const contextAcquisitions = acquisitions.map(acq => ({
         ...acq,
-        acquisitionFields: acq.acquisitionFields.map(field => ({
+        acquisitionFields: acq.acquisitionFields.map(field => processFieldForUI(field)),
+        seriesFields: acq.seriesFields.map(field => processFieldForUI({
           ...field,
-          validationRule: { type: 'exact' as const }
-        })),
-        seriesFields: acq.seriesFields.map(field => ({
-          ...field,
-          value: field.values?.[0] || field.value,
-          validationRule: { type: 'exact' as const }
+          value: field.values?.[0] || field.value
         })),
         series: acq.series.map(series => ({
           name: series.name,
@@ -378,17 +467,20 @@ const BuildSchema: React.FC = () => {
               
               return [
                 tag,
-                // If it's already an object with a value property, keep it
-                (typeof value === 'object' && value !== null && 'value' in value) ? {
-                  ...value,
-                  field: fieldName  // Add field name
-                } : {
-                  value,
-                  field: fieldName,  // Add field name
-                  dataType: typeof value === 'number' ? 'number' : 
-                           Array.isArray(value) ? 'list_string' : 'string',
-                  validationRule: { type: 'exact' }
-                }
+                // Process the series field value with rounding and appropriate validation rules
+                processSeriesFieldValue(
+                  (typeof value === 'object' && value !== null && 'value' in value) ? {
+                    ...value,
+                    field: fieldName  // Add field name
+                  } : {
+                    value,
+                    field: fieldName,  // Add field name
+                    dataType: typeof value === 'number' ? 'number' : 
+                             Array.isArray(value) ? 'list_string' : 'string'
+                  },
+                  fieldName,
+                  tag
+                )
               ];
             })
           )
@@ -420,78 +512,133 @@ const BuildSchema: React.FC = () => {
     navigate('/generate-template/enter-metadata');
   };
 
-  // Component to render upload card (consistent formatting for both empty and additional upload states)
-  const renderUploadCard = (isAdditional: boolean = false) => (
-    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6 h-fit">
+  // Component to render unified upload card
+  const renderUnifiedUploadCard = (isAdditional: boolean = false) => (
+    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6 h-fit col-span-3">
       <div
-        className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-medical-400 transition-colors"
+        className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
+          isDragOver 
+            ? 'border-medical-500 bg-medical-50' 
+            : 'border-medical-300 hover:border-medical-400'
+        }`}
         onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <Upload className="h-8 w-8 text-gray-400 mx-auto mb-3" />
-        <h3 className="text-sm font-semibold text-gray-900 mb-2">
-          {isAdditional ? 'Upload More DICOMs' : 'Upload DICOM Files'}
+        <Upload className="h-10 w-10 text-medical-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2 text-center">
+          {isAdditional ? 'Add More Content' : 'Create Acquisitions'}
         </h3>
-        <p className="text-xs text-gray-600 mb-4">
-          {isAdditional ? 'Add more DICOM files or folders' : 'Drag and drop DICOM files or folders here'}
+        <p className="text-sm text-gray-600 mb-6 text-center">
+          {isAdditional ? 'Upload more files or add manual acquisitions' : 'Upload files, drag and drop, or create acquisitions manually'}
         </p>
         
-        {uploadStatus.includes('Starting Python environment') && (
-          <div className="mb-4 text-xs text-amber-600 flex items-center justify-center">
-            <Loader2 className="h-3 w-3 animate-spin mr-1" />
-            Starting Python environment...
-          </div>
-        )}
-        
-        <div className="space-y-3">
-          <input
-            type="file"
-            multiple
-            webkitdirectory=""
-            className="hidden"
-            id={isAdditional ? "file-upload-extra" : "file-upload"}
-            onChange={(e) => handleFileUpload(e.target.files)}
-          />
-          <label
-            htmlFor={!isUploading ? (isAdditional ? "file-upload-extra" : "file-upload") : ""}
-            className={`inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md ${
-              !isUploading 
-                ? 'text-white bg-medical-600 hover:bg-medical-700 cursor-pointer' 
-                : 'text-gray-400 bg-gray-300 cursor-not-allowed'
-            }`}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Browse Files
-          </label>
-
-          <button
-            onClick={addNewAcquisition}
-            className="inline-flex items-center justify-center w-full px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add New Acquisition
-          </button>
-        </div>
-
-        {isUploading && (
-          <div className="mt-4">
-            <div className="flex items-center justify-center mb-2">
-              <Loader2 className="h-4 w-4 animate-spin text-medical-600 mr-2" />
-              <span className="text-sm font-medium text-gray-700">{uploadStatus}</span>
-            </div>
-            <div className="bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-medical-600 h-2 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${uploadProgress}%` }}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* DICOM Upload Section */}
+          <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/50 hover:bg-blue-50 transition-colors">
+            <div className="text-center">
+              <Upload className="h-6 w-6 text-blue-500 mx-auto mb-2" />
+              <h4 className="text-sm font-medium text-gray-900 mb-1">DICOM Files</h4>
+              <p className="text-xs text-gray-600 mb-3">Upload DICOM files or folders</p>
+              <input
+                type="file"
+                multiple
+                webkitdirectory=""
+                className="hidden"
+                id={isAdditional ? "dicom-upload-extra" : "dicom-upload"}
+                onChange={(e) => handleFileUpload(e.target.files)}
               />
+              <label
+                htmlFor={!isUploading ? (isAdditional ? "dicom-upload-extra" : "dicom-upload") : ""}
+                className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
+                  !isUploading 
+                    ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer' 
+                    : 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                }`}
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                Browse DICOMs
+              </label>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {Math.round(uploadProgress)}% complete
-            </p>
           </div>
-        )}
+
+          {/* Protocol Upload Section */}
+          <div className="border border-purple-200 rounded-lg p-4 bg-purple-50/50 hover:bg-purple-50 transition-colors">
+            <div className="text-center">
+              <Upload className="h-6 w-6 text-purple-500 mx-auto mb-2" />
+              <h4 className="text-sm font-medium text-gray-900 mb-1">Siemens Protocol</h4>
+              <p className="text-xs text-gray-600 mb-3">Upload .pro protocol files</p>
+              <input
+                type="file"
+                accept=".pro"
+                className="hidden"
+                id={isAdditional ? "protocol-upload-extra" : "protocol-upload"}
+                onChange={(e) => handleProFileUpload(e.target.files)}
+              />
+              <label
+                htmlFor={!isUploading ? (isAdditional ? "protocol-upload-extra" : "protocol-upload") : ""}
+                className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
+                  !isUploading 
+                    ? 'text-white bg-purple-600 hover:bg-purple-700 cursor-pointer' 
+                    : 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                }`}
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                Browse Protocols
+              </label>
+            </div>
+          </div>
+
+          {/* Manual Entry Section */}
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors">
+            <div className="text-center">
+              <Plus className="h-6 w-6 text-gray-500 mx-auto mb-2" />
+              <h4 className="text-sm font-medium text-gray-900 mb-1">Manual Entry</h4>
+              <p className="text-xs text-gray-600 mb-3">Create acquisition manually</p>
+              <button
+                onClick={addNewAcquisition}
+                className="inline-flex items-center justify-center w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add Acquisition
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+  );
+
+
+
+  // Status display component
+  const renderStatusDisplay = () => (
+    <>
+      {uploadStatus && uploadStatus.includes('Starting Python environment') && (
+        <div className="col-span-full mb-4 text-xs text-amber-600 flex items-center justify-center">
+          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+          Starting Python environment...
+        </div>
+      )}
+      
+      {isUploading && (
+        <div className="col-span-full mt-4">
+          <div className="flex items-center justify-center mb-2">
+            <Loader2 className="h-4 w-4 animate-spin text-medical-600 mr-2" />
+            <span className="text-sm font-medium text-gray-700">{uploadStatus}</span>
+          </div>
+          <div className="bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-medical-600 h-2 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            {Math.round(uploadProgress)}% complete
+          </p>
+        </div>
+      )}
+    </>
   );
 
   return (
@@ -531,37 +678,48 @@ const BuildSchema: React.FC = () => {
         </div>
       </div>
 
-      {/* Acquisitions Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Show placeholder card when no acquisitions exist */}
-        {acquisitions.length === 0 && renderUploadCard(false)}
-        
-        {/* Show existing acquisitions */}
-        {acquisitions.map((acquisition) => (
-          <AcquisitionTable
-            key={acquisition.id}
-            acquisition={acquisition}
-            isEditMode={true}
-            incompleteFields={incompleteFields}
-            onUpdate={(field, value) => updateAcquisition(acquisition.id, { [field]: value })}
-            onDelete={() => deleteAcquisition(acquisition.id)}
-            onFieldUpdate={(fieldTag, updates) => updateField(acquisition.id, fieldTag, updates)}
-            onFieldConvert={(fieldTag, toLevel) => convertFieldLevel(acquisition.id, fieldTag, toLevel)}
-            onFieldDelete={(fieldTag) => deleteField(acquisition.id, fieldTag)}
-            onFieldAdd={(fields) => addFields(acquisition.id, fields)}
-            onSeriesUpdate={(seriesIndex, fieldTag, value) => updateSeries(acquisition.id, seriesIndex, fieldTag, value)}
-            onSeriesAdd={() => addSeries(acquisition.id)}
-            onSeriesDelete={(seriesIndex) => deleteSeries(acquisition.id, seriesIndex)}
-            onSeriesNameUpdate={(seriesIndex, name) => updateSeriesName(acquisition.id, seriesIndex, name)}
-            onValidationFunctionAdd={(func) => addValidationFunction(acquisition.id, func)}
-            onValidationFunctionUpdate={(index, func) => updateValidationFunction(acquisition.id, index, func)}
-            onValidationFunctionDelete={(index) => deleteValidationFunction(acquisition.id, index)}
-          />
-        ))}
+      {/* Status Display */}
+      {renderStatusDisplay()}
 
-        {/* Always show upload card for additional DICOMs/acquisitions */}
-        {acquisitions.length > 0 && renderUploadCard(true)}
-      </div>
+      {/* Upload Card when no acquisitions exist */}
+      {acquisitions.length === 0 && (
+        <div className="mb-8">
+          {renderUnifiedUploadCard(false)}
+        </div>
+      )}
+
+      {/* Acquisitions Grid */}
+      {acquisitions.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Show existing acquisitions */}
+          {acquisitions.map((acquisition) => (
+            <AcquisitionTable
+              key={acquisition.id}
+              acquisition={acquisition}
+              isEditMode={true}
+              incompleteFields={incompleteFields}
+              onUpdate={(field, value) => updateAcquisition(acquisition.id, { [field]: value })}
+              onDelete={() => deleteAcquisition(acquisition.id)}
+              onFieldUpdate={(fieldTag, updates) => updateField(acquisition.id, fieldTag, updates)}
+              onFieldConvert={(fieldTag, toLevel, mode) => convertFieldLevel(acquisition.id, fieldTag, toLevel, mode)}
+              onFieldDelete={(fieldTag) => deleteField(acquisition.id, fieldTag)}
+              onFieldAdd={(fields) => addFields(acquisition.id, fields)}
+              onSeriesUpdate={(seriesIndex, fieldTag, value) => updateSeries(acquisition.id, seriesIndex, fieldTag, value)}
+              onSeriesAdd={() => addSeries(acquisition.id)}
+              onSeriesDelete={(seriesIndex) => deleteSeries(acquisition.id, seriesIndex)}
+              onSeriesNameUpdate={(seriesIndex, name) => updateSeriesName(acquisition.id, seriesIndex, name)}
+              onValidationFunctionAdd={(func) => addValidationFunction(acquisition.id, func)}
+              onValidationFunctionUpdate={(index, func) => updateValidationFunction(acquisition.id, index, func)}
+              onValidationFunctionDelete={(index) => deleteValidationFunction(acquisition.id, index)}
+            />
+          ))}
+
+          {/* Always show unified upload card for additional uploads */}
+          <div className="col-span-1">
+            {renderUnifiedUploadCard(true)}
+          </div>
+        </div>
+      )}
 
       {/* Continue Button */}
       <div className="mt-8 flex flex-col items-end">

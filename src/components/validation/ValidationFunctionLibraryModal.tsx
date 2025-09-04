@@ -10,12 +10,20 @@ export interface TestCase {
   description?: string;
 }
 
+export type FieldDataType = 'string' | 'number' | 'list_string' | 'list_number';
+
+export interface FieldDefinition {
+  name: string;
+  dataType: FieldDataType;
+}
+
 export interface ValidationFunction {
   id: string;
   name: string;
   description: string;
   category: string;
   fields: string[];
+  fieldTypes?: Record<string, FieldDataType>; // Maps field name to data type
   parameters?: Record<string, any>;
   implementation: string;
   testCases?: TestCase[];
@@ -28,6 +36,7 @@ export interface SelectedFunction extends ValidationFunction {
   customName?: string;
   customDescription?: string;
   customFields?: string[];
+  customFieldTypes?: Record<string, FieldDataType>; // Custom field data types
   customTestCases?: TestCase[];
   enabledSystemFields?: string[]; // System fields like 'Count' that are enabled
 }

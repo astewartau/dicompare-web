@@ -139,6 +139,16 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
         i === testIndex ? { ...tc, ...updates } : tc
       ) || []
     }) : null);
+    
+    // Clear test results when test case is updated
+    const testCase = editedFunc?.customTestCases?.[testIndex];
+    if (testCase) {
+      setTestResults(prev => {
+        const newResults = { ...prev };
+        delete newResults[testCase.id];
+        return newResults;
+      });
+    }
   };
 
   const deleteTestCase = (testIndex: number) => {
@@ -311,8 +321,7 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
       if (!dicompareInstalled) {
         if (packagesToInstall.length > 0) statusMessage += ' + ';
         statusMessage += 'dicompare';
-        // For now, we'll use the mock dicompare that's already set up in PyodideManager
-        // The mock dicompare.validation module should already be available
+        // The dicompare package should be available after PyodideManager initialization
       }
       
       if (packagesToInstall.length > 0) {
@@ -339,7 +348,7 @@ micropip.install("dicompare", keep_going=True)
       }
       
       // Properly indent the implementation - only add base indentation if not present
-      const indentedImplementation = implementation.split('\n').map(line => {
+      let indentedImplementation = implementation.split('\n').map(line => {
         // If line is empty or already has indentation, keep it as is
         if (line.trim() === '' || line.startsWith(' ') || line.startsWith('\t')) {
           return '    ' + line;
@@ -347,6 +356,17 @@ micropip.install("dicompare", keep_going=True)
         // Otherwise add 4 spaces for function body indentation
         return '    ' + line;
       }).join('\n');
+      
+      // Check if the implementation is effectively empty (only comments/whitespace)
+      const hasNonCommentCode = implementation.split('\n').some(line => {
+        const trimmed = line.trim();
+        return trimmed.length > 0 && !trimmed.startsWith('#');
+      });
+      
+      // If there's no actual code, add a pass statement to avoid syntax errors
+      if (!hasNonCommentCode) {
+        indentedImplementation += '\n    pass';
+      }
       
       // Create DataFrame-like structure for the test
       const testData = `
@@ -363,12 +383,13 @@ sys.stdout = captured_output
 # Create test data
 test_data = {${Object.entries(testCase.data).map(([field, values]) => 
   `"${field}": [${values.filter(v => v !== '' && v != null).map(v => {
-    if (typeof v === 'string') {
-      return `"${v}"`;
-    } else if (Array.isArray(v)) {
-      // Handle nested arrays (like ImageType: [['M'], ['P']])
+    if (Array.isArray(v)) {
+      // Handle arrays - automatically detected from comma-separated input
       return `[${v.map(item => typeof item === 'string' ? `"${item}"` : item).join(', ')}]`;
+    } else if (typeof v === 'string') {
+      return `"${v}"`;
     } else {
+      // Numbers are already parsed
       return v;
     }
   }).join(', ')}]`
@@ -483,13 +504,14 @@ json.dumps({
       const testResult = JSON.parse(result);
       
       // Check if test result matches expectation
-      const actuallyPassed = testResult.passed === testCase.expectedToPass;
+      // If expectedToPass is true and test passed, or expectedToPass is false and test failed, then the test was successful
+      const testSuccessful = testResult.passed === testCase.expectedToPass;
       
       setTestResults(prev => ({
         ...prev,
         [testCase.id]: { 
-          passed: actuallyPassed, 
-          error: actuallyPassed ? undefined : `Expected ${testCase.expectedToPass ? 'pass' : 'fail'}, got ${testResult.passed ? 'pass' : 'fail'}. ${testResult.error || ''}`,
+          passed: testSuccessful, 
+          error: testResult.error || undefined,
           stdout: testResult.stdout || undefined,
           loading: false
         }
@@ -560,6 +582,7 @@ json.dumps({
                         value={field}
                         onChange={(e) => updateFieldInFunction(fieldIndex, e.target.value)}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-medical-500"
+                        placeholder="Field name"
                       />
                       <button
                         onClick={() => removeFieldFromFunction(fieldIndex)}
@@ -611,11 +634,15 @@ json.dumps({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Implementation</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Validation Code</label>
                 <div className="border border-gray-300 rounded-md overflow-hidden">
                   <CodeMirror
                     value={editedFunc.customImplementation || ''}
-                    onChange={(value) => setEditedFunc(prev => prev ? ({ ...prev, customImplementation: value }) : null)}
+                    onChange={(value) => {
+                      setEditedFunc(prev => prev ? ({ ...prev, customImplementation: value }) : null);
+                      // Clear all test results when implementation changes
+                      setTestResults({});
+                    }}
                     extensions={[python(), pythonLinter, lintGutter()]}
                     theme="light"
                     height="200px"
@@ -680,15 +707,25 @@ json.dumps({
                     </div>
 
                     <div className="mb-3">
-                      <label className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={testCase.expectedToPass}
-                          onChange={(e) => updateTestCase(testIndex, { expectedToPass: e.target.checked })}
-                          className="rounded border-gray-300 text-medical-600 focus:ring-medical-500"
-                        />
-                        <span className="text-sm text-gray-700">Expected to pass</span>
-                      </label>
+                      <div className="flex items-center space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => updateTestCase(testIndex, { expectedToPass: !testCase.expectedToPass })}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-medical-500 focus:ring-offset-2 ${
+                            testCase.expectedToPass ? 'bg-medical-600' : 'bg-red-600'
+                          }`}
+                          aria-pressed={testCase.expectedToPass}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              testCase.expectedToPass ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                        <span className="text-sm text-gray-700">
+                          {testCase.expectedToPass ? 'Expected to pass' : 'Expected to fail'}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -747,7 +784,15 @@ json.dumps({
                                 <div key={field} className={`flex-1 border-r border-gray-300 last:border-r-0 ${isSystemField ? 'bg-purple-25' : ''}`}>
                                   <input
                                     type="text"
-                                    value={testCase.data[field]?.[rowIndex] || ''}
+                                    value={(() => {
+                                      const value = testCase.data[field]?.[rowIndex];
+                                      if (Array.isArray(value)) {
+                                        // Convert array back to comma-separated string for editing
+                                        return value.join(',');
+                                      }
+                                      // Convert all values to strings for editing
+                                      return value != null ? String(value) : '';
+                                    })()}
                                     onChange={(e) => {
                                       const newData = { ...testCase.data };
                                       if (!newData[field]) newData[field] = [];
@@ -757,15 +802,38 @@ json.dumps({
                                         newData[field].push('');
                                       }
                                       
-                                      // Parse value as number if possible
-                                      const trimmed = e.target.value.trim();
-                                      const parsed = parseFloat(trimmed);
-                                      newData[field][rowIndex] = trimmed === '' ? '' : (isNaN(parsed) ? trimmed : parsed);
+                                      const inputValue = e.target.value;
+                                      console.log(`Input for ${field}: "${inputValue}"`);
                                       
+                                      // Smart value parsing - automatically detect type
+                                      let parsedValue;
+                                      if (inputValue.trim() === '') {
+                                        parsedValue = '';
+                                      } else if (inputValue.includes(',')) {
+                                        // Comma-separated values - parse as array
+                                        const arrayValues = inputValue.split(',').map(v => {
+                                          // Only trim for number parsing, preserve original value
+                                          const trimmed = v.trim();
+                                          if (trimmed === '') return ''; // Keep empty strings for incomplete arrays
+                                          const num = parseFloat(trimmed);
+                                          // Return number if it's a valid number, otherwise return original (with spaces)
+                                          return isNaN(num) ? v : num;
+                                        });
+                                        parsedValue = arrayValues;
+                                      } else {
+                                        // Single value - try to parse as number
+                                        const trimmed = inputValue.trim();
+                                        const num = parseFloat(trimmed);
+                                        // Return number if it's a valid number, otherwise return original (with spaces)
+                                        parsedValue = isNaN(num) ? inputValue : num;
+                                      }
+                                      
+                                      console.log(`Parsed value for ${field}:`, parsedValue);
+                                      newData[field][rowIndex] = parsedValue;
                                       updateTestCase(testIndex, { data: newData });
                                     }}
                                     className={`w-full px-2 py-1 text-xs border-none focus:outline-none ${isSystemField ? 'focus:bg-purple-50' : 'focus:bg-blue-50'}`}
-                                    placeholder={`${field} value`}
+                                    placeholder={`${field} value (e.g., "1,1" for lists)`}
                                   />
                                 </div>
                                 );
@@ -813,7 +881,11 @@ json.dumps({
                                 Running...
                               </>
                             ) : (
-                              testResults[testCase.id].passed ? '✓ Passed' : '✗ Failed'
+                              testResults[testCase.id].passed ? (
+                                testCase.expectedToPass ? '✓ Passed' : '✓ Failed as expected'
+                              ) : (
+                                testCase.expectedToPass ? '✗ Failed' : '✗ Did not fail as expected'
+                              )
                             )}
                           </span>
                         </div>

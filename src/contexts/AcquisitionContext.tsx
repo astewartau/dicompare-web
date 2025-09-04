@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Acquisition, DicomField, Series, SelectedValidationFunction } from '../types';
 import { searchDicomFields, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
+import { getSuggestedToleranceValue } from '../utils/vrMapping';
 
 interface TemplateMetadata {
   name: string;
@@ -19,7 +20,7 @@ interface AcquisitionContextType {
   addNewAcquisition: () => void;
   updateField: (acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => void;
   deleteField: (acquisitionId: string, fieldTag: string) => void;
-  convertFieldLevel: (acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series') => void;
+  convertFieldLevel: (acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series', mode?: 'separate-series' | 'single-series') => void;
   addFields: (acquisitionId: string, fieldTags: string[]) => Promise<void>;
   updateSeries: (acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => void;
   addSeries: (acquisitionId: string) => void;
@@ -99,7 +100,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
     }));
   }, []);
 
-  const convertFieldLevel = useCallback((acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series') => {
+  const convertFieldLevel = useCallback((acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series', mode: 'separate-series' | 'single-series' = 'single-series') => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
       
@@ -110,30 +111,85 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
       if (!field) return acq;
       
       if (toLevel === 'acquisition') {
+        // Remove field from series level
+        const updatedSeriesFields = acq.seriesFields.filter(f => f.tag !== fieldTag);
+        
+        // Clean up series data if no series-level fields remain
+        const updatedSeries = updatedSeriesFields.length > 0 
+          ? (acq.series || []).map(series => ({
+              ...series,
+              fields: Object.fromEntries(
+                Object.entries(series.fields || {}).filter(([tag]) => tag !== fieldTag)
+              )
+            }))
+          : []; // Clear all series if no series-level fields exist
+        
         return {
           ...acq,
           acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTag), { ...field, level: 'acquisition' }],
-          seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag)
+          seriesFields: updatedSeriesFields,
+          series: updatedSeries
         };
       } else {
-        // When converting to series level, ensure we have at least 2 series
+        // When converting to series level, handle different modes for list values
         const currentSeries = acq.series || [];
-        const seriesCount = Math.max(2, currentSeries.length);
+        let updatedSeries = [];
         
-        const updatedSeries = [];
-        for (let i = 0; i < seriesCount; i++) {
-          const existingSeries = currentSeries[i];
-          updatedSeries.push({
-            name: existingSeries?.name || `Series ${i + 1}`,
-            fields: {
-              ...(existingSeries?.fields || {}),
-              [fieldTag]: {
-                value: field.value,
-                dataType: field.dataType,
-                validationRule: field.validationRule,
+        if (Array.isArray(field.value) && mode === 'separate-series') {
+          // Create permutations of existing series with new field values
+          if (currentSeries.length > 0) {
+            // Generate permutations: existing series × new field values
+            let seriesCounter = 1;
+            for (const existingSeries of currentSeries) {
+              for (let i = 0; i < field.value.length; i++) {
+                updatedSeries.push({
+                  name: `Series ${seriesCounter}`,
+                  fields: {
+                    ...existingSeries.fields,
+                    [fieldTag]: {
+                      value: field.value[i],
+                      dataType: field.dataType === 'list_number' ? 'number' : 
+                               field.dataType === 'list_string' ? 'string' : field.dataType,
+                      validationRule: field.validationRule,
+                    }
+                  }
+                });
+                seriesCounter++;
               }
             }
-          });
+          } else {
+            // No existing series - create one series per value
+            for (let i = 0; i < field.value.length; i++) {
+              updatedSeries.push({
+                name: `Series ${i + 1}`,
+                fields: {
+                  [fieldTag]: {
+                    value: field.value[i],
+                    dataType: field.dataType === 'list_number' ? 'number' : 
+                             field.dataType === 'list_string' ? 'string' : field.dataType,
+                    validationRule: field.validationRule,
+                  }
+                }
+              });
+            }
+          }
+        } else {
+          // Single series mode - add field to all existing series or create minimum 2
+          const seriesCount = Math.max(2, currentSeries.length);
+          for (let i = 0; i < seriesCount; i++) {
+            const existingSeries = currentSeries[i];
+            updatedSeries.push({
+              name: existingSeries?.name || `Series ${i + 1}`,
+              fields: {
+                ...(existingSeries?.fields || {}),
+                [fieldTag]: {
+                  value: field.value,
+                  dataType: field.dataType,
+                  validationRule: field.validationRule,
+                }
+              }
+            });
+          }
         }
 
         return {
@@ -160,9 +216,17 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
         const name = fieldDef?.name || tag;
         const keyword = fieldDef?.keyword || name;
         const dataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
-        const validationRule = fieldDef ? {
-          type: suggestValidationConstraint(fieldDef)
-        } : { type: 'exact' as const };
+        const constraintType = fieldDef ? suggestValidationConstraint(fieldDef) : 'exact' as const;
+        
+        let validationRule: any = { type: constraintType };
+        
+        // Add tolerance value for fields that use tolerance validation
+        if (constraintType === 'tolerance') {
+          const toleranceValue = getSuggestedToleranceValue(name, tag);
+          if (toleranceValue !== undefined) {
+            validationRule.tolerance = toleranceValue;
+          }
+        }
         
         return {
           tag,

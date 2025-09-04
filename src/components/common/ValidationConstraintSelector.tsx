@@ -32,13 +32,25 @@ const CONSTRAINT_OPTIONS: {
     value: 'contains',
     label: 'Contains',
     description: 'String fields must contain substring (e.g., "BOLD" in "BOLD_task")',
-    supportedTypes: ['string', 'list_string']
+    supportedTypes: ['string']
   },
   {
     value: 'range',
     label: 'Range',
     description: 'Numeric fields within min/max bounds',
     supportedTypes: ['number', 'list_number']
+  },
+  {
+    value: 'contains_any',
+    label: 'Contains Any',
+    description: 'String fields must contain any of the specified substrings, or list fields must contain any of the specified elements',
+    supportedTypes: ['string', 'list_string', 'list_number']
+  },
+  {
+    value: 'contains_all',
+    label: 'Contains All',
+    description: 'List fields must contain all of the specified elements',
+    supportedTypes: ['list_string', 'list_number']
   },
 ];
 

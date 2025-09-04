@@ -112,6 +112,10 @@ export function formatValidationRule(rule?: ValidationRule): string {
       return `${rule.min ?? '-∞'} to ${rule.max ?? '∞'}`;
     case 'contains':
       return `contains "${rule.contains || ''}"`;
+    case 'contains_any':
+      return `contains any [${(rule.contains_any || []).slice(0, 3).join(', ')}${(rule.contains_any || []).length > 3 ? '...' : ''}]`;
+    case 'contains_all':
+      return `contains all [${(rule.contains_all || []).slice(0, 3).join(', ')}${(rule.contains_all || []).length > 3 ? '...' : ''}]`;
     default:
       return rule.type;
   }

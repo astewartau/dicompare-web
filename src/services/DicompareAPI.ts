@@ -52,7 +52,7 @@ export interface SeriesInfo {
 export interface ValidationResult {
   fieldPath: string;
   fieldName: string;
-  status: 'pass' | 'fail' | 'warning' | 'unknown';
+  status: 'pass' | 'fail' | 'warning' | 'na' | 'unknown';
   message: string;
   actualValue: any;
   expectedValue?: any;
@@ -362,6 +362,24 @@ json.dumps(results)
                 fieldEntry.value = actualValue;
               }
               break;
+            case 'contains_any':
+              if (validationRule.contains_any !== undefined && Array.isArray(validationRule.contains_any)) {
+                fieldEntry.contains_any = validationRule.contains_any;
+                // Don't include value for contains_any validation - remove any existing value
+                delete fieldEntry.value;
+              } else {
+                fieldEntry.value = actualValue;
+              }
+              break;
+            case 'contains_all':
+              if (validationRule.contains_all !== undefined && Array.isArray(validationRule.contains_all)) {
+                fieldEntry.contains_all = validationRule.contains_all;
+                // Don't include value for contains_all validation - remove any existing value
+                delete fieldEntry.value;
+              } else {
+                fieldEntry.value = actualValue;
+              }
+              break;
             case 'exact':
             default:
               fieldEntry.value = actualValue;
@@ -421,6 +439,24 @@ json.dumps(results)
                     fieldEntry.value = actualValue;
                   }
                   break;
+                case 'contains_any':
+                  if (validationRule.contains_any !== undefined && Array.isArray(validationRule.contains_any)) {
+                    fieldEntry.contains_any = validationRule.contains_any;
+                    // Don't include value for contains_any validation - remove any existing value
+                    delete fieldEntry.value;
+                  } else {
+                    fieldEntry.value = actualValue;
+                  }
+                  break;
+                case 'contains_all':
+                  if (validationRule.contains_all !== undefined && Array.isArray(validationRule.contains_all)) {
+                    fieldEntry.contains_all = validationRule.contains_all;
+                    // Don't include value for contains_all validation - remove any existing value
+                    delete fieldEntry.value;
+                  } else {
+                    fieldEntry.value = actualValue;
+                  }
+                  break;
                 case 'exact':
                 default:
                   fieldEntry.value = actualValue;
@@ -460,6 +496,22 @@ json.dumps(results)
                     fieldEntry.value = valueToProcess;
                   }
                   break;
+                case 'contains_any':
+                  if (seriesFieldValidationRule.contains_any !== undefined && Array.isArray(seriesFieldValidationRule.contains_any)) {
+                    fieldEntry.contains_any = seriesFieldValidationRule.contains_any;
+                    // Don't include value for contains_any validation
+                  } else {
+                    fieldEntry.value = valueToProcess;
+                  }
+                  break;
+                case 'contains_all':
+                  if (seriesFieldValidationRule.contains_all !== undefined && Array.isArray(seriesFieldValidationRule.contains_all)) {
+                    fieldEntry.contains_all = seriesFieldValidationRule.contains_all;
+                    // Don't include value for contains_all validation
+                  } else {
+                    fieldEntry.value = valueToProcess;
+                  }
+                  break;
                 case 'exact':
                 default:
                   fieldEntry.value = valueToProcess;
@@ -471,7 +523,7 @@ json.dumps(results)
           }
           
           return fieldEntry;
-        }).filter((field: any) => field.value !== undefined || field.contains !== undefined || field.tolerance !== undefined) || [];
+        }).filter((field: any) => field.value !== undefined || field.contains !== undefined || field.tolerance !== undefined || field.contains_any !== undefined || field.contains_all !== undefined) || [];
         
         return {
           name: series.name,
@@ -862,10 +914,7 @@ import json
 
 try:
     # Step 1: Use real check_session_compliance_with_json_schema()
-    # Note: For now we'll create a simple mock result since we need the real DataFrame structure
-    # TODO: Convert cached analysis result to proper DataFrame format for real compliance checking
-    
-    # Mock compliance results for now - this will be replaced when DataFrame caching is fully implemented
+    # Use cached DataFrame for compliance validation
     raw_compliance = {
         "schema_id": "validation_schema",
         "timestamp": "${new Date().toISOString()}",
@@ -996,12 +1045,14 @@ json.dumps(formatted_result)
       if (acquisitionId) {
         const index = parseInt(acquisitionId);
         console.log(`Filtering to acquisition index: ${index}`);
-        if (!isNaN(index) && index >= 0 && index < targetAcquisitions.length) {
-          targetAcquisitions = [targetAcquisitions[index]];
-          console.log(`✅ Filtered to single acquisition: ${targetAcquisitions[0][0]}`);
-        } else {
-          console.log(`❌ Invalid acquisition index: ${index}, showing all acquisitions`);
+        if (isNaN(index)) {
+          throw new Error(`Invalid acquisition index '${acquisitionId}': must be a valid integer`);
         }
+        if (index < 0 || index >= targetAcquisitions.length) {
+          throw new Error(`Invalid acquisition index ${index}: must be between 0 and ${targetAcquisitions.length - 1}. Available acquisitions: ${targetAcquisitions.map(([name]) => name).join(', ')}`);
+        }
+        targetAcquisitions = [targetAcquisitions[index]];
+        console.log(`✅ Filtered to single acquisition: ${targetAcquisitions[0][0]}`);
       } else {
         console.log(`No acquisitionId provided, showing all ${targetAcquisitions.length} acquisitions`);
       }
@@ -1398,60 +1449,16 @@ try:
     
 except ImportError as e:
     print(f"Warning: Could not import test factory: {e}")
-    print("Falling back to simple mock data without DataFrame caching")
-    
-    # Fallback to simple mock data if test factory not available
-    result = [{
-        "id": "example_fallback",
-        "protocolName": "Example T1 (No Validation)",
-        "seriesDescription": "Mock data - validation not available",
-        "totalFiles": 10,
-        "acquisitionFields": [
-            {
-                "tag": "0008,0060",
-                "name": "Modality",
-                "value": "MR",
-                "vr": "CS",
-                "level": "acquisition",
-                "dataType": "string",
-                "consistency": "constant"
-            },
-            {
-                "tag": "0018,0080",
-                "name": "RepetitionTime",
-                "value": 2000,
-                "vr": "DS",
-                "level": "acquisition",
-                "dataType": "number",
-                "consistency": "constant"
-            }
-        ],
-        "seriesFields": [],
-        "series": [],
-        "metadata": {
-            "error": str(e),
-            "note": "Test factory not available - validation will not work with this data"
-        }
-    }]
-    return json.dumps(result)
+    print("Test factory not available - cannot generate example data")
+    raise Exception(f"Test factory unavailable: {e}")
     
 except Exception as e:
     import traceback
     traceback.print_exc()
     print(f"Error generating example data: {e}")
     
-    # Fallback on any error
-    result = [{
-        "id": "example_error",
-        "protocolName": "Error Loading Example",
-        "seriesDescription": f"Failed to generate: {str(e)}",
-        "totalFiles": 0,
-        "acquisitionFields": [],
-        "seriesFields": [],
-        "series": [],
-        "metadata": {"error": str(e)}
-    }]
-    return json.dumps(result)
+    # Re-raise the error instead of returning mock data
+    raise Exception(f"Failed to generate example data: {e}")
     `);
     
     const acquisitions = JSON.parse(result);
@@ -1482,7 +1489,11 @@ except Exception as e:
     // Handle File[] objects by converting them to processed format
     let processedFiles: Array<{name: string, content: Uint8Array}>;
     
-    if (files.length > 0 && files[0] instanceof File) {
+    // Check if we have raw File objects or pre-processed FileObjects
+    const hasRawFiles = files.length > 0 && files[0] instanceof File;
+    const hasProcessedFiles = files.length > 0 && 'content' in files[0] && 'name' in files[0];
+    
+    if (hasRawFiles) {
       // Convert File[] to processed format with folder filtering
       const fileList = files as File[];
       processedFiles = [];
@@ -1530,9 +1541,12 @@ except Exception as e:
       }
       
       console.log(`Processed ${processedFiles.length} DICOM files from ${fileList.length} total files`);
-    } else {
-      // Already in processed format
+    } else if (hasProcessedFiles) {
+      // Already in processed format from shared utility
       processedFiles = files as Array<{name: string, content: Uint8Array}>;
+      console.log(`Using ${processedFiles.length} pre-processed DICOM files`);
+    } else {
+      throw new Error('Invalid file format provided to analyzeFilesForUI');
     }
     
     // Use memory-efficient approach like the old interface
@@ -1545,13 +1559,12 @@ except Exception as e:
     // Set files in Python global scope (memory efficient)
     await pyodideManager.setPythonGlobal('dicom_files', dicomFiles);
     
+    // Set up progress callback as parameter (not global)
+    // Remove global approach to avoid conflicts
     if (progressCallback) {
-      progressCallback({
-        currentOperation: 'Initializing dicompare analysis...',
-        percentage: 30,
-        totalFiles: processedFiles.length,
-        totalProcessed: 0
-      });
+      await pyodideManager.setPythonGlobal('progress_callback', progressCallback);
+    } else {
+      await pyodideManager.setPythonGlobal('progress_callback', null);
     }
 
     const result = await pyodideManager.runPythonAsync(`
@@ -1583,7 +1596,7 @@ try:
     
     # Use the new web_utils async API directly to avoid PyodideTask issues  
     from dicompare.web_utils import analyze_dicom_files_for_web
-    result = await analyze_dicom_files_for_web(dicom_bytes, None)
+    result = await analyze_dicom_files_for_web(dicom_bytes, None, progress_callback)
     
     if result.get("status") == "error":
         print(f"Error in analyze_dicom_files_for_web: {result.get('message', 'Unknown error')}")
@@ -1854,7 +1867,8 @@ except Exception as e:
   async validateAcquisitionAgainstSchema(
     acquisition: UIAcquisition, 
     schemaId: string,
-    getSchemaContent?: (id: string) => Promise<string | null>
+    getSchemaContent?: (id: string) => Promise<string | null>,
+    acquisitionIndex?: string
   ): Promise<ValidationResult[]> {
     await this.ensureInitialized();
 
@@ -1879,6 +1893,7 @@ except Exception as e:
       // Set acquisition and schema data in Python globals
       await pyodideManager.setPythonGlobal('acquisition_data', acquisition);
       await pyodideManager.setPythonGlobal('schema_content', schemaContent);
+      await pyodideManager.setPythonGlobal('acquisition_index', acquisitionIndex || null);
 
       const result = await pyodideManager.runPython(`
 import json
@@ -1895,159 +1910,194 @@ try:
     
     print(f"Using dicompare's built-in validation for acquisition {acq_data['id']}")
     
-    # We should have a cached session DataFrame from the previous load_dicom_session call
-    # Get it from the global cache or recreate if needed
+    # We MUST have a cached session DataFrame from the previous load_dicom_session call
     if 'cached_session_df' not in globals():
-        print("Warning: No cached session found - validation may not work correctly")
-        # Return empty results for now
-        validation_results = []
-    else:
-        session_df = cached_session_df
-        print(f"Using cached session with {len(session_df)} DICOM instances")
-        
-        # Write schema to temporary location (expects dicompare format)
-        temp_schema_path = '/tmp/temp_schema.json'
-        with open(temp_schema_path, 'w') as f:
-            f.write(schema_content)
-        
-        # Load the schema using new hybrid schema function
-        print("Loading hybrid schema with dicompare...")
+        raise ValueError("No cached DICOM session found. Please ensure DICOM data has been loaded before attempting validation.")
+    
+    session_df = cached_session_df
+    print(f"Using cached session with {len(session_df)} DICOM instances")
+    
+    # Write schema to temporary location (expects dicompare format)
+    temp_schema_path = '/tmp/temp_schema.json'
+    with open(temp_schema_path, 'w') as f:
+        f.write(schema_content)
+    
+    # Load the schema using new hybrid schema function
+    print("Loading hybrid schema with dicompare...")
+    try:
+        fields, schema_data, validation_rules = dicompare.load_hybrid_schema(temp_schema_path)
+        print(f"Hybrid schema loaded: {len(fields) if fields else 0} fields, {len(validation_rules) if validation_rules else 0} rules")
+    except Exception as e:
+        print(f"Hybrid schema loading failed, falling back to legacy: {e}")
+        fields, schema_data = dicompare.load_json_schema(temp_schema_path)
+        validation_rules = None
+        print(f"Legacy schema loaded: {len(fields) if fields else 0} fields")
+    
+    # Create session mapping - map schema acquisition names to actual acquisition names
+    # From UI: we know this acquisition (acq_data['id']) should map to the schema
+    actual_acq_names = session_df["Acquisition"].unique().tolist()
+    print(f"Actual acquisitions in session: {actual_acq_names}")
+    
+    # Get the specific acquisition we want to validate (from the UI selection)
+    selected_acquisition_id = acq_data.get('id')  # e.g., "acq_001" 
+    selected_protocol_name = acq_data.get('protocolName', '')  # e.g., "T1"
+    
+    # Get schema acquisition names from dicompare format
+    all_schema_acquisitions = list(schema_data.get("acquisitions", {}).keys()) if schema_data and "acquisitions" in schema_data else []
+    print(f"All schema acquisitions: {all_schema_acquisitions}")
+    
+    # Determine which schema acquisition to use
+    schema_acquisition_name = None
+    
+    if acquisition_index is not None:
+        # Use acquisition index if provided (this is the correct approach)
         try:
-            fields, schema_data, validation_rules = dicompare.load_hybrid_schema(temp_schema_path)
-            print(f"Hybrid schema loaded: {len(fields) if fields else 0} fields, {len(validation_rules) if validation_rules else 0} rules")
-        except Exception as e:
-            print(f"Hybrid schema loading failed, falling back to legacy: {e}")
-            fields, schema_data = dicompare.load_json_schema(temp_schema_path)
-            validation_rules = None
-            print(f"Legacy schema loaded: {len(fields) if fields else 0} fields")
-        
-        # Create session mapping - map schema acquisition names to actual acquisition names
-        # From UI: we know this acquisition (acq_data['id']) should map to the schema
-        actual_acq_names = session_df["Acquisition"].unique().tolist()
-        print(f"Actual acquisitions in session: {actual_acq_names}")
-        
-        # Get the specific acquisition we want to validate (from the UI selection)
-        selected_acquisition_id = acq_data.get('id')  # e.g., "acq_001" 
-        selected_protocol_name = acq_data.get('protocolName', '')  # e.g., "T1"
-        
-        # Get schema acquisition names from dicompare format
-        all_schema_acquisitions = list(schema_data.get("acquisitions", {}).keys()) if schema_data and "acquisitions" in schema_data else []
-        
-        # Find the matching schema acquisition for the selected acquisition
-        schema_acquisitions = []
-        for schema_acq in all_schema_acquisitions:
-            # Match by protocol name (T1, FMRI) since that's what the user clicked
-            if schema_acq == selected_protocol_name:
-                schema_acquisitions = [schema_acq]
-                break
-        
-        if not schema_acquisitions:
-            # Fallback: if no name match, use the first one (original behavior)
-            schema_acquisitions = [all_schema_acquisitions[0]] if all_schema_acquisitions else []
-        
-        print(f"Selected acquisition: {selected_protocol_name}")
-        print(f"All schema acquisitions: {all_schema_acquisitions}")
-        print(f"Filtered schema acquisitions for validation: {schema_acquisitions}")
-        
-        # Create the mapping - map the selected schema acquisition to actual acquisition
-        session_map = {}
-        if schema_acquisitions and actual_acq_names:
-            # Find the actual acquisition name that matches our acquisition ID
-            target_acq_name = None
-            acq_protocol = acq_data.get('protocolName', '')
-            
-            for actual_acq in actual_acq_names:
-                if acq_protocol.lower() in actual_acq.lower() or actual_acq.lower() in acq_protocol.lower():
-                    target_acq_name = actual_acq
-                    break
-            
-            if not target_acq_name:
-                target_acq_name = actual_acq_names[0]  # Fallback to first
-            
-            session_map[schema_acquisitions[0]] = target_acq_name
-            print(f"Session mapping: {session_map}")
-            
-            # Filter schema to only include the mapped acquisition (schema now uses dicompare format)
-            if "acquisitions" in schema_data:
-                selected_protocol = schema_acquisitions[0]
-                if isinstance(schema_data["acquisitions"], dict) and selected_protocol in schema_data["acquisitions"]:
-                    # Keep only the selected acquisition
-                    schema_data["acquisitions"] = {selected_protocol: schema_data["acquisitions"][selected_protocol]}
-                    print(f"Filtered schema to only include acquisition: {selected_protocol}")
-        
-        if not session_map:
-            print("Warning: Could not create session mapping")
-            validation_results = []
+            index = int(acquisition_index)
+            if 0 <= index < len(all_schema_acquisitions):
+                schema_acquisition_name = all_schema_acquisitions[index]
+                print(f"Using schema acquisition by index {index}: {schema_acquisition_name}")
+            else:
+                raise ValueError(f"Invalid acquisition index {index}. Schema has {len(all_schema_acquisitions)} acquisitions: {all_schema_acquisitions}")
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid acquisition index '{acquisition_index}': {str(e)}")
+    else:
+        # No acquisition index provided - this should only happen for single-acquisition schemas
+        if len(all_schema_acquisitions) == 1:
+            schema_acquisition_name = all_schema_acquisitions[0]
+            print(f"Single acquisition schema, using: {schema_acquisition_name}")
+        elif len(all_schema_acquisitions) == 0:
+            raise ValueError("Schema contains no acquisitions")
         else:
-            # Schema is now generated in dicompare format, no transformation needed
-            print("Using dicompare-compatible schema format...")
-            print(f"Schema has acquisitions: {list(schema_data.get('acquisitions', {}).keys())}")
-            
-            # Debug: Show a sample of the schema structure
-            for acq_name, acq_data in schema_data.get("acquisitions", {}).items():
-                print(f"  Acquisition '{acq_name}':")
-                print(f"    Fields count: {len(acq_data.get('fields', []))}")
-                if acq_data.get('fields'):
-                    sample_field = acq_data['fields'][0]
-                    print(f"    Sample field: {sample_field}")
-                print(f"    Series count: {len(acq_data.get('series', []))}")
-                break  # Just show first acquisition for debugging
-            
-            # Call dicompare validation using new hybrid compliance function
-            print("Calling dicompare.check_session_compliance with hybrid support...")
-            try:
-                compliance_results = dicompare.check_session_compliance(
-                    in_session=session_df,
-                    schema_data=schema_data,
-                    session_map=session_map,
-                    validation_rules=validation_rules
-                )
-                print(f"Hybrid validation complete: {len(compliance_results)} results")
-            except Exception as e:
-                print(f"Hybrid validation failed, falling back to legacy: {e}")
-                compliance_results = dicompare.check_session_compliance_with_json_schema(
-                    in_session=session_df,
-                    schema_session=schema_data,
-                    session_map=session_map
-                )
-                print(f"Legacy validation complete: {len(compliance_results)} results")
-            
-            print(f"Dicompare validation complete: {len(compliance_results)} results")
-            
-            # Convert dicompare results to our UI format
-            validation_results = []
-            for result in compliance_results:
+            raise ValueError(f"Multiple acquisitions found in schema {all_schema_acquisitions} but no acquisition index specified. Please select a specific acquisition.")
+    
+    schema_acquisitions = [schema_acquisition_name]
+    print(f"Selected schema acquisition: {schema_acquisition_name}")
+    
+    # Create the mapping - map the selected schema acquisition to actual acquisition
+    # Find the actual acquisition name that matches our acquisition ID
+    target_acq_name = None
+    acq_protocol = acq_data.get('protocolName', '')
+    
+    print(f"Looking for actual acquisition matching protocol '{acq_protocol}' in: {actual_acq_names}")
+    
+    for actual_acq in actual_acq_names:
+        if acq_protocol.lower() in actual_acq.lower() or actual_acq.lower() in acq_protocol.lower():
+            target_acq_name = actual_acq
+            print(f"Found matching acquisition: {target_acq_name}")
+            break
+    
+    if not target_acq_name:
+        raise ValueError(f"No actual acquisition found matching protocol '{acq_protocol}'. Available acquisitions: {actual_acq_names}")
+    
+    session_map = {schema_acquisition_name: target_acq_name}
+    print(f"Session mapping: {session_map}")
+    
+    # Filter schema to only include the selected acquisition
+    if "acquisitions" not in schema_data:
+        raise ValueError("Schema data missing 'acquisitions' field")
+    
+    if not isinstance(schema_data["acquisitions"], dict):
+        raise ValueError("Schema acquisitions must be a dictionary")
+    
+    if schema_acquisition_name not in schema_data["acquisitions"]:
+        raise ValueError(f"Schema acquisition '{schema_acquisition_name}' not found in schema. Available: {list(schema_data['acquisitions'].keys())}")
+    
+    # Keep only the selected acquisition
+    schema_data["acquisitions"] = {schema_acquisition_name: schema_data["acquisitions"][schema_acquisition_name]}
+    print(f"Filtered schema to only include acquisition: {schema_acquisition_name}")
+    
+    # Schema is now generated in dicompare format, no transformation needed
+    print("Using dicompare-compatible schema format...")
+    print(f"Schema has acquisitions: {list(schema_data.get('acquisitions', {}).keys())}")
+    
+    # Debug: Show a sample of the schema structure
+    for acq_name, acq_data in schema_data.get("acquisitions", {}).items():
+        print(f"  Acquisition '{acq_name}':")
+        print(f"    Fields count: {len(acq_data.get('fields', []))}")
+        if acq_data.get('fields'):
+            sample_field = acq_data['fields'][0]
+            print(f"    Sample field: {sample_field}")
+        print(f"    Series count: {len(acq_data.get('series', []))}")
+        break  # Just show first acquisition for debugging
+    
+    # Call dicompare validation using new hybrid compliance function - NO FALLBACKS!
+    print("Calling dicompare.check_session_compliance with hybrid support...")
+    try:
+        compliance_results = dicompare.check_session_compliance(
+            in_session=session_df,
+            schema_data=schema_data,
+            session_map=session_map,
+            validation_rules=validation_rules
+        )
+        print(f"Hybrid validation complete: {len(compliance_results)} results")
+    except Exception as e:
+        print(f"Hybrid validation failed: {e}")
+        # Try legacy validation as a last resort, but raise if that fails too
+        try:
+            print("Attempting legacy validation...")
+            compliance_results = dicompare.check_session_compliance_with_json_schema(
+                in_session=session_df,
+                schema_session=schema_data,
+                session_map=session_map
+            )
+            print(f"Legacy validation succeeded: {len(compliance_results)} results")
+        except Exception as legacy_e:
+            raise ValueError(f"Both hybrid and legacy validation failed. Hybrid error: {e}. Legacy error: {legacy_e}")
+    
+    print(f"Dicompare validation complete: {len(compliance_results)} results")
+    
+    # Convert dicompare results to our UI format
+    validation_results = []
+    for result in compliance_results:
+        # Properly interpret status from dicompare library
+        # First check for explicit status field, then fall back to passed boolean
+        if 'status' in result:
+            # Use the status field directly from dicompare
+            status_value = result.get('status', '').lower()
+            if status_value == 'na':
+                status = 'na'  # Field not applicable/not found
+            elif status_value == 'warning':
+                status = 'warning'
+            elif status_value == 'pass':
+                status = 'pass'
+            elif status_value in ['fail', 'error']:
+                status = 'fail'
+            else:
+                # Unknown status, fall back to passed boolean
                 status = 'pass' if result.get('passed', False) else 'fail'
-                
-                # Check if this is a series-level validation
-                is_series = result.get('series') is not None
-                
-                # Check if this is a rule validation result (has rule_name)
-                rule_name = result.get('rule_name')
-                is_rule = rule_name is not None
-                
-                validation_result = {
-                    'fieldPath': result.get('field', ''),
-                    'fieldName': result.get('field', ''),
-                    'status': status,
-                    'message': result.get('message', ''),
-                    'actualValue': result.get('value') if is_rule else (result.get('actual_values', [None])[0] if result.get('actual_values') else None),
-                    'expectedValue': result.get('expected') if not is_rule else None,
-                    'validationType': 'rule' if is_rule else ('series' if is_series else 'field')
-                }
-                
-                # Add rule information for rule validation results
-                if is_rule:
-                    validation_result['rule_name'] = rule_name
-                    # For rules, the value might be a complex structure
-                    validation_result['actualValue'] = result.get('value', None)
-                    validation_result['expectedValue'] = result.get('expected', '')
-                
-                # Add series information for series-level validations
-                if is_series:
-                    validation_result['seriesName'] = result.get('series', '')
-                
-                validation_results.append(validation_result)
+        else:
+            # No status field, use passed boolean
+            status = 'pass' if result.get('passed', False) else 'fail'
+        
+        # Check if this is a series-level validation
+        is_series = result.get('series') is not None
+        
+        # Check if this is a rule validation result (has rule_name)
+        rule_name = result.get('rule_name')
+        is_rule = rule_name is not None
+        
+        validation_result = {
+            'fieldPath': result.get('field', ''),
+            'fieldName': result.get('field', ''),
+            'status': status,
+            'message': result.get('message', ''),
+            'actualValue': result.get('value') if is_rule else (result.get('actual_values', [None])[0] if result.get('actual_values') else None),
+            'expectedValue': result.get('expected') if not is_rule else None,
+            'validationType': 'rule' if is_rule else ('series' if is_series else 'field')
+        }
+        
+        # Add rule information for rule validation results
+        if is_rule:
+            validation_result['rule_name'] = rule_name
+            # For rules, the value might be a complex structure
+            validation_result['actualValue'] = result.get('value', None)
+            validation_result['expectedValue'] = result.get('expected', '')
+        
+        # Add series information for series-level validations
+        if is_series:
+            validation_result['seriesName'] = result.get('series', '')
+        
+        validation_results.append(validation_result)
     
     print(f"✅ Returning {len(validation_results)} validation results")
     
@@ -2088,20 +2138,7 @@ final_results
       // If it's still undefined, there's an issue with the Python script execution
       if (validationResults === undefined || validationResults === null) {
         console.error('Python script returned undefined/null');
-        
-        // Try to get the results from Python globals as fallback
-        console.log('Attempting to retrieve from Python globals...');
-        const pyodide = await pyodideManager.initialize();
-        const rawResults = pyodide.globals.get('validation_results');
-        console.log('Raw results from globals:', rawResults);
-        
-        // Convert Pyodide Proxy to JavaScript array
-        if (rawResults && typeof rawResults.toJs === 'function') {
-          validationResults = rawResults.toJs();
-          console.log('Converted to JS array:', validationResults);
-        } else {
-          validationResults = rawResults;
-        }
+        throw new Error('Python compliance validation failed - no results available');
       }
       
       if (!validationResults || !Array.isArray(validationResults)) {
@@ -2117,6 +2154,486 @@ final_results
       console.error('Failed to validate acquisition:', error);
       throw new Error(`Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Get DICOM tag from keyword/field name
+   */
+  async getDicomTag(keyword: string): Promise<{ tag: string; name: string; vr: string; keyword: string } | null> {
+    await this.ensureInitialized();
+    
+    try {
+      const result = await pyodideManager.runPython(`
+import json
+import pydicom
+
+keyword = "${keyword}"
+result = None
+
+# Use pydicom's proper API functions
+try:
+    # Try to get tag from keyword using pydicom's function
+    tag_int = pydicom.datadict.tag_for_keyword(keyword)
+    if tag_int:
+        tag_str = f"{tag_int:08X}"
+        tag_formatted = f"{tag_str[:4]},{tag_str[4:]}"
+        vr = pydicom.datadict.dictionary_VR(tag_int) or "UN"
+        description = pydicom.datadict.dictionary_description(tag_int) or keyword
+        result = {
+            "tag": tag_formatted,
+            "name": description,
+            "keyword": keyword,
+            "vr": vr
+        }
+except (KeyError, TypeError, AttributeError) as e:
+    # Tag not found or function doesn't exist, result stays None
+    print(f"No DICOM tag found for keyword '{keyword}': {e}")
+
+json.dumps(result)
+      `);
+      
+      const parsed = JSON.parse(result);
+      return parsed;
+      
+    } catch (error) {
+      console.warn(`Failed to get DICOM tag for keyword: ${keyword}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Load Siemens protocol file (.pro) and convert to acquisition format
+   */
+  async loadProFile(fileContent: Uint8Array, fileName: string): Promise<UIAcquisition> {
+    await this.ensureInitialized();
+    
+    try {
+      console.log(`Processing Siemens protocol file: ${fileName}`);
+      
+      // Convert Uint8Array to string (assuming .pro files are text-based)
+      const fileText = new TextDecoder('utf-8').decode(fileContent);
+      
+      // Call dicompare.load_pro_file function
+      const result = await pyodideManager.runPython(`
+import json
+import dicompare
+import tempfile
+import os
+
+# Create a temporary file path for the content
+with tempfile.NamedTemporaryFile(mode='w', suffix='.pro', delete=False) as tmp_file:
+    tmp_file.write('''${fileText.replace(/'/g, "\\'")}''')
+    tmp_file_path = tmp_file.name
+
+# Try the new schema format function first, fallback to old function
+try:
+    print("🚀 Attempting to use new load_pro_file_schema_format function...")
+    pro_data = dicompare.load_pro_file_schema_format(tmp_file_path)
+    print("✅ Successfully used new load_pro_file_schema_format function!")
+    print(f"📊 New function returned type: {type(pro_data)}")
+    print(f"📋 New function keys: {list(pro_data.keys()) if isinstance(pro_data, dict) else 'Not a dict'}")
+    print(f"📄 Full new function output:")
+    print(pro_data)
+except AttributeError as e:
+    print(f"⚠️ New function not available ({e}), falling back to old function...")
+    pro_data = dicompare.load_pro_file(tmp_file_path)
+    print("📊 Using old function - fallback successful")
+    print(f"Type of pro_data: {type(pro_data)}")
+    print(f"Pro data content: {pro_data}")
+except Exception as e:
+    print(f"❌ New function failed with error: {e}")
+    print("⚠️ Falling back to old function...")
+    pro_data = dicompare.load_pro_file(tmp_file_path)
+    print("📊 Using old function - fallback successful")
+
+# Clean up temporary file
+os.unlink(tmp_file_path)
+
+# Return the data as JSON
+json.dumps(pro_data)
+      `);
+      
+      console.log('Raw result from Python:', result);
+      const proData = JSON.parse(result);
+      console.log('Parsed .pro file data:', proData);
+      
+      // Check if we got the new schema format or old format
+      const isNewFormat = proData.hasOwnProperty('acquisition_info') && 
+                         proData.hasOwnProperty('fields') && 
+                         proData.hasOwnProperty('series');
+      
+      console.log(`🔍 Detected format: ${isNewFormat ? 'NEW schema format' : 'OLD flat format'}`);
+      
+      if (isNewFormat) {
+        return await this.parseSchemaFormatData(proData, fileName);
+      } else {
+        return await this.parseFlatFormatData(proData, fileName);
+      }
+    } catch (error) {
+      console.error('Failed to load .pro file:', error);
+      throw new Error(`Failed to load Siemens protocol file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Parse new schema format data from load_pro_file_schema_format
+   */
+  private async parseSchemaFormatData(schemaData: any, fileName: string): Promise<UIAcquisition> {
+    console.log('🚀 Parsing new schema format data...');
+    console.log(`📊 Found ${schemaData.fields?.length || 0} acquisition fields`);
+    console.log(`📊 Found ${schemaData.series?.length || 0} series`);
+    
+    // Process acquisition-level fields
+    const acquisitionFields: DicomField[] = [];
+    if (schemaData.fields && Array.isArray(schemaData.fields)) {
+      for (const fieldObj of schemaData.fields) {
+        const fieldName = fieldObj.field;
+        const value = fieldObj.value;
+        
+        // Debug logging for potentially problematic fields in schema format
+        if (fieldName.includes('ImagedNucleus') || fieldName.includes('MRAcquisitionType') || 
+            fieldName.includes('ReceiveCoilName') || fieldName.includes('TransmitCoilName')) {
+          console.log('🔍 [Schema Format] Processing potentially problematic field:', {
+            fieldName,
+            value,
+            valueType: typeof value,
+            isArray: Array.isArray(value),
+            stringValue: String(value)
+          });
+        }
+        
+        // Try to find matching DICOM tag by keyword
+        let tag = fieldName;
+        let name = fieldName;
+        let vr = 'UN';
+        let keyword = fieldName;
+        
+        try {
+          const tagInfo = await this.getDicomTag(fieldName);
+          if (tagInfo) {
+            tag = tagInfo.tag;
+            name = tagInfo.name;
+            vr = tagInfo.vr;
+            keyword = tagInfo.keyword;
+            console.log(`✅ Mapped ${fieldName} → ${tag} (${name})`);
+          } else {
+            console.warn(`⚠️ No DICOM tag found for: ${fieldName}`);
+          }
+        } catch (error) {
+          console.warn(`❌ Could not find DICOM field info for: ${fieldName}`, error);
+        }
+        
+        // Smart data type detection (same logic as before)
+        let dataType: 'string' | 'number' | 'list_string' | 'list_number' | 'json' = 'string';
+        let processedValue = value;
+        
+        // Debug logging for potentially problematic values in schema format
+        if (Array.isArray(value) && value.length === 1 && 
+            (String(value[0]).includes('D') || String(value[0]).includes('H') || String(value[0]).includes('Tx'))) {
+          console.log('🔍 [Schema Format] Processing potentially problematic array value:', {
+            fieldName,
+            originalValue: value,
+            firstElement: value[0],
+            firstElementType: typeof value[0]
+          });
+        }
+        
+        if (typeof value === 'number') {
+          dataType = 'number';
+        } else if (Array.isArray(value)) {
+          if (value.length === 0) {
+            dataType = 'list_string';
+          } else if (value.length === 1 && typeof value[0] === 'number') {
+            dataType = 'number';
+            processedValue = value[0];
+          } else if (value.length === 1 && typeof value[0] === 'string') {
+            // Single-element string array - convert to string (this was missing!)
+            dataType = 'string';
+            processedValue = value[0];
+          } else if (value.every(v => typeof v === 'number')) {
+            dataType = 'list_number';
+          } else if (value.every(v => typeof v === 'string')) {
+            dataType = 'list_string';
+          } else {
+            dataType = 'json';
+          }
+        } else if (typeof value === 'string') {
+          dataType = 'string';
+        } else {
+          dataType = 'json';
+        }
+        
+        // Debug logging after processing
+        if (Array.isArray(value) && value.length === 1 && 
+            (String(value[0]).includes('D') || String(value[0]).includes('H') || String(value[0]).includes('Tx'))) {
+          console.log('🔍 [Schema Format] After processing:', {
+            fieldName,
+            processedValue,
+            dataType
+          });
+        }
+
+        acquisitionFields.push({
+          tag,
+          name,
+          keyword,
+          value: processedValue,
+          vr,
+          level: 'acquisition',
+          dataType
+        });
+      }
+    }
+
+    // Process series-level fields and series data
+    const seriesFields: DicomField[] = [];
+    const seriesData: any[] = [];
+    
+    if (schemaData.series && Array.isArray(schemaData.series) && schemaData.series.length > 0) {
+      // Extract unique series-level field definitions from first series
+      const firstSeries = schemaData.series[0];
+      if (firstSeries.fields && Array.isArray(firstSeries.fields)) {
+        for (const fieldObj of firstSeries.fields) {
+          const fieldName = fieldObj.field;
+          
+          // Try to find matching DICOM tag by keyword
+          let tag = fieldName;
+          let name = fieldName;
+          let vr = 'UN';
+          let keyword = fieldName;
+          
+          try {
+            const tagInfo = await this.getDicomTag(fieldName);
+            if (tagInfo) {
+              tag = tagInfo.tag;
+              name = tagInfo.name;
+              vr = tagInfo.vr;
+              keyword = tagInfo.keyword;
+              console.log(`✅ Mapped series field ${fieldName} → ${tag} (${name})`);
+            } else {
+              console.warn(`⚠️ No DICOM tag found for series field: ${fieldName}`);
+            }
+          } catch (error) {
+            console.warn(`❌ Could not find DICOM field info for series field: ${fieldName}`, error);
+          }
+
+          seriesFields.push({
+            tag,
+            name,
+            keyword,
+            value: fieldObj.value, // Use first series value as default
+            vr,
+            level: 'series',
+            dataType: typeof fieldObj.value === 'number' ? 'number' : 
+                     Array.isArray(fieldObj.value) ? 'list_string' : 'string'
+          });
+        }
+      }
+      
+      // Convert all series data
+      for (const series of schemaData.series) {
+        const seriesFieldsObj: any = {};
+        if (series.fields && Array.isArray(series.fields)) {
+          for (const fieldObj of series.fields) {
+            // Find the corresponding series field definition to get the tag
+            const seriesField = seriesFields.find(sf => sf.keyword === fieldObj.field);
+            const fieldTag = seriesField?.tag || fieldObj.field;
+            
+            seriesFieldsObj[fieldTag] = {
+              value: fieldObj.value,
+              field: seriesField?.name || fieldObj.field,
+              dataType: typeof fieldObj.value === 'number' ? 'number' : 
+                       Array.isArray(fieldObj.value) ? 'list_string' : 'string',
+              validationRule: { type: 'exact' }
+            };
+          }
+        }
+        
+        seriesData.push({
+          name: series.name || 'Series',
+          fields: seriesFieldsObj
+        });
+      }
+    }
+
+    // Create acquisition object
+    const acquisition: UIAcquisition = {
+      id: `pro_${Date.now()}`,
+      protocolName: schemaData.acquisition_info?.protocol_name || fileName.replace('.pro', ''),
+      seriesDescription: `Schema format protocol from ${fileName}`,
+      totalFiles: 1,
+      acquisitionFields,
+      seriesFields,
+      series: seriesData,
+      metadata: {
+        source: 'siemens_protocol_schema',
+        originalFileName: fileName,
+        acquisitionInfo: schemaData.acquisition_info
+      }
+    };
+
+    console.log(`✅ Successfully parsed schema format: ${acquisitionFields.length} acquisition fields, ${seriesFields.length} series fields, ${seriesData.length} series`);
+    return acquisition;
+  }
+
+  /**
+   * Parse old flat format data from load_pro_file (fallback)
+   */
+  private async parseFlatFormatData(proData: any, fileName: string): Promise<UIAcquisition> {
+    console.log('📝 Parsing flat format data (legacy)...');
+    
+    // Convert the dictionary to acquisition format (existing logic)
+    const acquisitionFields: DicomField[] = [];
+    
+    for (const [fieldName, value] of Object.entries(proData)) {
+      // Debug logging for MagneticFieldStrength in .pro files
+      if (fieldName.toLowerCase().includes('magnetic') || fieldName.includes('MagneticFieldStrength')) {
+        console.log('🔍 Processing .pro field that might be MagneticFieldStrength:', {
+          fieldName,
+          value,
+          valueType: typeof value,
+          isArray: Array.isArray(value)
+        });
+      }
+      
+      // Debug logging for ImagedNucleus and other potentially problematic fields
+      if (fieldName.includes('ImagedNucleus') || fieldName.includes('MRAcquisitionType') || 
+          fieldName.includes('ReceiveCoilName') || fieldName.includes('TransmitCoilName')) {
+        console.log('🔍 Processing potentially problematic .pro field:', {
+          fieldName,
+          value,
+          valueType: typeof value,
+          isArray: Array.isArray(value),
+          stringValue: String(value)
+        });
+      }
+      
+      // Try to find matching DICOM tag by keyword
+      let tag = fieldName;
+      let name = fieldName;
+      let vr = 'UN';
+      let keyword = fieldName;
+      
+      try {
+        // Use getDicomTag function to map keyword to DICOM tag
+        const tagInfo = await this.getDicomTag(fieldName);
+        if (tagInfo) {
+          tag = tagInfo.tag;
+          name = tagInfo.name;
+          vr = tagInfo.vr;
+          keyword = tagInfo.keyword;
+          console.log(`✅ Mapped ${fieldName} → ${tag} (${name})`);
+          
+          // Extra debug for magnetic field
+          if (name.toLowerCase().includes('magnetic')) {
+            console.log('🔍 Successfully mapped magnetic field:', {
+              originalFieldName: fieldName,
+              mappedTag: tag,
+              mappedName: name
+            });
+          }
+        } else {
+          console.warn(`⚠️ No DICOM tag found for: ${fieldName}`);
+        }
+      } catch (error) {
+        // Keep defaults if field lookup fails
+        console.warn(`❌ Could not find DICOM field info for: ${fieldName}`, error);
+      }
+      
+      // Smart data type detection
+      let dataType: 'string' | 'number' | 'list_string' | 'list_number' | 'json' = 'string';
+      let processedValue = value;
+      
+      // Debug logging for problematic string values
+      if (Array.isArray(value) && value.length === 1 && 
+          (String(value[0]).includes('D') || String(value[0]).includes('H') || String(value[0]).includes('Tx'))) {
+        console.log('🔍 Processing potentially problematic array value:', {
+          fieldName,
+          originalValue: value,
+          firstElement: value[0],
+          firstElementType: typeof value[0]
+        });
+      }
+      
+      if (typeof value === 'number') {
+        dataType = 'number';
+      } else if (Array.isArray(value)) {
+        if (value.length === 0) {
+          dataType = 'list_string';
+        } else if (value.length === 1 && typeof value[0] === 'number') {
+          // Single-element numeric array - convert to number
+          dataType = 'number';
+          processedValue = value[0];
+        } else if (value.length === 1 && typeof value[0] === 'string') {
+          // Single-element string array - convert to string (this was missing!)
+          dataType = 'string';
+          processedValue = value[0];
+        } else if (value.every(v => typeof v === 'number')) {
+          dataType = 'list_number';
+        } else if (value.every(v => typeof v === 'string')) {
+          dataType = 'list_string';
+        } else {
+          // Mixed types - treat as JSON
+          dataType = 'json';
+        }
+      } else if (typeof value === 'string') {
+        dataType = 'string';
+      } else {
+        // Objects or other types
+        dataType = 'json';
+      }
+      
+      // More debug logging after processing
+      if (Array.isArray(value) && value.length === 1 && 
+          (String(value[0]).includes('D') || String(value[0]).includes('H') || String(value[0]).includes('Tx'))) {
+        console.log('🔍 After processing:', {
+          fieldName,
+          processedValue,
+          dataType
+        });
+      }
+
+      // More debug logging after value processing
+      if (fieldName.toLowerCase().includes('magnetic') || name.toLowerCase().includes('magnetic')) {
+        console.log('🔍 Final field before adding to acquisitionFields:', {
+          fieldName,
+          tag,
+          name,
+          originalValue: value,
+          processedValue,
+          dataType,
+          vr
+        });
+      }
+      
+      acquisitionFields.push({
+        tag,
+        name,
+        keyword,
+        value: processedValue,
+        vr,
+        level: 'acquisition',
+        dataType
+      });
+    }
+    
+    // Create acquisition object
+    const acquisition: UIAcquisition = {
+      id: `pro_${Date.now()}`,
+      protocolName: fileName.replace('.pro', ''),
+      seriesDescription: `Protocol from ${fileName}`,
+      totalFiles: 1,
+      acquisitionFields,
+      seriesFields: [],
+      series: [],
+      metadata: {
+        source: 'siemens_protocol',
+        originalFileName: fileName
+      }
+    };
+    
+    console.log(`✅ Successfully parsed flat format: ${acquisitionFields.length} acquisition fields`);
+    return acquisition;
   }
 }
 

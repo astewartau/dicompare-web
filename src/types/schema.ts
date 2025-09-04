@@ -53,7 +53,7 @@ export interface ComplianceReport {
 export interface ComplianceFieldResult {
   fieldPath: string;
   fieldName: string;
-  status: 'pass' | 'fail' | 'warning' | 'unknown';
+  status: 'pass' | 'fail' | 'warning' | 'na' | 'unknown';
   expectedValue?: any;
   actualValue?: any;
   message?: string;

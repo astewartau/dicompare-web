@@ -13,7 +13,7 @@ export interface DicomField {
 
 // Enhanced field types for validation
 export type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' | 'json';
-export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range';
+export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'contains_any' | 'contains_all';
 export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 
 // Series Types
@@ -84,6 +84,8 @@ export interface ValidationRule {
   tolerance?: number;
   contains?: string;
   substring?: string; // Alias for contains
+  contains_any?: any[]; // Array of values for contains_any constraint (substrings for strings, elements for lists)
+  contains_all?: any[]; // Array of values for contains_all constraint (lists only - all must be present)
 }
 
 export interface SchemaField {
@@ -115,7 +117,7 @@ export interface Template {
 export interface ComplianceResult {
   fieldTag: string;
   fieldName: string;
-  status: 'pass' | 'fail' | 'warning';
+  status: 'pass' | 'fail' | 'warning' | 'na';
   expected: any;
   actual: any;
   message: string;
@@ -124,14 +126,14 @@ export interface ComplianceResult {
 export interface SeriesComplianceResult {
   seriesId: string;
   seriesDescription: string;
-  overallStatus: 'pass' | 'fail' | 'warning';
+  overallStatus: 'pass' | 'fail' | 'warning' | 'na';
   fieldResults: ComplianceResult[];
 }
 
 export interface AcquisitionComplianceResult {
   acquisitionId: string;
   acquisitionName: string;
-  overallStatus: 'pass' | 'fail' | 'warning';
+  overallStatus: 'pass' | 'fail' | 'warning' | 'na';
   acquisitionFieldResults: ComplianceResult[];
   seriesResults: SeriesComplianceResult[];
 }
@@ -141,7 +143,7 @@ export interface ComplianceReport {
   templateName: string;
   templateVersion: string;
   analysisDate: string;
-  overallStatus: 'pass' | 'fail' | 'warning';
+  overallStatus: 'pass' | 'fail' | 'warning' | 'na';
   summary: {
     totalAcquisitions: number;
     passedAcquisitions: number;

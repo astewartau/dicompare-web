@@ -150,6 +150,74 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
         </div>
       );
 
+    case 'contains_any':
+      return (
+        <div className={className}>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Values to Search For
+          </label>
+          <input
+            type="text"
+            value={value.contains_any ? value.contains_any.join(', ') : ''}
+            onChange={(e) => {
+              const values = e.target.value.split(',').map(v => v.trim()).filter(v => v !== '');
+              updateRule({ contains_any: values });
+            }}
+            disabled={disabled}
+            placeholder="T1, t1, T1-weighted"
+            className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+              disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+            }`}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Enter comma-separated values. For strings: field must contain any of these substrings. For lists: field must contain any of these elements.
+          </p>
+          {value.contains_any && value.contains_any.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {value.contains_any.map((val, index) => (
+                <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                  {String(val)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+
+    case 'contains_all':
+      return (
+        <div className={className}>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Required Elements
+          </label>
+          <input
+            type="text"
+            value={value.contains_all ? value.contains_all.join(', ') : ''}
+            onChange={(e) => {
+              const values = e.target.value.split(',').map(v => v.trim()).filter(v => v !== '');
+              updateRule({ contains_all: values });
+            }}
+            disabled={disabled}
+            placeholder="NORMAL, PRIMARY"
+            className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+              disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+            }`}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Enter comma-separated values. List field must contain all of these elements (order doesn't matter).
+          </p>
+          {value.contains_all && value.contains_all.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {value.contains_all.map((val, index) => (
+                <span key={index} className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                  {String(val)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+
     default:
       return null;
   }

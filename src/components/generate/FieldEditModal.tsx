@@ -101,6 +101,16 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             newErrors.constraint = 'Substring is required for contains constraint';
           }
           break;
+        case 'contains_any':
+          if (!formData.validationRule.contains_any || formData.validationRule.contains_any.length === 0) {
+            newErrors.constraint = 'At least one value is required for contains any constraint';
+          }
+          break;
+        case 'contains_all':
+          if (!formData.validationRule.contains_all || formData.validationRule.contains_all.length === 0) {
+            newErrors.constraint = 'At least one value is required for contains all constraint';
+          }
+          break;
       }
     }
 
@@ -183,6 +193,42 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
           newValidationRule = {
             type: 'contains',
             contains: extractedValue && typeof extractedValue === 'string' ? extractedValue : ''
+          };
+          break;
+        case 'contains_any':
+          // If extractedValue is already a comma-separated string, split it
+          let containsAnyValues: any[] = [];
+          if (extractedValue) {
+            if (typeof extractedValue === 'string' && extractedValue.includes(',')) {
+              // Split comma-separated string and trim each value
+              containsAnyValues = extractedValue.split(',').map(v => v.trim()).filter(v => v !== '');
+            } else if (Array.isArray(extractedValue)) {
+              containsAnyValues = extractedValue;
+            } else {
+              containsAnyValues = [extractedValue];
+            }
+          }
+          newValidationRule = {
+            type: 'contains_any',
+            contains_any: containsAnyValues
+          };
+          break;
+        case 'contains_all':
+          // If extractedValue is already a comma-separated string, split it
+          let containsAllValues: any[] = [];
+          if (extractedValue) {
+            if (typeof extractedValue === 'string' && extractedValue.includes(',')) {
+              // Split comma-separated string and trim each value
+              containsAllValues = extractedValue.split(',').map(v => v.trim()).filter(v => v !== '');
+            } else if (Array.isArray(extractedValue)) {
+              containsAllValues = extractedValue;
+            } else {
+              containsAllValues = [extractedValue];
+            }
+          }
+          newValidationRule = {
+            type: 'contains_all',
+            contains_all: containsAllValues
           };
           break;
         case 'exact':
@@ -302,6 +348,10 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                     `${formData.validationRule.min ?? '-∞'} to ${formData.validationRule.max ?? '∞'}` :
                   formData.validationRule.type === 'contains' ? 
                     `contains "${formData.validationRule.contains || ''}"` :
+                  formData.validationRule.type === 'contains_any' ? 
+                    `contains any [${(formData.validationRule.contains_any || []).slice(0, 3).join(', ')}${(formData.validationRule.contains_any || []).length > 3 ? '...' : ''}]` :
+                  formData.validationRule.type === 'contains_all' ? 
+                    `contains all [${(formData.validationRule.contains_all || []).slice(0, 3).join(', ')}${(formData.validationRule.contains_all || []).length > 3 ? '...' : ''}]` :
                     'Not specified'
                 }</span>
               </div>
