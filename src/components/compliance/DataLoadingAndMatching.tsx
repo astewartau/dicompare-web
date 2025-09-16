@@ -491,8 +491,29 @@ const DataLoadingAndMatching: React.FC = () => {
       version: schema.version,
       authors: schema.authors
     }));
-    
+
     return [...uploadedSchemas, ...availableSchemas];
+  };
+
+  // Universal schema content loader that handles both uploaded and library schemas
+  const getUniversalSchemaContent = async (schemaId: string): Promise<string | null> => {
+    // Try uploaded schemas from IndexedDB first (user's custom schemas)
+    const uploadedContent = await getSchemaContent(schemaId);
+    if (uploadedContent) {
+      return uploadedContent;
+    }
+
+    // Try library schemas from public folder (pre-built schemas)
+    try {
+      const response = await fetch(`/schemas/${schemaId}.json`);
+      if (response.ok) {
+        return await response.text();
+      }
+    } catch (error) {
+      console.error(`Failed to load library schema ${schemaId}:`, error);
+    }
+
+    return null;
   };
 
   // Load example schemas automatically when component mounts
@@ -711,6 +732,7 @@ const DataLoadingAndMatching: React.FC = () => {
                         schemaFields={[]} // Not used anymore, Python API handles schema internally
                         schemaId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[0] : preSelectedSchemaId}
                         acquisitionId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[1] : undefined}
+                        getSchemaContent={getUniversalSchemaContent}
                       />
                     </div>
                   </div>
@@ -726,7 +748,7 @@ const DataLoadingAndMatching: React.FC = () => {
                 }}
                 onSchemaDelete={handleDeleteSchema}
                 onSchemaUpload={handleSchemaUpload}
-                getSchemaContent={getSchemaContent}
+                getSchemaContent={getUniversalSchemaContent}
                 title="Select Validation Schema"
               />
             )}
@@ -808,6 +830,7 @@ const DataLoadingAndMatching: React.FC = () => {
                           schemaFields={[]}
                           schemaId={pairedTemplate.id}
                           acquisitionId={pairedTemplate.acquisitionIndex}
+                          getSchemaContent={getUniversalSchemaContent}
                         />
                       </div>
                     </div>
@@ -876,6 +899,7 @@ const DataLoadingAndMatching: React.FC = () => {
                         schemaFields={[]} // Not used anymore, Python API handles schema internally
                         schemaId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[0] : preSelectedSchemaId}
                         acquisitionId={preSelectedSchemaId?.includes(':') ? preSelectedSchemaId.split(':')[1] : undefined}
+                        getSchemaContent={getUniversalSchemaContent}
                       />
                     </div>
                   </div>
@@ -888,7 +912,7 @@ const DataLoadingAndMatching: React.FC = () => {
                 onSchemaSelect={setPreSelectedSchemaId}
                 onSchemaDelete={handleDeleteSchema}
                 onSchemaUpload={handleSchemaUpload}
-                getSchemaContent={getSchemaContent}
+                getSchemaContent={getUniversalSchemaContent}
                 title="Select Validation Schema"
               />
             )}

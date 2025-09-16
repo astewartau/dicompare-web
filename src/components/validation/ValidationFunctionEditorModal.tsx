@@ -535,7 +535,7 @@ json.dumps({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">Edit Validation Function</h3>
@@ -548,10 +548,10 @@ json.dumps({
           </div>
         </div>
         
-        <div className="flex-1 p-6 overflow-hidden min-h-0">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+        <div className="flex-1 p-6 min-h-0 overflow-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-full">
             {/* Left Panel - Function Details */}
-            <div className="space-y-4 overflow-y-auto pr-2">
+            <div className="space-y-4 flex flex-col min-h-0">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Function Name</label>
                 <input
@@ -667,7 +667,7 @@ json.dumps({
             </div>
 
             {/* Right Panel - Test Cases */}
-            <div className="flex flex-col h-full min-h-0">
+            <div className="flex flex-col min-h-0 h-full">
               <div className="flex items-center justify-between mb-4 flex-shrink-0">
                 <h4 className="text-lg font-medium text-gray-900">Test Cases</h4>
                 <button
@@ -679,7 +679,7 @@ json.dumps({
                 </button>
               </div>
 
-              <div className="space-y-4 flex-1 overflow-y-auto min-h-0 pr-2" style={{ maxHeight: 'calc(100vh - 400px)' }}>
+              <div className="space-y-4 flex-1 overflow-y-auto min-h-0">
                 {(editedFunc.customTestCases || []).map((testCase, testIndex) => (
                   <div key={testCase.id} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">

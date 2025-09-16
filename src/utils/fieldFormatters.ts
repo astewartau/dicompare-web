@@ -16,9 +16,14 @@ export function formatFieldDisplay(
     return formatValidationRule(validationRule);
   }
   
-  // Otherwise, show the value
+  // Show the value if available
   if (options.showValue !== false) {
-    return formatRawValue(value);
+    const formattedValue = formatRawValue(value);
+    // If value is empty/dash but we have a constraint-based validation rule, show the constraint instead
+    if (formattedValue === '-' && validationRule && ['contains_any', 'contains_all', 'contains'].includes(validationRule.type)) {
+      return formatValidationRule(validationRule);
+    }
+    return formattedValue;
   }
   
   return '-';

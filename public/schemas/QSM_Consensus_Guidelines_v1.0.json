@@ -1,0 +1,136 @@
+{
+  "version": "1.0",
+  "name": "QSM Consensus Guidelines",
+  "description": "Auto-generated validation template",
+  "created": "2025-09-04T04:21:19.506Z",
+  "authors": [
+    "Ashley Stewart"
+  ],
+  "acquisitions": {
+    "QSM": {
+      "fields": [],
+      "series": [],
+      "rules": [
+        {
+          "id": "validate_echo_count",
+          "name": "Multi-echo Validation",
+          "description": "While QSM can be achieved with one echo, two is the minimum number of echoes needed to separate the intrinsic transmit RF phase from the magnetic field-induced phase.",
+          "implementation": "echo_times = value[\"EchoTime\"].dropna().unique()\nif len(echo_times) == 1:\n    raise ValidationError(\"Found single-echo acquisition.\")\nelif len(echo_times) < 3:\n    raise ValidationError(f\"Found {len(echo_times)} echoes, but at least 3 are recommended.\")",
+          "parameters": {},
+          "fields": [
+            "EchoTime"
+          ]
+        },
+        {
+          "id": "uniform_echo_spacing",
+          "name": "Uniform Echo Spacing",
+          "description": "The spacing between echoes (ΔTE) should be uniform.",
+          "implementation": "echo_times = value[\"EchoTime\"].dropna().sort_values()\nspacings = echo_times.diff().iloc[1:]\nif not all(abs(spacings.iloc[0] - s) < 0.01 for s in spacings):\n    raise ValidationError(f\"Echo spacing is not uniform. Found spacings: {spacings}.\")",
+          "parameters": {},
+          "fields": [
+            "EchoTime"
+          ]
+        },
+        {
+          "id": "validate_first_echo",
+          "name": "Short First Echo",
+          "description": "The first TE (TE1) should be as short as possible.",
+          "implementation": "first_echo_time = value[\"EchoTime\"].min()\nif first_echo_time > 10:\n    raise ValidationError(f\"The first TE is overly long. Found {first_echo_time} ms.\")",
+          "parameters": {},
+          "fields": [
+            "EchoTime"
+          ]
+        },
+        {
+          "id": "validate_echo_times",
+          "name": "TE Close to T2*",
+          "description": "The longest TE (the TE of the last echo) should be equal to at least the T2* value of the tissue of interest.",
+          "implementation": "echo_times = value[\"EchoTime\"].dropna().sort_values()\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\n\ntissue_values = {\n    1.5: {\"grey\": 84.0, \"white\": 66.2, \"caudate\": 58.8, \"putamen\": 55.5},\n    3.0: {\"grey\": 66.0, \"white\": 53.2, \"caudate\": 41.3, \"putamen\": 31.5},\n    7.0: {\"grey\": 33.2, \"white\": 26.8, \"caudate\": 19.9, \"putamen\": 16.1},\n}\n\nmax_tissue = max(tissue_values[field_strength].values())\nmin_tissue = min(tissue_values[field_strength].values())\n\nif echo_times.iloc[-1] > 1.25 * max_tissue:\n    raise ValidationError(f\"The longest TE should be ≤1.25x the highest tissue T2* ({max_tissue} ms).\")\nif echo_times.iloc[-1] < 0.75 * min_tissue:\n    raise ValidationError(f\"The longest TE should be ≥0.75x the lowest tissue T2* ({min_tissue} ms).\")",
+          "parameters": {},
+          "fields": [
+            "EchoTime",
+            "MagneticFieldStrength"
+          ]
+        },
+        {
+          "id": "validate_image_type",
+          "name": "Valid Magnitude/Phase Pairs",
+          "description": "Each EchoTime must have at least one magnitude and phase image.",
+          "implementation": "magnitude_counts = []\nphase_counts = []\n\nfor echo_time, group in value.groupby(\"EchoTime\"):\n    image_types = group[\"ImageType\"]\n    \n    # Count occurrences of 'M' and 'P' in ImageType tuples\n    magnitude_counts.append(sum('M' in image for image in image_types))\n    phase_counts.append(sum('P' in image for image in image_types))\n\nif not all(m >= 1 for m in magnitude_counts):\n    raise ValidationError(f\"Each EchoTime must have at least one magnitude image. Found {magnitude_counts}.\")\nif not all(p >= 1 for p in phase_counts):\n    raise ValidationError(f\"Each EchoTime must have at least one phase image. Found {phase_counts}.\")\n",
+          "parameters": {},
+          "fields": [
+            "ImageType",
+            "EchoTime"
+          ]
+        },
+        {
+          "id": "validate_image_slices",
+          "name": "Matching Magnitude/Phase Slices",
+          "description": "Each magnitude and phase image should have the same number of slices.",
+          "implementation": "num_slices = value['Count']\nif not all(num_slices == num_slices.iloc[0]):\n    raise ValidationError(f\"Magnitude and phase images do not have the same number of slices. Found {list(num_slices)}.\")",
+          "parameters": {},
+          "fields": [
+            "ImageType",
+            "EchoTime"
+          ]
+        },
+        {
+          "id": "validate_mra_type",
+          "name": "3D Acquisition Type",
+          "description": "Use 3D acquisition instead of 2D acquisition to avoid potential slice-to-slice phase discontinuities in 2D phase maps.",
+          "implementation": "acquisition_type = value[\"MRAcquisitionType\"].iloc[0]  # Assuming consistent within group\nif acquisition_type != \"3D\":\n    raise ValidationError(f\"The input data is not 3D. Found {acquisition_type}.\")",
+          "parameters": {},
+          "fields": [
+            "MRAcquisitionType"
+          ]
+        },
+        {
+          "id": "validate_pixel_bandwidth",
+          "name": "Readout Bandwidth",
+          "description": "Use the minimum readout bandwidth which generates acceptable distortions.",
+          "implementation": "pixel_bandwidth = value[\"PixelBandwidth\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\n\nif field_strength == 3.0 and pixel_bandwidth > 220:\n    raise ValidationError(f\"PixelBandwidth should be ≤220 Hz/pixel at 3T. Found {pixel_bandwidth} Hz/pixel.\")\nelif field_strength != 3.0:\n    raise ValidationError(\"PixelBandwidth recommendations are not available for this field strength.\")",
+          "parameters": {},
+          "fields": [
+            "PixelBandwidth",
+            "MagneticFieldStrength"
+          ]
+        },
+        {
+          "id": "validate_flip_angle",
+          "name": "Ernst Flip Angle",
+          "description": "FlipAngle should be close to the Ernst angle.",
+          "implementation": "tr = value[\"RepetitionTime\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\nflip_angle = value[\"FlipAngle\"].iloc[0]\n\nT1_MIN_MAX = {\n    1.5: {\"min\": 600, \"max\": 1200},\n    3.0: {\"min\": 900, \"max\": 1650},\n    7.0: {\"min\": 1100, \"max\": 1900},\n}\n\nif field_strength not in T1_MIN_MAX:\n    raise ValidationError(f\"Unsupported MagneticFieldStrength {field_strength}T for Ernst angle validation.\")\n\nt1_min, t1_max = T1_MIN_MAX[field_strength][\"min\"], T1_MIN_MAX[field_strength][\"max\"]\nernst_min = math.acos(math.exp(-tr / t1_max)) * (180 / math.pi)\nernst_max = math.acos(math.exp(-tr / t1_min)) * (180 / math.pi)\n\ntolerance = 0.1\n\nif flip_angle < ernst_min - tolerance or flip_angle > ernst_max + tolerance:\n    raise ValidationError(f\"FlipAngle should be between {ernst_min:.2f}° and {ernst_max:.2f}° at {field_strength}T with TR={tr} ms. Found {flip_angle:.2f}°.\")",
+          "parameters": {},
+          "fields": [
+            "FlipAngle",
+            "RepetitionTime",
+            "MagneticFieldStrength"
+          ]
+        },
+        {
+          "id": "validate_voxel_shape",
+          "name": "Isotropic Voxels",
+          "description": "Use isotropic voxels.",
+          "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\nslice_thickness = value[\"SliceThickness\"].iloc[0]\n\ntolerance = 0.1\nif not all(abs(p - pixel_spacing[0]) < tolerance for p in pixel_spacing) or abs(pixel_spacing[0] - slice_thickness) > tolerance:\n    raise ValidationError(f\"Voxel shape is not isotropic. Found PixelSpacing: {pixel_spacing}, SliceThickness: {slice_thickness}.\")\n",
+          "parameters": {},
+          "fields": [
+            "PixelSpacing",
+            "SliceThickness"
+          ]
+        },
+        {
+          "id": "validate_pixel_spacing",
+          "name": "Voxel Size Limit",
+          "description": "Use a combined voxel size of at most 1 mm³ to reduce partial volume-related estimation errors.",
+          "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\nslice_thickness = value[\"SliceThickness\"].iloc[0]\nvoxel_size_mm3 = math.prod(list(pixel_spacing) + [slice_thickness])\n\nif voxel_size_mm3 > 1:\n    raise ValidationError(f\"Voxel size should be ≤1 mm³. Got {voxel_size_mm3:.2f} mm³.\")\n",
+          "parameters": {},
+          "fields": [
+            "PixelSpacing",
+            "SliceThickness"
+          ]
+        }
+      ]
+    }
+  },
+  "global_constraints": {}
+}

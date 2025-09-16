@@ -21,6 +21,7 @@ interface ComplianceFieldTableProps {
   schemaFields: SchemaField[];
   schemaId?: string;
   acquisitionId?: string;
+  getSchemaContent?: (id: string) => Promise<string | null>;
 }
 
 const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
@@ -28,7 +29,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   acquisition,
   schemaFields,
   schemaId,
-  acquisitionId
+  acquisitionId,
+  getSchemaContent: providedGetSchemaContent
 }) => {
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [expandedCompliance, setExpandedCompliance] = useState<boolean>(false);
@@ -38,7 +40,8 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
   const [loadedSchemaFields, setLoadedSchemaFields] = useState<DicomField[]>([]);
   const [validationRules, setValidationRules] = useState<any[]>([]);
 
-  const { getSchemaContent } = useSchemaContext();
+  const { getSchemaContent: contextGetSchemaContent } = useSchemaContext();
+  const getSchemaContent = providedGetSchemaContent || contextGetSchemaContent;
 
   // Load schema fields from API
   const loadSchemaFields = async () => {

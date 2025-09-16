@@ -78,23 +78,25 @@ export function processFieldForUI(field: any, source: 'dicom' | 'pro' = 'dicom')
   
   // Handle contains_any constraint for .pro files (especially ScanOptions)
   if (constraintType === 'contains_any') {
-    // For ScanOptions from .pro files, split the value by common separators to create the contains_any array
-    if ((field.name === 'Scan Options' || field.tag === '0018,0022') && source === 'pro') {
-      const value = processedField.value;
-      if (typeof value === 'string') {
+    // For ScanOptions, always use array value directly if it's already an array
+    if ((field.name === 'Scan Options' || field.tag === '0018,0022')) {
+      if (Array.isArray(processedField.value)) {
+        validationRule.contains_any = processedField.value;
+      } else if (typeof processedField.value === 'string') {
         // Split by backslash, comma, or space and filter out empty values
-        const options = value.split(/[\\,\s]+/).map(opt => opt.trim()).filter(opt => opt !== '');
-        validationRule.contains_any = options.length > 0 ? options : [value];
-        console.log('🔍 Setting contains_any for ScanOptions from .pro:', {
-          originalValue: value,
-          extractedOptions: validationRule.contains_any
-        });
+        const options = processedField.value.split(/[\\,\s]+/).map(opt => opt.trim()).filter(opt => opt !== '');
+        validationRule.contains_any = options.length > 0 ? options : [processedField.value];
       } else {
-        validationRule.contains_any = [value];
+        validationRule.contains_any = [processedField.value];
       }
     } else {
       // For other contains_any constraints, default to the field value as single option
-      validationRule.contains_any = [processedField.value];
+      // If the value is already an array, use it directly; otherwise wrap in array
+      if (Array.isArray(processedField.value)) {
+        validationRule.contains_any = processedField.value;
+      } else {
+        validationRule.contains_any = [processedField.value];
+      }
     }
   }
   
@@ -147,19 +149,25 @@ export function processSeriesFieldValue(value: any, fieldName?: string, tag?: st
   
   // Handle contains_any constraint for series values
   if (constraintType === 'contains_any') {
-    // For ScanOptions from .pro files, split the value by common separators to create the contains_any array
-    if ((fieldName === 'Scan Options' || tag === '0018,0022') && source === 'pro') {
-      const fieldValue = processedValue.value;
-      if (typeof fieldValue === 'string') {
+    // For ScanOptions, always use array value directly if it's already an array
+    if ((fieldName === 'Scan Options' || tag === '0018,0022')) {
+      if (Array.isArray(processedValue.value)) {
+        validationRule.contains_any = processedValue.value;
+      } else if (typeof processedValue.value === 'string') {
         // Split by backslash, comma, or space and filter out empty values
-        const options = fieldValue.split(/[\\,\s]+/).map(opt => opt.trim()).filter(opt => opt !== '');
-        validationRule.contains_any = options.length > 0 ? options : [fieldValue];
+        const options = processedValue.value.split(/[\\,\s]+/).map(opt => opt.trim()).filter(opt => opt !== '');
+        validationRule.contains_any = options.length > 0 ? options : [processedValue.value];
       } else {
-        validationRule.contains_any = [fieldValue];
+        validationRule.contains_any = [processedValue.value];
       }
     } else {
       // For other contains_any constraints, default to the field value as single option
-      validationRule.contains_any = [processedValue.value];
+      // If the value is already an array, use it directly; otherwise wrap in array
+      if (Array.isArray(processedValue.value)) {
+        validationRule.contains_any = processedValue.value;
+      } else {
+        validationRule.contains_any = [processedValue.value];
+      }
     }
   }
   

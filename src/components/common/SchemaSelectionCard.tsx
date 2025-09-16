@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Trash2, Upload, ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { Trash2, Upload, ChevronDown, ChevronRight, FileText, Library, FolderOpen } from 'lucide-react';
 import { SchemaTemplate } from '../../types/schema';
 
 interface SchemaSelectionCardProps {
@@ -26,6 +26,7 @@ const SchemaSelectionCard: React.FC<SchemaSelectionCardProps> = ({
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [dragActive, setDragActive] = useState(false);
   const [schemaAcquisitions, setSchemaAcquisitions] = useState<Record<string, any[]>>({});
+  const [activeTab, setActiveTab] = useState<'library' | 'uploaded'>('library');
   
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -53,6 +54,8 @@ const SchemaSelectionCard: React.FC<SchemaSelectionCardProps> = ({
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       onSchemaUpload?.(e.target.files[0]);
+      // Switch to uploaded tab after upload
+      setActiveTab('uploaded');
     }
   };
 
@@ -105,14 +108,14 @@ const SchemaSelectionCard: React.FC<SchemaSelectionCardProps> = ({
       return parsedAcquisitions;
     } catch (error) {
       console.error('Failed to parse schema acquisitions:', error);
-      return [{ id: 'acq_001', protocolName: 'Parse Error', seriesDescription: 'Could not parse schema' }];
+      return [{ id: '0', protocolName: 'Parse Error', seriesDescription: 'Could not parse schema' }];
     }
   };
 
   // Synchronous version for immediate use (uses cached data)
   const getSchemaAcquisitionsSync = (schemaId: string) => {
     return schemaAcquisitions[schemaId] || [
-      { id: 'acq_001', protocolName: schemas.find(s => s.id === schemaId)?.name || 'Unknown', seriesDescription: 'Loading...' }
+      { id: '0', protocolName: schemas.find(s => s.id === schemaId)?.name || 'Unknown', seriesDescription: 'Loading...' }
     ];
   };
 
@@ -147,6 +150,11 @@ const SchemaSelectionCard: React.FC<SchemaSelectionCardProps> = ({
     });
   }, [schemas, getSchemaContent]);
 
+  // Filter schemas by category
+  const librarySchemas = schemas.filter(s => s.category === 'Library');
+  const uploadedSchemas = schemas.filter(s => s.category === 'Uploaded Schema');
+  const displayedSchemas = activeTab === 'library' ? librarySchemas : uploadedSchemas;
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 h-fit">
       <div className="mb-4">
@@ -155,13 +163,55 @@ const SchemaSelectionCard: React.FC<SchemaSelectionCardProps> = ({
         </h4>
       </div>
 
-      {/* Upload Area */}
-      {onSchemaUpload && (
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-4">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('library')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'library'
+                ? 'border-medical-600 text-medical-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center">
+              <Library className="h-4 w-4 mr-2" />
+              Library
+              {librarySchemas.length > 0 && (
+                <span className="ml-2 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
+                  {librarySchemas.length}
+                </span>
+              )}
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveTab('uploaded')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'uploaded'
+                ? 'border-medical-600 text-medical-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center">
+              <FolderOpen className="h-4 w-4 mr-2" />
+              Uploaded
+              {uploadedSchemas.length > 0 && (
+                <span className="ml-2 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
+                  {uploadedSchemas.length}
+                </span>
+              )}
+            </div>
+          </button>
+        </nav>
+      </div>
+
+      {/* Upload Area - only show on uploaded tab */}
+      {onSchemaUpload && activeTab === 'uploaded' && (
         <div className="mb-4">
           <div
             className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-              dragActive 
-                ? 'border-medical-400 bg-medical-50' 
+              dragActive
+                ? 'border-medical-400 bg-medical-50'
                 : 'border-gray-300 hover:border-gray-400'
             }`}
             onDragEnter={handleDrag}
@@ -187,7 +237,7 @@ const SchemaSelectionCard: React.FC<SchemaSelectionCardProps> = ({
       )}
 
       <div className="space-y-2 max-h-96 overflow-y-auto">
-        {schemas.map((template) => {
+        {displayedSchemas.map((template) => {
           const isExpanded = expandedSchemas.has(template.id);
           const acquisitions = getSchemaAcquisitionsSync(template.id);
           const hasMultipleAcquisitions = acquisitions.length > 1;
@@ -244,12 +294,9 @@ const SchemaSelectionCard: React.FC<SchemaSelectionCardProps> = ({
                           {template.description || 'No description available'}
                         </p>
                         <div className="flex items-center space-x-2 text-xs text-gray-500 ml-6">
-                          <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                            {template.category}
-                          </span>
                           <span className={`px-1.5 py-0.5 rounded-full ${
-                            template.format === 'json' 
-                              ? 'bg-blue-100 text-blue-700' 
+                            template.format === 'json'
+                              ? 'bg-blue-100 text-blue-700'
                               : 'bg-green-100 text-green-700'
                           }`}>
                             {template.format.toUpperCase()}
@@ -295,9 +342,11 @@ const SchemaSelectionCard: React.FC<SchemaSelectionCardProps> = ({
         })}
       </div>
 
-      {schemas.length === 0 && (
+      {displayedSchemas.length === 0 && (
         <p className="text-sm text-gray-500 text-center py-4">
-          {emptyMessage}
+          {activeTab === 'library'
+            ? 'No library schemas available.'
+            : 'No uploaded schemas. Upload a schema to get started.'}
         </p>
       )}
     </div>

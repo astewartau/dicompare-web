@@ -984,17 +984,37 @@ json.dumps(formatted_result)
       if (!indexResponse.ok) {
         throw new Error('Failed to load schema index');
       }
-      const schemaIndex = await indexResponse.json();
-      
-      // Convert repository format to SchemaTemplate format for UI
-      return schemaIndex.map((schema: any) => ({
-        id: schema.id,
-        name: schema.name,
-        description: schema.description,
-        category: schema.category,
-        content: '', // Content will be loaded when schema is selected via parseSchema()
-        format: 'json' as const
-      }));
+      const schemaPaths = await indexResponse.json();
+
+      // Load each schema file and extract metadata from it
+      const schemas = await Promise.all(
+        schemaPaths.map(async (path: string) => {
+          try {
+            const response = await fetch(path);
+            if (!response.ok) return null;
+
+            const schemaData = await response.json();
+
+            // Extract metadata from the actual schema file
+            return {
+              id: path.replace('/schemas/', '').replace('.json', ''),
+              name: schemaData.name || 'Unnamed Schema',
+              description: schemaData.description || '',
+              category: 'Library', // All library schemas get this category
+              content: '', // Content will be loaded when schema is selected
+              format: 'json' as const,
+              version: schemaData.version,
+              authors: schemaData.authors || []
+            };
+          } catch (error) {
+            console.error(`Failed to load schema at ${path}:`, error);
+            return null;
+          }
+        })
+      );
+
+      // Filter out any failed loads
+      return schemas.filter(s => s !== null) as SchemaTemplate[];
     } catch (error) {
       console.error('Failed to load example schemas from repository:', error);
       // Fallback to empty array if repository loading fails
@@ -1079,6 +1099,16 @@ json.dumps(formatted_result)
               value: field.value,
               tolerance: field.tolerance
             };
+          } else if (field.contains_any !== undefined) {
+            validationRule = {
+              type: 'contains_any',
+              contains_any: field.contains_any
+            };
+          } else if (field.contains_all !== undefined) {
+            validationRule = {
+              type: 'contains_all',
+              contains_all: field.contains_all
+            };
           } else if (field.contains !== undefined) {
             validationRule = {
               type: 'contains',
@@ -1125,6 +1155,16 @@ json.dumps(formatted_result)
                 type: 'tolerance',
                 value: field.value,
                 tolerance: field.tolerance
+              };
+            } else if (field.contains_any !== undefined) {
+              validationRule = {
+                type: 'contains_any',
+                contains_any: field.contains_any
+              };
+            } else if (field.contains_all !== undefined) {
+              validationRule = {
+                type: 'contains_all',
+                contains_all: field.contains_all
               };
             } else if (field.contains !== undefined) {
               validationRule = {
