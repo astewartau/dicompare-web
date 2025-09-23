@@ -8,6 +8,7 @@ import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { SchemaUploadModal } from '../schema/SchemaUploadModal';
 import AcquisitionTable from '../schema/AcquisitionTable';
 import SchemaSelector from '../schema/SchemaSelector';
+import ComplianceReportModal from './ComplianceReportModal';
 
 // ✅ MOVE COMPONENT OUTSIDE TO PREVENT RECREATION!
 const SchemaAcquisitionDisplay = React.memo<{
@@ -169,6 +170,8 @@ const DataLoadingAndMatching: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [schemaAcquisitions, setSchemaAcquisitions] = useState<Map<string, Acquisition>>(new Map());
+  const [showComplianceReport, setShowComplianceReport] = useState(false);
+  const [allComplianceResults, setAllComplianceResults] = useState<Map<string, any[]>>(new Map());
 
   // Clear cache for debugging - remove this later
   useEffect(() => {
@@ -696,8 +699,31 @@ const DataLoadingAndMatching: React.FC = () => {
     });
   };
 
-  const handleContinue = () => {
-    // Navigate to analysis or export
+  const handleContinue = async () => {
+    // Collect all compliance results for the report
+    const reportResults = new Map<string, any[]>();
+
+    for (const acquisition of loadedData) {
+      const pairing = getAcquisitionPairing(acquisition.id);
+      if (pairing) {
+        try {
+          // Get compliance results for this acquisition
+          const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
+            acquisition,
+            pairing.schemaId,
+            getSchemaContent,
+            pairing.acquisitionId
+          );
+          reportResults.set(acquisition.id, validationResults);
+        } catch (error) {
+          console.error(`Failed to get compliance results for ${acquisition.id}:`, error);
+          reportResults.set(acquisition.id, []);
+        }
+      }
+    }
+
+    setAllComplianceResults(reportResults);
+    setShowComplianceReport(true);
   };
 
   // Memoize the preselected schema binding to prevent unnecessary re-renders
@@ -969,6 +995,15 @@ const DataLoadingAndMatching: React.FC = () => {
           setUploadedFile(null);
         }}
         preloadedFile={uploadedFile}
+      />
+
+      {/* Compliance Report Modal */}
+      <ComplianceReportModal
+        isOpen={showComplianceReport}
+        onClose={() => setShowComplianceReport(false)}
+        acquisitions={loadedData.filter(acq => schemaPairings.has(acq.id))}
+        schemaPairings={schemaPairings}
+        complianceResults={allComplianceResults}
       />
 
       {/* Continue Button */}

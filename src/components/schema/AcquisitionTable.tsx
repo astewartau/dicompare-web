@@ -89,6 +89,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [isValidatingRules, setIsValidatingRules] = useState(false);
   const [validationRuleError, setValidationRuleError] = useState<string | null>(null);
   const [allComplianceResults, setAllComplianceResults] = useState<ComplianceFieldResult[]>([]);
+  const [isComplianceSummaryExpanded, setIsComplianceSummaryExpanded] = useState(false);
 
   const isComplianceMode = mode === 'compliance';
   const isSchemaMode = isComplianceMode || Boolean(schemaId);
@@ -545,6 +546,175 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'acquisition')}
                 onSeriesNameUpdate={onSeriesNameUpdate}
               />
+            </div>
+          )}
+
+          {/* Compliance Summary - Only show in compliance mode */}
+          {isComplianceMode && realAcquisition && (
+            <div className="mt-4 border-t border-gray-200 pt-4">
+              {(() => {
+                // Combine all compliance results
+                const allResults = [
+                  ...allComplianceResults,
+                  ...validationRuleResults
+                ];
+
+                // Count by status
+                const statusCounts = {
+                  pass: allResults.filter(r => r.status === 'pass').length,
+                  fail: allResults.filter(r => r.status === 'fail').length,
+                  warning: allResults.filter(r => r.status === 'warning').length,
+                  na: allResults.filter(r => r.status === 'na').length,
+                  unknown: allResults.filter(r => r.status === 'unknown').length
+                };
+
+                // Get errors and warnings for detailed list
+                const errors = allResults.filter(r => r.status === 'fail');
+                const warnings = allResults.filter(r => r.status === 'warning');
+
+                return (
+                  <>
+                    {/* Summary Header with Toggle */}
+                    <div
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded"
+                      onClick={() => setIsComplianceSummaryExpanded(!isComplianceSummaryExpanded)}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <button
+                          className="p-0.5 text-gray-500 hover:text-gray-700"
+                          aria-label={isComplianceSummaryExpanded ? "Collapse summary" : "Expand summary"}
+                        >
+                          {isComplianceSummaryExpanded ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </button>
+                        <h4 className="text-sm font-semibold text-gray-900">Compliance Summary</h4>
+                      </div>
+
+                      {/* Always show status counts in header */}
+                      <div className="flex items-center gap-2">
+                        {statusCounts.fail > 0 && (
+                          <div className="flex items-center space-x-1 bg-red-50 px-2 py-0.5 rounded-full">
+                            <XCircle className="h-3 w-3 text-red-600" />
+                            <span className="text-xs font-medium text-red-900">{statusCounts.fail}</span>
+                          </div>
+                        )}
+                        {statusCounts.warning > 0 && (
+                          <div className="flex items-center space-x-1 bg-yellow-50 px-2 py-0.5 rounded-full">
+                            <AlertTriangle className="h-3 w-3 text-yellow-600" />
+                            <span className="text-xs font-medium text-yellow-900">{statusCounts.warning}</span>
+                          </div>
+                        )}
+                        {statusCounts.pass > 0 && (
+                          <div className="flex items-center space-x-1 bg-green-50 px-2 py-0.5 rounded-full">
+                            <CheckCircle className="h-3 w-3 text-green-600" />
+                            <span className="text-xs font-medium text-green-900">{statusCounts.pass}</span>
+                          </div>
+                        )}
+                        {statusCounts.na > 0 && (
+                          <div className="flex items-center space-x-1 bg-gray-100 px-2 py-0.5 rounded-full">
+                            <HelpCircle className="h-3 w-3 text-gray-500" />
+                            <span className="text-xs font-medium text-gray-700">{statusCounts.na}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Expandable Content */}
+                    {isComplianceSummaryExpanded && (
+                      <div className="mt-3">
+                        {/* Detailed Status Counts */}
+                        <div className="flex flex-wrap gap-3 mb-4">
+                          <div className="flex items-center space-x-1.5 bg-green-50 px-3 py-1.5 rounded-full">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <span className="text-sm font-medium text-green-900">{statusCounts.pass} Passed</span>
+                          </div>
+                          <div className="flex items-center space-x-1.5 bg-red-50 px-3 py-1.5 rounded-full">
+                            <XCircle className="h-4 w-4 text-red-600" />
+                            <span className="text-sm font-medium text-red-900">{statusCounts.fail} Failed</span>
+                          </div>
+                          <div className="flex items-center space-x-1.5 bg-yellow-50 px-3 py-1.5 rounded-full">
+                            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                            <span className="text-sm font-medium text-yellow-900">{statusCounts.warning} Warnings</span>
+                          </div>
+                          <div className="flex items-center space-x-1.5 bg-gray-100 px-3 py-1.5 rounded-full">
+                            <HelpCircle className="h-4 w-4 text-gray-500" />
+                            <span className="text-sm font-medium text-gray-700">{statusCounts.na} N/A</span>
+                          </div>
+                        </div>
+
+                        {/* Errors List */}
+                        {errors.length > 0 && (
+                          <div className="mb-3">
+                            <h5 className="text-xs font-semibold text-red-700 mb-2 flex items-center">
+                              <XCircle className="h-3.5 w-3.5 mr-1" />
+                              Errors ({errors.length})
+                            </h5>
+                            <div className="space-y-1">
+                              {errors.map((error, idx) => (
+                                <div key={idx} className="bg-red-50 border border-red-200 rounded px-3 py-2">
+                                  <div className="flex items-start">
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-red-900">
+                                        {error.fieldName || error.rule_name}
+                                        {error.seriesName && (
+                                          <span className="ml-2 text-red-700">({error.seriesName})</span>
+                                        )}
+                                      </p>
+                                      <p className="text-xs text-red-700 mt-0.5">{error.message}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Warnings List */}
+                        {warnings.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-yellow-700 mb-2 flex items-center">
+                              <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                              Warnings ({warnings.length})
+                            </h5>
+                            <div className="space-y-1">
+                              {warnings.map((warning, idx) => (
+                                <div key={idx} className="bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
+                                  <div className="flex items-start">
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-yellow-900">
+                                        {warning.fieldName || warning.rule_name}
+                                        {warning.seriesName && (
+                                          <span className="ml-2 text-yellow-700">({warning.seriesName})</span>
+                                        )}
+                                      </p>
+                                      <p className="text-xs text-yellow-700 mt-0.5">{warning.message}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Success message if all pass */}
+                        {errors.length === 0 && warnings.length === 0 && statusCounts.pass > 0 && (
+                          <div className="bg-green-50 border border-green-200 rounded px-4 py-3">
+                            <div className="flex items-center">
+                              <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                              <p className="text-sm text-green-800 font-medium">
+                                All compliance checks passed successfully!
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>
