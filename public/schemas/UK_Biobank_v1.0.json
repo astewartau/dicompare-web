@@ -1,0 +1,1183 @@
+{
+  "version": "1.0",
+  "name": "UK Biobank",
+  "description": "Auto-generated validation template",
+  "created": "2025-09-17T05:13:11.521Z",
+  "authors": [
+    "Ashley Stewart"
+  ],
+  "acquisitions": {
+    "T1 structural brain images": {
+      "fields": [
+        {
+          "field": "SeriesDescription",
+          "tag": "0008,103E",
+          "value": "T1_p2_1mm_fov256_sag_TI_880"
+        },
+        {
+          "field": "SequenceName",
+          "tag": "0018,0024",
+          "value": "*tfl3d1_16ns"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "value": [
+            "SK",
+            "SP",
+            "MP",
+            "OSP"
+          ]
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "value": [
+            "GR",
+            "IR"
+          ]
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS"
+        },
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "value": "Skyra"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "3D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 1
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            1,
+            1
+          ]
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 256
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 256
+        },
+        {
+          "field": "AcquisitionMatrix",
+          "tag": "0018,1310",
+          "value": [
+            0,
+            256,
+            256,
+            0
+          ]
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 2000
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 2.01
+        },
+        {
+          "field": "InversionTime",
+          "tag": "0018,0082",
+          "value": 880
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 8
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 1
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 240,
+          "tolerance": 1
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "ROW"
+        },
+        {
+          "field": "NumberOfPhaseEncodingSteps",
+          "tag": "0018,0089",
+          "value": 269
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "value": 3,
+          "tolerance": 0.3
+        },
+        {
+          "field": "ImagingFrequency",
+          "tag": "0018,0084",
+          "value": 123.26391,
+          "tolerance": 1
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body"
+        },
+        {
+          "field": "PercentSampling",
+          "tag": "0018,0093",
+          "value": 100
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100
+        },
+        {
+          "field": "ScanOptions",
+          "tag": "0018,0022",
+          "value": "IR"
+        },
+        {
+          "field": "AngioFlag",
+          "tag": "0018,0025",
+          "value": "N"
+        }
+      ],
+      "series": [
+        {
+          "name": "Series_001",
+          "fields": [
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "ND",
+                "NORM"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Series_002",
+          "fields": [
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "ND"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Functional brain images - task": {
+      "fields": [
+        {
+          "field": "SequenceName",
+          "tag": "0018,0024",
+          "value": "epfid2d1_88"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "value": [
+            "SK",
+            "SS"
+          ]
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "value": "EP"
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS"
+        },
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "value": "Skyra"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 2.4
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            2.38636,
+            2.38636
+          ]
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 704
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 704
+        },
+        {
+          "field": "AcquisitionMatrix",
+          "tag": "0018,1310",
+          "value": [
+            88,
+            0,
+            0,
+            88
+          ]
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 735
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 42.4
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 51
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 88
+        },
+        {
+          "field": "MultibandFactor",
+          "tag": "unknown_MultibandFactor",
+          "value": 8
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 2030,
+          "tolerance": 1
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "COL"
+        },
+        {
+          "field": "NumberOfPhaseEncodingSteps",
+          "tag": "0018,0089",
+          "value": 88
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "value": 3,
+          "tolerance": 0.3
+        },
+        {
+          "field": "ImagingFrequency",
+          "tag": "0018,0084",
+          "value": 123.26392,
+          "tolerance": 1
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body"
+        },
+        {
+          "field": "PercentSampling",
+          "tag": "0018,0093",
+          "value": 100
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100
+        },
+        {
+          "field": "ScanOptions",
+          "tag": "0018,0022",
+          "value": "FS"
+        },
+        {
+          "field": "AngioFlag",
+          "tag": "0018,0025",
+          "value": "N"
+        }
+      ],
+      "series": [
+        {
+          "name": "Series_002",
+          "fields": [
+            {
+              "field": "SeriesDescription",
+              "tag": "0008,103E",
+              "value": "MB8_FMRI_fov210_2.4mm_task"
+            },
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "MB",
+                "ND",
+                "MOSAIC"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Series_001",
+          "fields": [
+            {
+              "field": "SeriesDescription",
+              "tag": "0008,103E",
+              "value": "MB8_FMRI_fov210_2.4mm_task_SBRef"
+            },
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "ND",
+                "MOSAIC"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Multiband diffusion brain images": {
+      "fields": [
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "value": [
+            "SK",
+            "SS"
+          ]
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "value": "EP"
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS"
+        },
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "value": "Skyra"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 2
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            2.01923,
+            2.01923
+          ]
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 936
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 936
+        },
+        {
+          "field": "AcquisitionMatrix",
+          "tag": "0018,1310",
+          "value": [
+            104,
+            0,
+            0,
+            104
+          ]
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 3600
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 92
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 78
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 78
+        },
+        {
+          "field": "MultibandFactor",
+          "tag": "unknown_MultibandFactor",
+          "value": 3
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 1780,
+          "tolerance": 1
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "COL"
+        },
+        {
+          "field": "NumberOfPhaseEncodingSteps",
+          "tag": "0018,0089",
+          "value": 78
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "value": 3,
+          "tolerance": 0.3
+        },
+        {
+          "field": "ImagingFrequency",
+          "tag": "0018,0084",
+          "value": 123.2639,
+          "tolerance": 1
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body"
+        },
+        {
+          "field": "PercentSampling",
+          "tag": "0018,0093",
+          "value": 100
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100
+        },
+        {
+          "field": "ScanOptions",
+          "tag": "0018,0022",
+          "value": [
+            "PFP",
+            "FS"
+          ]
+        },
+        {
+          "field": "AngioFlag",
+          "tag": "0018,0025",
+          "value": "N"
+        },
+        {
+          "field": "ImageType",
+          "tag": "0008,0008",
+          "value": [
+            "ORIGINAL",
+            "PRIMARY",
+            "DIFFUSION",
+            "NONE",
+            "MB",
+            "ND",
+            "MOSAIC"
+          ]
+        }
+      ],
+      "series": [],
+      "rules": [
+        {
+          "id": "custom_1758075459044",
+          "name": "Diffusion Directions",
+          "description": "Checks expected number of diffusion gradient directions",
+          "implementation": "# Custom validation logic\n# Access field data with value[\"FieldName\"]\n# Raise ValidationError for failures\n# Function should not return anything\n\nn_expected = 100\nn_actual = value[\"DiffusionGradientDirectionSequence\"].nunique()\n\nif n_actual != n_expected:\n    raise ValueError(f\"Expected {n_expected} distinct diffusion gradient directions, but found {n_actual}.\")\n",
+          "parameters": {},
+          "fields": [
+            "DiffusionGradientDirectionSequence"
+          ]
+        },
+        {
+          "id": "custom_1758079469072",
+          "name": "B-value Distribution Validation",
+          "description": "Validate b-value shell distribution",
+          "implementation": "b_values = value[\"DiffusionBValue\"]\nb0_count = sum(1 for b in b_values if b < 50)  # b≈0 images\nb1000_count = sum(1 for b in b_values if 900 <= b <= 1100)  # b≈1000 shell\nb2000_count = sum(1 for b in b_values if 1900 <= b <= 2100)  # b≈2000 shell\n\nif b0_count < 8 or b0_count > 12:\n  raise ValueError(f\"Expected ~10 b=0 images, found {b0_count}\")\n\nif b1000_count < 45 or b1000_count > 55:\n  raise ValueError(f\"Expected ~50 b=1000 images, found {b1000_count}\")\n\nif b2000_count < 45 or b2000_count > 55:\n  raise ValueError(f\"Expected ~50 b=2000 images, found {b2000_count}\")",
+          "parameters": {},
+          "fields": [
+            "DiffusionBValue"
+          ]
+        }
+      ]
+    },
+    "Susceptibility weighted brain images": {
+      "fields": [
+        {
+          "field": "SeriesDescription",
+          "tag": "0008,103E",
+          "value": "SWI_3mm_Updated_v1.1"
+        },
+        {
+          "field": "SequenceName",
+          "tag": "0018,0024",
+          "value": "*fl3d2r"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "value": [
+            "SP",
+            "OSP"
+          ]
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "value": "GR"
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS"
+        },
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "value": "Skyra"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "3D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 3
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            0.79861,
+            0.79861
+          ]
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 288
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 256
+        },
+        {
+          "field": "AcquisitionMatrix",
+          "tag": "0018,1310",
+          "value": [
+            0,
+            288,
+            256,
+            0
+          ]
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 27
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 15
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 2
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 140,
+          "tolerance": 1
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "ROW"
+        },
+        {
+          "field": "NumberOfPhaseEncodingSteps",
+          "tag": "0018,0089",
+          "value": 223
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "value": 3,
+          "tolerance": 0.3
+        },
+        {
+          "field": "ImagingFrequency",
+          "tag": "0018,0084",
+          "value": 123.26392,
+          "tolerance": 1
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body"
+        },
+        {
+          "field": "PercentSampling",
+          "tag": "0018,0093",
+          "value": 100
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 88.88889
+        },
+        {
+          "field": "ScanOptions",
+          "tag": "0018,0022",
+          "value": "PFP"
+        },
+        {
+          "field": "AngioFlag",
+          "tag": "0018,0025",
+          "value": "N"
+        }
+      ],
+      "series": [
+        {
+          "name": "TE1",
+          "fields": [
+            {
+              "field": "EchoTime",
+              "tag": "0018,0081",
+              "value": 9.42
+            }
+          ]
+        },
+        {
+          "name": "TE2",
+          "fields": [
+            {
+              "field": "EchoTime",
+              "tag": "0018,0081",
+              "value": 19.7
+            }
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "id": "custom_1758084379924",
+          "name": "Expected number of echoes",
+          "description": "Expected two echoes",
+          "implementation": "expected = 2\nactual = value['EchoTime'].nunique()\n\nif expected != actual:\n  raise ValidationError(f\"Expected {expected} echoes but got {actual}.\")",
+          "parameters": {},
+          "fields": [
+            "EchoTime"
+          ]
+        },
+        {
+          "id": "validate_image_type",
+          "name": "Valid Magnitude/Phase Pairs",
+          "description": "Each EchoTime must have at least one magnitude and phase image.",
+          "implementation": "magnitude_counts = []\nphase_counts = []\n\nfor echo_time, group in value.groupby(\"EchoTime\"):\n    image_types = group[\"ImageType\"]\n    \n    # Count occurrences of 'M' and 'P' in ImageType tuples\n    magnitude_counts.append(sum('M' in image for image in image_types))\n    phase_counts.append(sum('P' in image for image in image_types))\n\nif not all(m >= 1 for m in magnitude_counts):\n    raise ValidationError(f\"Each EchoTime must have at least one magnitude image. Found {magnitude_counts}.\")\nif not all(p >= 1 for p in phase_counts):\n    raise ValidationError(f\"Each EchoTime must have at least one phase image. Found {phase_counts}.\")\n",
+          "parameters": {},
+          "fields": [
+            "ImageType",
+            "EchoTime"
+          ]
+        }
+      ]
+    },
+    "T2 FLAIR structural brain images": {
+      "fields": [
+        {
+          "field": "SeriesDescription",
+          "tag": "0008,103E",
+          "value": "T2_flair_sag_p2_1mm_FS_ellip_pf78"
+        },
+        {
+          "field": "SequenceName",
+          "tag": "0018,0024",
+          "value": "*spcir_284ns"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "value": [
+            "SK",
+            "SP",
+            "MP"
+          ]
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "value": [
+            "SE",
+            "IR"
+          ]
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS"
+        },
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "value": "Skyra"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "3D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 1.05
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            1,
+            1
+          ]
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 256
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 256
+        },
+        {
+          "field": "AcquisitionMatrix",
+          "tag": "0018,1310",
+          "value": [
+            0,
+            256,
+            256,
+            0
+          ]
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 5000
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 395
+        },
+        {
+          "field": "InversionTime",
+          "tag": "0018,0082",
+          "value": 1800
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 120
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 254
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 780,
+          "tolerance": 1
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "ROW"
+        },
+        {
+          "field": "NumberOfPhaseEncodingSteps",
+          "tag": "0018,0089",
+          "value": 209
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "value": 3,
+          "tolerance": 0.3
+        },
+        {
+          "field": "ImagingFrequency",
+          "tag": "0018,0084",
+          "value": 123.26392,
+          "tolerance": 1
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body"
+        },
+        {
+          "field": "PercentSampling",
+          "tag": "0018,0093",
+          "value": 100
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100
+        },
+        {
+          "field": "ScanOptions",
+          "tag": "0018,0022",
+          "value": [
+            "IR",
+            "PFP",
+            "FS"
+          ]
+        },
+        {
+          "field": "AngioFlag",
+          "tag": "0018,0025",
+          "value": "N"
+        }
+      ],
+      "series": [
+        {
+          "name": "Series_001",
+          "fields": [
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "ND"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Series_002",
+          "fields": [
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "ND",
+                "NORM"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Functional brain images - resting": {
+      "fields": [
+        {
+          "field": "SequenceName",
+          "tag": "0018,0024",
+          "value": "epfid2d1_88"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "value": [
+            "SK",
+            "SS"
+          ]
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "value": "EP"
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS"
+        },
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "value": "Skyra"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 2.4
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            2.38636,
+            2.38636
+          ]
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 704
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 704
+        },
+        {
+          "field": "AcquisitionMatrix",
+          "tag": "0018,1310",
+          "value": [
+            88,
+            0,
+            0,
+            88
+          ]
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 735
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 42.4
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 51
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 88
+        },
+        {
+          "field": "MultibandFactor",
+          "tag": "unknown_MultibandFactor",
+          "value": 8
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 2030,
+          "tolerance": 1
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "COL"
+        },
+        {
+          "field": "NumberOfPhaseEncodingSteps",
+          "tag": "0018,0089",
+          "value": 88
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "value": 3,
+          "tolerance": 0.3
+        },
+        {
+          "field": "ImagingFrequency",
+          "tag": "0018,0084",
+          "value": 123.26389,
+          "tolerance": 1
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body"
+        },
+        {
+          "field": "PercentSampling",
+          "tag": "0018,0093",
+          "value": 100
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100
+        },
+        {
+          "field": "ScanOptions",
+          "tag": "0018,0022",
+          "value": "FS"
+        },
+        {
+          "field": "AngioFlag",
+          "tag": "0018,0025",
+          "value": "N"
+        }
+      ],
+      "series": [
+        {
+          "name": "Series_002",
+          "fields": [
+            {
+              "field": "SeriesDescription",
+              "tag": "0008,103E",
+              "value": "MB8_FMRI_fov210_2.4mm_resting"
+            },
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "MB",
+                "ND",
+                "MOSAIC"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Series_001",
+          "fields": [
+            {
+              "field": "SeriesDescription",
+              "tag": "0008,103E",
+              "value": "MB8_FMRI_fov210_2.4mm_resting_SBRef"
+            },
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "ND",
+                "MOSAIC"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "global_constraints": {}
+}

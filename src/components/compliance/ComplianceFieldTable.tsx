@@ -51,11 +51,16 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     setError(null);
 
     try {
-      console.log(`Loading schema fields for schema ${schemaId} with acquisitionIndex ${acquisitionId}`);
-      
+      console.log('🔍 SCHEMA DEBUG: Loading schema fields');
+      console.log('🔍 SCHEMA DEBUG: schemaId =', schemaId);
+      console.log('🔍 SCHEMA DEBUG: acquisitionId =', acquisitionId);
+
       // Get schema fields from Python API, passing getSchemaContent for uploaded schemas
       const apiFields: FieldInfo[] = await dicompareAPI.getSchemaFields(schemaId, getSchemaContent, acquisitionId);
-      
+
+      console.log('🔍 SCHEMA DEBUG: Raw API returned', apiFields.length, 'fields');
+      console.log('🔍 SCHEMA DEBUG: First few fields:', apiFields.slice(0, 3).map(f => ({ name: f.name, tag: f.tag, level: f.level })));
+
       // Convert API format to DicomField format
       const schemaFields: DicomField[] = apiFields.map(field => ({
         tag: field.tag,
@@ -69,12 +74,13 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
         seriesName: field.seriesName // Pass through the series name
       }));
 
+      console.log('🔍 SCHEMA DEBUG: Converted to', schemaFields.length, 'schema fields');
       setLoadedSchemaFields(schemaFields);
-      
+
       // Extract validation rules if they exist
       const rules = (apiFields as any).validationRules || [];
       setValidationRules(rules);
-      console.log(`Extracted ${rules.length} validation rules from schema`);
+      console.log('🔍 SCHEMA DEBUG: Found', rules.length, 'validation rules');
     } catch (err) {
       console.error('Failed to load schema fields:', err);
       setError('Failed to load schema fields from API');
@@ -92,7 +98,7 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
     setError(null);
 
     try {
-      console.log(`Validating acquisition against schema ${schemaId} with acquisitionIndex ${acquisitionId}`);
+      // Validating acquisition against schema
       
       // Use real dicompare validation against the selected schema
       const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
@@ -127,6 +133,7 @@ const ComplianceFieldTable: React.FC<ComplianceFieldTableProps> = ({
 
   // Load schema fields when we have a schema (always load for display)
   useEffect(() => {
+    console.log('🔄 EFFECT DEBUG: useEffect triggered - schemaId =', schemaId, ', acquisitionId =', acquisitionId, ', isLoading =', isLoading, ', error =', error);
     if (schemaId && !isLoading && !error) {
       loadSchemaFields();
     }
