@@ -6,7 +6,7 @@ import { dicompareAPI } from '../../services/DicompareAPI';
 import { processUploadedFiles } from '../../utils/fileUploadUtils';
 import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { SchemaUploadModal } from '../schema/SchemaUploadModal';
-import AcquisitionTable from '../generate/AcquisitionTable';
+import AcquisitionTable from '../schema/AcquisitionTable';
 import SchemaSelector from '../schema/SchemaSelector';
 
 // ✅ MOVE COMPONENT OUTSIDE TO PREVENT RECREATION!

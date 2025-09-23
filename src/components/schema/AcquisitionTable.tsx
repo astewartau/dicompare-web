@@ -501,18 +501,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                     </table>
                   </div>
 
-                  {/* Validation Rules Compliance Status Summary */}
-                  {isComplianceMode && validationRuleResults.length > 0 && (
-                    <div className="mt-2 text-xs text-gray-600">
-                      <span className="text-green-600">{validationRuleResults.filter(r => r.status === 'pass').length} passed</span>
-                      {validationRuleResults.filter(r => r.status === 'fail').length > 0 && (
-                        <span className="ml-2 text-red-600">{validationRuleResults.filter(r => r.status === 'fail').length} failed</span>
-                      )}
-                      {validationRuleResults.filter(r => r.status === 'warning').length > 0 && (
-                        <span className="ml-2 text-yellow-600">{validationRuleResults.filter(r => r.status === 'warning').length} warnings</span>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
             </div>

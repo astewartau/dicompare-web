@@ -270,18 +270,6 @@ const FieldTable: React.FC<FieldTableProps> = ({
         />
       )}
 
-      {/* Compliance Status Summary */}
-      {isComplianceMode && complianceResults.length > 0 && (
-        <div className="mt-2 text-xs text-gray-600">
-          <span className="text-green-600">{complianceResults.filter(r => r.status === 'pass').length} passed</span>
-          {complianceResults.filter(r => r.status === 'fail').length > 0 && (
-            <span className="ml-2 text-red-600">{complianceResults.filter(r => r.status === 'fail').length} failed</span>
-          )}
-          {complianceResults.filter(r => r.status === 'warning').length > 0 && (
-            <span className="ml-2 text-yellow-600">{complianceResults.filter(r => r.status === 'warning').length} warnings</span>
-          )}
-        </div>
-      )}
     </>
   );
 };

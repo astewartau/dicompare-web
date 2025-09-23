@@ -2,18 +2,19 @@ import React from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, FileText } from 'lucide-react';
 import { AcquisitionProvider } from '../contexts/AcquisitionContext';
-import BuildSchema from '../components/generate/BuildSchema';
-import EnterMetadata from '../components/generate/EnterMetadata';
-import DownloadSchema from '../components/generate/DownloadSchema';
+import { SchemaProvider } from '../contexts/SchemaContext';
+import BuildSchema from '../components/schema/BuildSchema';
+import EnterMetadata from '../components/schema/EnterMetadata';
+import DownloadSchema from '../components/schema/DownloadSchema';
 
-const GenerateTemplate: React.FC = () => {
+const SchemaBuilder: React.FC = () => {
   const location = useLocation();
   const currentStep = location.pathname.split('/').pop();
 
   const steps = [
-    { id: 'build-schema', name: 'Build Schema', path: '/generate-template/build-schema' },
-    { id: 'enter-metadata', name: 'Enter Metadata', path: '/generate-template/enter-metadata' },
-    { id: 'download-schema', name: 'Download Schema', path: '/generate-template/download-schema' }
+    { id: 'build-schema', name: 'Build Schema', path: '/schema-builder/build-schema' },
+    { id: 'enter-metadata', name: 'Enter Metadata', path: '/schema-builder/enter-metadata' },
+    { id: 'download-schema', name: 'Download Schema', path: '/schema-builder/download-schema' }
   ];
 
   const getCurrentStepIndex = () => {
@@ -22,8 +23,9 @@ const GenerateTemplate: React.FC = () => {
   };
 
   return (
-    <AcquisitionProvider>
-      <div className="min-h-screen bg-gray-50">
+    <SchemaProvider>
+      <AcquisitionProvider>
+        <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <header className="bg-white shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -33,7 +35,7 @@ const GenerateTemplate: React.FC = () => {
                 Back to Home
               </Link>
               <FileText className="h-8 w-8 text-medical-600 mr-3" />
-              <h1 className="text-2xl font-bold text-gray-900">Generate Template</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Schema Builder</h1>
             </div>
           </div>
         </header>
@@ -79,9 +81,10 @@ const GenerateTemplate: React.FC = () => {
             <Route path="/download-schema" element={<DownloadSchema />} />
           </Routes>
         </div>
-      </div>
-    </AcquisitionProvider>
+        </div>
+      </AcquisitionProvider>
+    </SchemaProvider>
   );
 };
 
-export default GenerateTemplate;
+export default SchemaBuilder;

@@ -38,7 +38,7 @@ export const convertSchemaToAcquisition = async (
     const convertFields = (fields: any[] = [], level: 'acquisition' | 'series'): DicomField[] => {
       return fields.map(field => ({
         tag: field.tag || '',
-        name: field.name || field.tag || '',
+        name: field.name || field.field || field.tag || '',
         keyword: field.keyword,
         value: field.value || field.defaultValue || '',
         vr: field.vr || 'CS',
@@ -48,18 +48,21 @@ export const convertSchemaToAcquisition = async (
       }));
     };
 
+    // Only use actual defined fields, not fields extracted from rules
+    const allFields = acquisitionData.fields || [];
+
     // Build the acquisition object
     const acquisition: Acquisition = {
       id: `schema-${schema.id}-${acquisitionId}`,
       protocolName: acquisitionName,
-      seriesDescription: acquisitionData.description || `Schema template: ${acquisitionData.fields?.length || 0} fields`,
+      seriesDescription: acquisitionData.description || '',
       totalFiles: 0, // Schema templates don't have files
-      acquisitionFields: convertFields(acquisitionData.fields?.filter((f: any) => f.level === 'acquisition'), 'acquisition'),
-      seriesFields: convertFields(acquisitionData.fields?.filter((f: any) => f.level === 'series'), 'series'),
+      acquisitionFields: convertFields(allFields.filter((f: any) => !f.level || f.level === 'acquisition'), 'acquisition'),
+      seriesFields: convertFields(allFields.filter((f: any) => f.level === 'series'), 'series'),
       series: acquisitionData.series?.map((series: any, index: number) => ({
         name: series.name || `Series ${index + 1}`,
         fields: Object.fromEntries(
-          (acquisitionData.fields?.filter((f: any) => f.level === 'series') || []).map((field: any) => [
+          (allFields.filter((f: any) => f.level === 'series') || []).map((field: any) => [
             field.tag,
             {
               value: field.value || field.defaultValue || '',
@@ -69,7 +72,7 @@ export const convertSchemaToAcquisition = async (
           ])
         )
       })) || [],
-      validationFunctions: acquisitionData.validationFunctions || [],
+      validationFunctions: acquisitionData.rules || acquisitionData.validationFunctions || [],
       metadata: {
         manufacturer: schema.authors?.join(', ') || 'Schema Template',
         notes: `Template from schema: ${schema.name} v${schema.version || '1.0.0'}`,

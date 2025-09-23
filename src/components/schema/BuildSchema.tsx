@@ -1,11 +1,114 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, Loader2, Database } from 'lucide-react';
+import { Upload, Plus, Loader2, Database, Copy } from 'lucide-react';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
+import { useSchemaService } from '../../hooks/useSchemaService';
 import AcquisitionTable from './AcquisitionTable';
 import { processFieldForUI, processSeriesFieldValue } from '../../utils/fieldProcessing';
 import { processUploadedFiles } from '../../utils/fileUploadUtils';
+
+// Schema Card Component for the modal
+const SchemaCard: React.FC<{
+  schema: any;
+  onSelectAcquisition: (schemaId: string, acquisitionName: string) => void;
+  getSchemaContent: (schemaId: string) => Promise<string | null>;
+}> = ({ schema, onSelectAcquisition, getSchemaContent }) => {
+  const [acquisitions, setAcquisitions] = useState<string[]>([]);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadAcquisitions = async () => {
+    if (acquisitions.length > 0) return; // Already loaded
+
+    setIsLoading(true);
+    try {
+      const content = await getSchemaContent(schema.id);
+      if (content) {
+        const parsedSchema = JSON.parse(content);
+        if (parsedSchema.acquisitions && typeof parsedSchema.acquisitions === 'object') {
+          setAcquisitions(Object.keys(parsedSchema.acquisitions));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load acquisitions:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggle = () => {
+    if (!isExpanded) {
+      loadAcquisitions();
+    }
+    setIsExpanded(!isExpanded);
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-lg bg-white">
+      <div
+        className="p-4 cursor-pointer hover:bg-gray-50"
+        onClick={handleToggle}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <h5 className="font-medium text-gray-900">
+              {schema.title || schema.name || schema.filename || 'Untitled Schema'}
+            </h5>
+            {schema.description && (
+              <p className="text-sm text-gray-600 mt-1">{schema.description}</p>
+            )}
+            <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+              <span>v{schema.version || '1.0.0'}</span>
+              {schema.authors && schema.authors.length > 0 && (
+                <>
+                  <span>•</span>
+                  <span>by {schema.authors.join(', ')}</span>
+                </>
+              )}
+            </div>
+          </div>
+          <svg
+            className={`w-5 h-5 text-gray-400 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="border-t border-gray-200 p-4 bg-gray-50">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              <span className="text-sm text-gray-600">Loading acquisitions...</span>
+            </div>
+          ) : acquisitions.length > 0 ? (
+            <div>
+              <p className="text-sm text-gray-600 mb-3">Select an acquisition to import:</p>
+              <div className="space-y-2">
+                {acquisitions.map((acquisitionName) => (
+                  <button
+                    key={acquisitionName}
+                    onClick={() => onSelectAcquisition(schema.id, acquisitionName)}
+                    className="w-full text-left px-3 py-2 bg-white border border-gray-200 rounded-md hover:bg-blue-50 hover:border-blue-300 text-sm"
+                  >
+                    <span className="font-medium">{acquisitionName}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-4">No acquisitions found in this schema</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const BuildSchema: React.FC = () => {
   const navigate = useNavigate();
@@ -27,11 +130,20 @@ const BuildSchema: React.FC = () => {
     updateValidationFunction,
     deleteValidationFunction
   } = useAcquisitions();
+  const {
+    getAllUnifiedSchemas,
+    getSchemaContent,
+    librarySchemas,
+    uploadedSchemas
+  } = useSchemaService();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const [isPyodideReady, setIsPyodideReady] = useState(() => dicompareAPI.isInitialized());
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showSchemaModal, setShowSchemaModal] = useState(false);
+  const [isLoadingSchema, setIsLoadingSchema] = useState(false);
+  const [activeTab, setActiveTab] = useState<'library' | 'uploaded'>('library');
 
   // Initialize Pyodide only when needed
   const initializePyodideIfNeeded = useCallback(async () => {
@@ -508,8 +620,127 @@ const BuildSchema: React.FC = () => {
     setAcquisitions([]);
   };
 
+  const handleCopyFromSchema = async (schemaId: string, acquisitionName: string) => {
+    setIsLoadingSchema(true);
+    try {
+      // Get schema content
+      const schemaContent = await getSchemaContent(schemaId);
+      if (!schemaContent) {
+        throw new Error('Failed to load schema content');
+      }
+
+      const parsedSchema = JSON.parse(schemaContent);
+
+      // Find the specific acquisition
+      let targetAcquisition = null;
+      if (parsedSchema.acquisitions && typeof parsedSchema.acquisitions === 'object') {
+        targetAcquisition = parsedSchema.acquisitions[acquisitionName];
+      }
+
+      if (!targetAcquisition) {
+        throw new Error(`Acquisition "${acquisitionName}" not found in schema`);
+      }
+
+      // Convert schema acquisition to builder format
+      const newAcquisition = {
+        id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        protocolName: acquisitionName,
+        seriesDescription: targetAcquisition.description || `Imported from ${schemaId}`,
+        totalFiles: 0,
+        acquisitionFields: [],
+        seriesFields: [],
+        series: [],
+        validationFunctions: []
+      };
+
+      // Process acquisition-level fields
+      if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
+        newAcquisition.acquisitionFields = targetAcquisition.fields.map(field => processFieldForUI({
+          tag: field.tag,
+          name: field.field || field.name,
+          value: field.value || '',
+          vr: field.vr || 'UN',
+          level: 'acquisition',
+          dataType: field.dataType || 'string',
+          validationRule: field.validationRule || { type: 'exact' }
+        }));
+      }
+
+      // Process series-level fields and instances
+      if (targetAcquisition.series && Array.isArray(targetAcquisition.series)) {
+        const fieldMap = new Map();
+        const seriesInstances = [];
+
+        targetAcquisition.series.forEach(series => {
+          const seriesData = { name: series.name, fields: {} };
+
+          if (series.fields && Array.isArray(series.fields)) {
+            series.fields.forEach(f => {
+              // Add to unique field definitions
+              if (!fieldMap.has(f.tag)) {
+                fieldMap.set(f.tag, {
+                  tag: f.tag,
+                  name: f.field || f.name,
+                  value: '',
+                  vr: f.vr || 'UN',
+                  level: 'series',
+                  dataType: f.dataType || 'string',
+                  validationRule: f.validationRule || { type: 'exact' }
+                });
+              }
+
+              // Add value to this series instance
+              seriesData.fields[f.tag] = processSeriesFieldValue({
+                value: f.value,
+                field: f.field || f.name,
+                dataType: f.dataType || 'string',
+                validationRule: f.validationRule
+              }, f.field || f.name, f.tag);
+            });
+          }
+
+          seriesInstances.push(seriesData);
+        });
+
+        newAcquisition.seriesFields = Array.from(fieldMap.values()).map(field => processFieldForUI(field));
+        newAcquisition.series = seriesInstances;
+      }
+
+      // Process validation rules
+      if (targetAcquisition.rules && Array.isArray(targetAcquisition.rules)) {
+        newAcquisition.validationFunctions = targetAcquisition.rules.map(rule => ({
+          id: rule.id,
+          name: rule.name,
+          description: rule.description,
+          implementation: rule.implementation,
+          fields: rule.fields || [],
+          category: 'Custom',
+          testCases: rule.testCases || [],
+          customName: rule.name,
+          customDescription: rule.description,
+          customFields: rule.fields || [],
+          customImplementation: rule.implementation,
+          customTestCases: [],
+          enabledSystemFields: []
+        }));
+      }
+
+      // Add to acquisitions
+      setAcquisitions(prev => [...prev, newAcquisition]);
+      setShowSchemaModal(false);
+
+      console.log('✅ Successfully imported acquisition from schema');
+
+    } catch (error) {
+      console.error('❌ Failed to copy from schema:', error);
+      alert(`Failed to copy from schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoadingSchema(false);
+    }
+  };
+
   const handleContinue = () => {
-    navigate('/generate-template/enter-metadata');
+    navigate('/schema-builder/enter-metadata');
   };
 
   // Component to render unified upload card
@@ -533,7 +764,7 @@ const BuildSchema: React.FC = () => {
           {isAdditional ? 'Upload more files or add manual acquisitions' : 'Upload files, drag and drop, or create acquisitions manually'}
         </p>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* DICOM Upload Section */}
           <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/50 hover:bg-blue-50 transition-colors">
             <div className="text-center">
@@ -604,6 +835,36 @@ const BuildSchema: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Copy from Schema Section */}
+          <div className="border border-orange-200 rounded-lg p-4 bg-orange-50/50 hover:bg-orange-50 transition-colors">
+            <div className="text-center">
+              <Copy className="h-6 w-6 text-orange-500 mx-auto mb-2" />
+              <h4 className="text-sm font-medium text-gray-900 mb-1">Copy from Schema</h4>
+              <p className="text-xs text-gray-600 mb-3">Import from existing schemas</p>
+              <button
+                onClick={() => setShowSchemaModal(true)}
+                disabled={isLoadingSchema}
+                className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
+                  !isLoadingSchema
+                    ? 'text-white bg-orange-600 hover:bg-orange-700 cursor-pointer'
+                    : 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                }`}
+              >
+                {isLoadingSchema ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3 mr-1" />
+                    Browse Schemas
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -649,9 +910,9 @@ const BuildSchema: React.FC = () => {
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Build Schema - Step 1</h2>
             <p className="text-gray-600">
               {acquisitions.length > 0 ? (
-                'Review detected acquisitions and configure which DICOM fields to include in your validation template.'
+                'Review detected acquisitions and configure which DICOM fields to include in your validation schema.'
               ) : (
-                'Upload DICOM files to automatically extract metadata and create acquisition templates, or manually add acquisitions.'
+                'Upload DICOM files to automatically extract metadata and create acquisition schemas, or manually add acquisitions.'
               )}
             </p>
           </div>
@@ -739,6 +1000,119 @@ const BuildSchema: React.FC = () => {
           Continue to Metadata
         </button>
       </div>
+
+      {/* Schema Selection Modal */}
+      {showSchemaModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Select Schema and Acquisition</h3>
+                <button
+                  onClick={() => setShowSchemaModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="border-b border-gray-200">
+              <div className="px-6 pt-4">
+                <p className="text-gray-600 mb-4">
+                  Select a schema from your library, then choose a specific acquisition to import into your current schema.
+                </p>
+
+                {/* Tab Navigation */}
+                <nav className="flex space-x-8" aria-label="Tabs">
+                  <button
+                    onClick={() => setActiveTab('library')}
+                    className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'library'
+                        ? 'border-medical-500 text-medical-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Library Schemas
+                    {librarySchemas && librarySchemas.length > 0 && (
+                      <span className="ml-2 bg-gray-100 text-gray-900 rounded-full px-2 py-1 text-xs">
+                        {librarySchemas.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('uploaded')}
+                    className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'uploaded'
+                        ? 'border-medical-500 text-medical-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Uploaded Schemas
+                    {uploadedSchemas && uploadedSchemas.length > 0 && (
+                      <span className="ml-2 bg-gray-100 text-gray-900 rounded-full px-2 py-1 text-xs">
+                        {uploadedSchemas.length}
+                      </span>
+                    )}
+                  </button>
+                </nav>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {/* Library Schemas Tab */}
+              {activeTab === 'library' && (
+                <div>
+                  {librarySchemas && librarySchemas.length > 0 ? (
+                    <div className="space-y-3">
+                      {librarySchemas.map((schema) => (
+                        <SchemaCard
+                          key={schema.id}
+                          schema={schema}
+                          onSelectAcquisition={handleCopyFromSchema}
+                          getSchemaContent={getSchemaContent}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Copy className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                      <p>No library schemas available.</p>
+                      <p className="text-sm mt-1">Check back later as more schemas are added to the library.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Uploaded Schemas Tab */}
+              {activeTab === 'uploaded' && (
+                <div>
+                  {uploadedSchemas && uploadedSchemas.length > 0 ? (
+                    <div className="space-y-3">
+                      {uploadedSchemas.map((schema) => (
+                        <SchemaCard
+                          key={schema.id}
+                          schema={schema}
+                          onSelectAcquisition={handleCopyFromSchema}
+                          getSchemaContent={getSchemaContent}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Copy className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                      <p>No uploaded schemas available.</p>
+                      <p className="text-sm mt-1">Upload some schemas in the Check Compliance page or save schemas from the Schema Builder.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

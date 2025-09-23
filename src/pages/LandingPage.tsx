@@ -23,20 +23,20 @@ const LandingPage: React.FC = () => {
             Privacy-First DICOM Data Validation
           </h2>
           <p className="text-xl text-gray-600 mb-12 max-w-3xl mx-auto">
-            Generate standardized DICOM templates and validate data compliance across multi-site studies 
+            Generate standardized DICOM schemas and validate data compliance across multi-site studies 
             while ensuring sensitive medical data never leaves your environment.
           </p>
 
           {/* Feature Cards */}
           <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-16">
             <Link 
-              to="/generate-template" 
+              to="/schema-builder" 
               className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-2 border-transparent hover:border-medical-200"
             >
               <FileText className="h-10 w-10 text-medical-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Generate Template</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">Schema Builder</h3>
               <p className="text-gray-600 text-sm">
-                Create DICOM compliance templates from your reference datasets. 
+                Create DICOM compliance schemas from your reference datasets. 
                 Upload files, select validation fields, and generate reusable schemas.
               </p>
             </Link>
@@ -48,7 +48,7 @@ const LandingPage: React.FC = () => {
               <CheckCircle className="h-10 w-10 text-medical-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Check Compliance</h3>
               <p className="text-gray-600 text-sm">
-                Validate DICOM files against existing templates. 
+                Validate DICOM files against existing schemas. 
                 Get detailed compliance reports and identify data issues.
               </p>
             </Link>

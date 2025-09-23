@@ -1,12 +1,12 @@
 // Import for the combined export at the bottom
 import { mockAcquisitions } from './mockAcquisitions';
-import { mockTemplates } from './mockTemplates';
+import { mockTemplates } from './mockSchemas';
 import { mockComplianceReports, mockPublicReports } from './mockReports';
 import { commonAcquisitionFields } from './mockFields';
 
 // Re-export all mock data from the modular structure
 export { mockAcquisitions } from './mockAcquisitions';
-export { mockTemplates } from './mockTemplates';
+export { mockTemplates } from './mockSchemas';
 export { mockComplianceReports, mockPublicReports } from './mockReports';
 export { commonAcquisitionFields, commonSeriesFields, t1MprageFields, boldFmriFields, dtiFields } from './mockFields';
 

@@ -302,11 +302,11 @@ json.dumps(results)
   }
 
   /**
-   * Generate validation template from configured acquisitions using pure JavaScript.
-   * This replaces the Python-based template generation with a direct approach using form data.
+   * Generate validation schema from configured acquisitions using pure JavaScript.
+   * This replaces the Python-based schema generation with a direct approach using form data.
    */
-  async generateTemplateJS(acquisitions: any[], metadata: Record<string, any>): Promise<ValidationTemplate> {
-    console.log('🚀 Generating template using pure JavaScript approach');
+  async generateSchemaJS(acquisitions: any[], metadata: Record<string, any>): Promise<ValidationTemplate> {
+    console.log('🚀 Generating schema using pure JavaScript approach');
     
     // Ensure all fields have keywords populated
     const acquisitionsWithKeywords = await this.ensureKeywordsPopulated(acquisitions);
@@ -581,10 +581,10 @@ json.dumps(results)
   }
 
   /**
-   * Generate validation template from configured acquisitions.
+   * Generate validation schema from configured acquisitions.
    * Uses the real dicompare.generate_schema.create_json_schema() function.
-   * Uses cached DataFrame for efficient template generation.
-   * @deprecated Use generateTemplateJS instead for better keyword handling
+   * Uses cached DataFrame for efficient schema generation.
+   * @deprecated Use generateSchemaJS instead for better keyword handling
    */
   async generateTemplate(acquisitions: any[], metadata: Record<string, any>): Promise<ValidationTemplate> {
     await this.ensureInitialized();

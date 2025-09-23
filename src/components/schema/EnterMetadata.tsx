@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Tag, X, Plus } from 'lucide-react';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 
-interface TemplateMetadata {
+interface SchemaMetadata {
   name: string;
   description: string;
   authors: string[];
@@ -12,9 +12,9 @@ interface TemplateMetadata {
 
 const EnterMetadata: React.FC = () => {
   const navigate = useNavigate();
-  const { templateMetadata, setTemplateMetadata } = useAcquisitions();
+  const { schemaMetadata, setSchemaMetadata } = useAcquisitions();
   
-  const [metadata, setMetadata] = useState<TemplateMetadata>({
+  const [metadata, setMetadata] = useState<SchemaMetadata>({
     name: '',
     description: '',
     authors: [],
@@ -25,10 +25,10 @@ const EnterMetadata: React.FC = () => {
 
   // Load metadata from context on mount
   useEffect(() => {
-    if (templateMetadata) {
-      setMetadata(templateMetadata);
+    if (schemaMetadata) {
+      setMetadata(schemaMetadata);
     }
-  }, [templateMetadata]);
+  }, [schemaMetadata]);
 
   const addAuthor = () => {
     if (newAuthor.trim() && !metadata.authors.includes(newAuthor.trim())) {
@@ -61,7 +61,7 @@ const EnterMetadata: React.FC = () => {
     const newErrors: Record<string, string> = {};
 
     if (!metadata.name.trim()) {
-      newErrors.name = 'Template name is required';
+      newErrors.name = 'Schema name is required';
     }
 
     if (metadata.authors.length === 0) {
@@ -79,13 +79,13 @@ const EnterMetadata: React.FC = () => {
   const handleContinue = () => {
     if (validateForm()) {
       // Save metadata to context before navigating
-      setTemplateMetadata(metadata);
-      navigate('/generate-template/download-schema');
+      setSchemaMetadata(metadata);
+      navigate('/schema-builder/download-schema');
     }
   };
 
   const handleBack = () => {
-    navigate('/generate-template/build-schema');
+    navigate('/schema-builder/build-schema');
   };
 
   return (
@@ -93,16 +93,16 @@ const EnterMetadata: React.FC = () => {
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-4">Enter Metadata - Step 2</h2>
         <p className="text-gray-600">
-          Provide essential information about your template including name, description, and authors.
+          Provide essential information about your schema including name, description, and authors.
         </p>
       </div>
 
       <div className="bg-white rounded-lg shadow-md p-8">
         <div className="space-y-6">
-          {/* Template Name */}
+          {/* Schema Name */}
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-              Template Name *
+              Schema Name *
             </label>
             <input
               type="text"
@@ -119,7 +119,7 @@ const EnterMetadata: React.FC = () => {
             )}
           </div>
 
-          {/* Template Description */}
+          {/* Schema Description */}
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
               Description
@@ -130,10 +130,10 @@ const EnterMetadata: React.FC = () => {
               value={metadata.description}
               onChange={(e) => setMetadata(prev => ({ ...prev, description: e.target.value }))}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-medical-500 focus:border-medical-500"
-              placeholder="Describe the purpose and scope of this template..."
+              placeholder="Describe the purpose and scope of this schema..."
             />
             <p className="mt-1 text-sm text-gray-500">
-              Optional: Provide additional context about when and how to use this template
+              Optional: Provide additional context about when and how to use this schema
             </p>
           </div>
 
@@ -191,7 +191,7 @@ const EnterMetadata: React.FC = () => {
             )}
             
             <p className="text-sm text-gray-500">
-              Add the names of researchers or institutions who created this template
+              Add the names of researchers or institutions who created this schema
             </p>
           </div>
 
@@ -219,13 +219,13 @@ const EnterMetadata: React.FC = () => {
           </div>
         </div>
 
-        {/* Template Preview */}
+        {/* Schema Preview */}
         <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Template Preview</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Schema Preview</h3>
           <div className="space-y-2 text-sm">
             <div>
               <span className="font-medium text-gray-700">Name:</span> 
-              <span className="ml-2 text-gray-900">{metadata.name || 'Untitled Template'}</span>
+              <span className="ml-2 text-gray-900">{metadata.name || 'Untitled Schema'}</span>
             </div>
             <div>
               <span className="font-medium text-gray-700">Version:</span> 

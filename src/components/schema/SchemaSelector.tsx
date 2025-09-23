@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Library, FolderOpen, Trash2 } from 'lucide-react';
+import { Upload, Library, FolderOpen, Trash2, FileText, List, ChevronDown, ChevronUp } from 'lucide-react';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
-import AcquisitionTable from '../generate/AcquisitionTable';
+import AcquisitionTable from './AcquisitionTable';
 import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
 import { Acquisition } from '../../types';
 
@@ -189,7 +189,10 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
           return (
             <div key={schema.id} className="border border-gray-200 rounded-lg bg-white shadow-sm">
               {/* Schema Header */}
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+              <div
+                className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => toggleSchemaExpansion(schema.id)}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-semibold text-gray-900 truncate">
@@ -200,7 +203,7 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
                     </p>
                   </div>
                   <div className="flex items-center space-x-2">
-                    {onSchemaDelete && (
+                    {onSchemaDelete && activeTab === 'uploaded' && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -212,19 +215,16 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
                         <Trash2 className="h-3 w-3" />
                       </button>
                     )}
-                    <button
-                      onClick={() => toggleSchemaExpansion(schema.id)}
-                      className="px-3 py-1 text-xs bg-medical-600 text-white rounded hover:bg-medical-700"
-                    >
-                      {isExpanded ? 'Collapse' : 'View Templates'}
-                    </button>
+                    <div className="p-1 text-gray-600">
+                      {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </div>
                   </div>
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
-                  v{schema.version || '1.0.0'} • {schema.authors?.join(', ') || 'Schema Template'}
+                  v{schema.version || '1.0.0'} • {schema.authors?.join(', ') || 'Schema'}
                   {schema.isMultiAcquisition && (
                     <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                      {schema.acquisitions.length} templates
+                      {schema.acquisitions.length} acquisitions
                     </span>
                   )}
                 </div>
@@ -236,38 +236,53 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
                   {isLoading ? (
                     <div className="flex items-center justify-center py-8">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600"></div>
-                      <span className="ml-2 text-sm text-gray-600">Loading templates...</span>
+                      <span className="ml-2 text-sm text-gray-600">Loading acquisitions...</span>
                     </div>
                   ) : acquisitions.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {acquisitions.map((acquisition, index) => (
-                        <div key={acquisition.id} className="relative">
-                          <AcquisitionTable
-                            acquisition={acquisition}
-                            isEditMode={false}
-                            onUpdate={() => {}}
-                            onDelete={() => {}}
-                            onFieldUpdate={() => {}}
-                            onFieldConvert={() => {}}
-                            onFieldDelete={() => {}}
-                            onFieldAdd={() => {}}
-                            onSeriesUpdate={() => {}}
-                            onSeriesAdd={() => {}}
-                            onSeriesDelete={() => {}}
-                            onSeriesNameUpdate={() => {}}
-                          />
-                          {/* Overlay button for selection */}
-                          <button
-                            onClick={() => onSchemaSelect(schema.id, index)}
-                            className="absolute inset-0 bg-transparent hover:bg-medical-50 hover:bg-opacity-50 transition-colors rounded-lg border-2 border-transparent hover:border-medical-200"
-                            title={`Select ${acquisition.protocolName}`}
-                          />
-                        </div>
+                        <button
+                          key={acquisition.id}
+                          onClick={() => onSchemaSelect(schema.id, index)}
+                          className="w-full text-left border border-gray-200 rounded-lg p-3 hover:bg-medical-50 hover:border-medical-300 transition-all"
+                        >
+                          <div className="flex items-start space-x-3">
+                            <FileText className="h-5 w-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm text-gray-900">
+                                {acquisition.protocolName}
+                              </div>
+                              {acquisition.seriesDescription && (
+                                <div className="text-xs text-gray-600 mt-1">
+                                  {acquisition.seriesDescription}
+                                </div>
+                              )}
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                                  <span className="flex items-center">
+                                    <List className="h-3 w-3 mr-1" />
+                                    {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                  </span>
+                                )}
+                                {acquisition.series && acquisition.series.length > 0 && (
+                                  <span>
+                                    {acquisition.series.length} series
+                                  </span>
+                                )}
+                                {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                                  <span className="text-purple-600">
+                                    {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
                       ))}
                     </div>
                   ) : (
                     <div className="text-center py-4 text-sm text-gray-500">
-                      No templates found in this schema
+                      No acquisitions found in this schema
                     </div>
                   )}
                 </div>

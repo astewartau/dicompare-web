@@ -1,56 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, FileText, Code, Eye, ArrowLeft, Loader2 } from 'lucide-react';
+import { Download, FileText, Code, Eye, ArrowLeft, Loader2, Save, CheckCircle } from 'lucide-react';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
+import { useSchemaContext } from '../../contexts/SchemaContext';
 import { dicompareAPI } from '../../services/DicompareAPI';
 
 const DownloadSchema: React.FC = () => {
   const navigate = useNavigate();
-  const { acquisitions, templateMetadata } = useAcquisitions();
-  const [template, setTemplate] = useState<any>(null);
+  const { acquisitions, schemaMetadata } = useAcquisitions();
+  const { uploadSchema } = useSchemaContext();
+  const [schema, setSchema] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Generate template when component mounts
+  // Generate schema when component mounts
   useEffect(() => {
-    const generateTemplate = async () => {
-      if (!templateMetadata || acquisitions.length === 0) {
-        setError('Missing template metadata or acquisitions. Please go back and complete the previous steps.');
+    const generateSchema = async () => {
+      if (!schemaMetadata || acquisitions.length === 0) {
+        setError('Missing schema metadata or acquisitions. Please go back and complete the previous steps.');
         return;
       }
 
       setIsGenerating(true);
       try {
         console.log('Generating template with acquisitions:', acquisitions);
-        console.log('Template metadata:', templateMetadata);
+        console.log('Schema metadata:', schemaMetadata);
         
-        const generatedTemplate = await dicompareAPI.generateTemplateJS(acquisitions, templateMetadata);
-        setTemplate(generatedTemplate);
+        const generatedSchema = await dicompareAPI.generateSchemaJS(acquisitions, schemaMetadata);
+        setSchema(generatedSchema);
         setError(null);
       } catch (err) {
-        console.error('Failed to generate template:', err);
-        setError(`Failed to generate template: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        console.error('Failed to generate schema:', err);
+        setError(`Failed to generate schema: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
         setIsGenerating(false);
       }
     };
 
-    generateTemplate();
-  }, [acquisitions, templateMetadata]);
+    generateSchema();
+  }, [acquisitions, schemaMetadata]);
 
   const handleDownloadJSON = () => {
-    // Separate the template schema from statistics for download
-    const { statistics, ...templateSchema } = template;
-    const jsonContent = JSON.stringify(templateSchema, null, 2);
+    // Separate the schema from statistics for download
+    const { statistics, ...schemaContent } = schema;
+    const jsonContent = JSON.stringify(schemaContent, null, 2);
     const blob = new Blob([jsonContent], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     
-    // Use templateMetadata for filename, with fallback
-    const templateName = templateMetadata?.name || 'validation_template';
-    const version = templateMetadata?.version || '1.0';
-    a.download = `${templateName.replace(/\s+/g, '_')}_v${version}.json`;
+    // Use schemaMetadata for filename, with fallback
+    const schemaName = schemaMetadata?.name || 'validation_schema';
+    const version = schemaMetadata?.version || '1.0';
+    a.download = `${schemaName.replace(/\s+/g, '_')}_v${version}.json`;
     
     document.body.appendChild(a);
     a.click();
@@ -58,13 +62,51 @@ const DownloadSchema: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleSaveToLibrary = async () => {
+    if (!schema || !schemaMetadata) return;
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      // Separate the schema from statistics for saving
+      const { statistics, ...schemaContent } = schema;
+      const jsonContent = JSON.stringify(schemaContent, null, 2);
+
+      // Create a File object from the schema content
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const schemaName = schemaMetadata?.name || 'validation_schema';
+      const version = schemaMetadata?.version || '1.0';
+      const fileName = `${schemaName.replace(/\s+/g, '_')}_v${version}.json`;
+      const file = new File([blob], fileName, { type: 'application/json' });
+
+      // Use the existing uploadSchema function from SchemaContext
+      await uploadSchema(file, {
+        title: schemaMetadata.name,
+        description: schemaMetadata.description,
+        authors: schemaMetadata.authors,
+        version: schemaMetadata.version,
+      });
+
+      setSaveSuccess(true);
+
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setSaveSuccess(false), 3000);
+
+    } catch (err) {
+      console.error('Failed to save schema to library:', err);
+      setError(`Failed to save schema: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleBack = () => {
-    navigate('/generate-template/enter-metadata');
+    navigate('/schema-builder/enter-metadata');
   };
 
   const handleStartOver = () => {
-    navigate('/generate-template/build-schema');
+    navigate('/schema-builder/build-schema');
   };
 
   // Show loading state
@@ -73,12 +115,12 @@ const DownloadSchema: React.FC = () => {
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Download Schema - Step 3</h2>
-          <p className="text-gray-600">Generating your validation template...</p>
+          <p className="text-gray-600">Generating your validation schema...</p>
         </div>
         
         <div className="bg-white rounded-lg shadow-md p-12 text-center">
           <Loader2 className="h-12 w-12 animate-spin text-medical-600 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Generating Template</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Generating Schema</h3>
           <p className="text-gray-600">Using dicompare to create your validation schema...</p>
         </div>
       </div>
@@ -91,21 +133,21 @@ const DownloadSchema: React.FC = () => {
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Download Schema - Step 3</h2>
-          <p className="text-gray-600">There was an issue generating your template.</p>
+          <p className="text-gray-600">There was an issue generating your schema.</p>
         </div>
         
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-red-800 mb-2">Template Generation Failed</h3>
+          <h3 className="text-lg font-semibold text-red-800 mb-2">Schema Generation Failed</h3>
           <p className="text-red-700 mb-4">{error}</p>
           <div className="space-x-4">
             <button
-              onClick={() => navigate('/generate-template/enter-metadata')}
+              onClick={() => navigate('/schema-builder/enter-metadata')}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
             >
               Back to Metadata
             </button>
             <button
-              onClick={() => navigate('/generate-template/build-schema')}
+              onClick={() => navigate('/schema-builder/build-schema')}
               className="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50"
             >
               Start Over
@@ -116,9 +158,9 @@ const DownloadSchema: React.FC = () => {
     );
   }
 
-  // Show success state with template
-  if (!template) {
-    return null; // Still loading or no template
+  // Show success state with schema
+  if (!schema) {
+    return null; // Still loading or no schema
   }
 
   return (
@@ -126,38 +168,38 @@ const DownloadSchema: React.FC = () => {
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-4">Download Schema - Step 3</h2>
         <p className="text-gray-600">
-          Your template has been generated successfully! Download it in your preferred format or preview the content.
+          Your schema has been generated successfully! Download it in your preferred format or preview the content.
         </p>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
-        {/* Template Summary */}
+        {/* Schema Summary */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
             <Eye className="h-6 w-6 mr-2 text-medical-600" />
-            Template Summary
+            Schema Summary
           </h3>
           
           <div className="space-y-4">
             <div>
-              <h4 className="font-medium text-gray-700">Template Name</h4>
-              <p className="text-gray-900">{templateMetadata?.name || 'Generated Template'}</p>
+              <h4 className="font-medium text-gray-700">Schema Name</h4>
+              <p className="text-gray-900">{schemaMetadata?.name || 'Generated Schema'}</p>
             </div>
             
             <div>
               <h4 className="font-medium text-gray-700">Version</h4>
-              <p className="text-gray-900">{templateMetadata?.version || '1.0'}</p>
+              <p className="text-gray-900">{schemaMetadata?.version || '1.0'}</p>
             </div>
             
             <div>
               <h4 className="font-medium text-gray-700">Authors</h4>
-              <p className="text-gray-900">{templateMetadata?.authors?.join(', ') || 'Unknown'}</p>
+              <p className="text-gray-900">{schemaMetadata?.authors?.join(', ') || 'Unknown'}</p>
             </div>
             
-            {templateMetadata?.description && (
+            {schemaMetadata?.description && (
               <div>
                 <h4 className="font-medium text-gray-700">Description</h4>
-                <p className="text-gray-900">{templateMetadata.description}</p>
+                <p className="text-gray-900">{schemaMetadata.description}</p>
               </div>
             )}
             
@@ -180,13 +222,13 @@ const DownloadSchema: React.FC = () => {
               </div>
             </div>
             
-            {template.statistics && (
+            {schema.statistics && (
               <div>
                 <h4 className="font-medium text-gray-700">Statistics</h4>
                 <div className="mt-2 space-y-1 text-sm text-gray-600">
-                  <p>Total acquisitions: {template.statistics.total_acquisitions}</p>
-                  <p>Total validation fields: {template.statistics.total_validation_fields}</p>
-                  <p>Estimated validation time: {template.statistics.estimated_validation_time}</p>
+                  <p>Total acquisitions: {schema.statistics.total_acquisitions}</p>
+                  <p>Total validation fields: {schema.statistics.total_validation_fields}</p>
+                  <p>Estimated validation time: {schema.statistics.estimated_validation_time}</p>
                 </div>
               </div>
             )}
@@ -197,35 +239,64 @@ const DownloadSchema: React.FC = () => {
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center mb-4">
             <FileText className="h-6 w-6 mr-2 text-medical-600" />
-            <h3 className="text-xl font-semibold text-gray-900">Download Template</h3>
+            <h3 className="text-xl font-semibold text-gray-900">Save or Download Schema</h3>
           </div>
           
           <p className="text-gray-600 mb-6">
-            Download your validation template as a JSON file for use with dicompare validation tools.
+            Save your schema to your library for immediate use, or download it as a JSON file.
           </p>
-          
-          <button
-            onClick={handleDownloadJSON}
-            className="w-full flex items-center justify-center px-6 py-4 bg-medical-600 text-white rounded-lg hover:bg-medical-700 font-medium"
-          >
-            <Download className="h-5 w-5 mr-2" />
-            Download JSON Template
-          </button>
+
+          {/* Success Message */}
+          {saveSuccess && (
+            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center">
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Schema saved to library successfully! It's now available in Check Compliance.
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              onClick={handleSaveToLibrary}
+              disabled={isSaving}
+              className="flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-5 w-5 mr-2" />
+                  Save to Library
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleDownloadJSON}
+              className="flex items-center justify-center px-6 py-4 bg-medical-600 text-white rounded-lg hover:bg-medical-700 font-medium"
+            >
+              <Download className="h-5 w-5 mr-2" />
+              Download JSON
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Template Preview */}
+      {/* Schema Preview */}
       <div className="mt-8 bg-white rounded-lg shadow-md p-6">
         <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
           <FileText className="h-6 w-6 mr-2 text-medical-600" />
-          Template Content Preview
+          Schema Content Preview
         </h3>
         
         <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
           <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-            {template ? JSON.stringify((() => {
-              const { statistics, ...templateSchema } = template;
-              return templateSchema;
+            {schema ? JSON.stringify((() => {
+              const { statistics, ...schemaContent } = schema;
+              return schemaContent;
             })(), null, 2) : 'Loading...'}
           </pre>
         </div>
@@ -246,7 +317,7 @@ const DownloadSchema: React.FC = () => {
             onClick={handleStartOver}
             className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
-            Create Another Template
+            Create Another Schema
           </button>
           
           <button
