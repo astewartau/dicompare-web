@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Library, FolderOpen } from 'lucide-react';
+import { Upload, Library, FolderOpen, Trash2 } from 'lucide-react';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
-import SchemaCard from './SchemaCard';
+import AcquisitionTable from '../generate/AcquisitionTable';
+import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
+import { Acquisition } from '../../types';
 
 interface SchemaSelectorProps {
   librarySchemas: UnifiedSchema[];
   uploadedSchemas: UnifiedSchema[];
   selectedSchemaId?: string | null;
   title?: string;
-  onSchemaSelect: (schemaId: string, acquisitionId?: string) => void;
+  onSchemaSelect: (schemaId: string, acquisitionId?: number) => void;
   onSchemaDelete?: (schemaId: string, event: React.MouseEvent) => void;
   onSchemaUpload?: (file: File) => void;
+  getSchemaContent: (schemaId: string) => Promise<string | null>;
 }
 
 const SchemaSelector: React.FC<SchemaSelectorProps> = ({
@@ -20,24 +23,51 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
   title = "Select Validation Schema",
   onSchemaSelect,
   onSchemaDelete,
-  onSchemaUpload
+  onSchemaUpload,
+  getSchemaContent
 }) => {
   const [activeTab, setActiveTab] = useState<'library' | 'uploaded'>('library');
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [dragActive, setDragActive] = useState(false);
+  const [schemaAcquisitions, setSchemaAcquisitions] = useState<Record<string, Acquisition[]>>({});
+  const [loadingSchemas, setLoadingSchemas] = useState<Set<string>>(new Set());
 
   const displayedSchemas = activeTab === 'library' ? librarySchemas : uploadedSchemas;
 
-  const toggleSchemaExpansion = (schemaId: string) => {
+  const toggleSchemaExpansion = async (schemaId: string) => {
     setExpandedSchemas(prev => {
       const newSet = new Set(prev);
       if (newSet.has(schemaId)) {
         newSet.delete(schemaId);
       } else {
         newSet.add(schemaId);
+        // Load acquisitions when expanding
+        loadSchemaAcquisitions(schemaId);
       }
       return newSet;
     });
+  };
+
+  const loadSchemaAcquisitions = async (schemaId: string) => {
+    if (schemaAcquisitions[schemaId] || loadingSchemas.has(schemaId)) return;
+
+    setLoadingSchemas(prev => new Set(prev).add(schemaId));
+
+    try {
+      const schema = [...librarySchemas, ...uploadedSchemas].find(s => s.id === schemaId);
+      if (schema) {
+        const acquisitions = await convertSchemaToAcquisitions(schema, getSchemaContent);
+        setSchemaAcquisitions(prev => ({ ...prev, [schemaId]: acquisitions }));
+      }
+    } catch (error) {
+      console.error(`Failed to load acquisitions for schema ${schemaId}:`, error);
+    } finally {
+      setLoadingSchemas(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(schemaId);
+        return newSet;
+      });
+    }
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -150,19 +180,101 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
       )}
 
       {/* Schema List */}
-      <div className="space-y-2 max-h-96 overflow-y-auto">
-        {displayedSchemas.map((schema) => (
-          <SchemaCard
-            key={schema.id}
-            schema={schema}
-            isSelected={selectedSchemaId === schema.id}
-            isCollapsed={!expandedSchemas.has(schema.id)}
-            showDeleteButton={true}
-            onSelect={onSchemaSelect}
-            onToggleCollapse={() => toggleSchemaExpansion(schema.id)}
-            onDelete={onSchemaDelete}
-          />
-        ))}
+      <div className="space-y-4 max-h-96 overflow-y-auto">
+        {displayedSchemas.map((schema) => {
+          const isExpanded = expandedSchemas.has(schema.id);
+          const acquisitions = schemaAcquisitions[schema.id] || [];
+          const isLoading = loadingSchemas.has(schema.id);
+
+          return (
+            <div key={schema.id} className="border border-gray-200 rounded-lg bg-white shadow-sm">
+              {/* Schema Header */}
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-900 truncate">
+                      {schema.name}
+                    </h3>
+                    <p className="text-xs text-gray-600 truncate">
+                      {schema.description || 'No description available'}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {onSchemaDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSchemaDelete(schema.id, e);
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                        title="Delete schema"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => toggleSchemaExpansion(schema.id)}
+                      className="px-3 py-1 text-xs bg-medical-600 text-white rounded hover:bg-medical-700"
+                    >
+                      {isExpanded ? 'Collapse' : 'View Templates'}
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  v{schema.version || '1.0.0'} • {schema.authors?.join(', ') || 'Schema Template'}
+                  {schema.isMultiAcquisition && (
+                    <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                      {schema.acquisitions.length} templates
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded Acquisitions */}
+              {isExpanded && (
+                <div className="p-3">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600"></div>
+                      <span className="ml-2 text-sm text-gray-600">Loading templates...</span>
+                    </div>
+                  ) : acquisitions.length > 0 ? (
+                    <div className="space-y-3">
+                      {acquisitions.map((acquisition, index) => (
+                        <div key={acquisition.id} className="relative">
+                          <AcquisitionTable
+                            acquisition={acquisition}
+                            isEditMode={false}
+                            onUpdate={() => {}}
+                            onDelete={() => {}}
+                            onFieldUpdate={() => {}}
+                            onFieldConvert={() => {}}
+                            onFieldDelete={() => {}}
+                            onFieldAdd={() => {}}
+                            onSeriesUpdate={() => {}}
+                            onSeriesAdd={() => {}}
+                            onSeriesDelete={() => {}}
+                            onSeriesNameUpdate={() => {}}
+                          />
+                          {/* Overlay button for selection */}
+                          <button
+                            onClick={() => onSchemaSelect(schema.id, index)}
+                            className="absolute inset-0 bg-transparent hover:bg-medical-50 hover:bg-opacity-50 transition-colors rounded-lg border-2 border-transparent hover:border-medical-200"
+                            title={`Select ${acquisition.protocolName}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-sm text-gray-500">
+                      No templates found in this schema
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {displayedSchemas.length === 0 && (

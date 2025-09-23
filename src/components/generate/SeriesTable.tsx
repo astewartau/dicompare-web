@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit2, ArrowLeftRight } from 'lucide-react';
+import { Plus, Trash2, Edit2, ArrowLeftRight, CheckCircle, XCircle, AlertTriangle, HelpCircle } from 'lucide-react';
 import { DicomField, Series } from '../../types';
+import { ComplianceFieldResult } from '../../types/schema';
 import { formatSeriesFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
+import CustomTooltip from '../common/CustomTooltip';
 import FieldEditModal from './FieldEditModal';
 
 interface SeriesTableProps {
@@ -10,6 +12,9 @@ interface SeriesTableProps {
   isEditMode: boolean;
   incompleteFields?: Set<string>;
   acquisitionId?: string;
+  mode?: 'edit' | 'view' | 'compliance';
+  // Compliance-specific props
+  complianceResults?: any[];
   onSeriesUpdate: (seriesIndex: number, fieldTag: string, value: any) => void;
   onSeriesAdd: () => void;
   onSeriesDelete: (seriesIndex: number) => void;
@@ -23,6 +28,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   isEditMode,
   incompleteFields = new Set(),
   acquisitionId = '',
+  mode = 'edit',
+  complianceResults = [],
   onSeriesUpdate,
   onSeriesAdd,
   onSeriesDelete,
@@ -32,6 +39,70 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   const [editingCell, setEditingCell] = useState<{ seriesIndex: number; fieldTag: string } | null>(null);
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
+
+  const isComplianceMode = mode === 'compliance';
+
+  // Helper function to get compliance result for a specific field and series
+  const getSeriesFieldComplianceResult = (field: DicomField, seriesName: string): ComplianceFieldResult => {
+    // For series validation, find any result that includes this field
+    // Note: Series validation results may use generic series names (Series_001, Series_002)
+    // while the UI uses actual SeriesDescription values
+    const result = complianceResults.find(r => {
+      // Check if this is a series-level validation result
+      if (r.validationType !== 'series') return false;
+
+      // Check if this field is part of the validation result
+      // The fieldName might be a combined field like "SeriesDescription, ImageType"
+      const fieldNameLower = r.fieldName.toLowerCase();
+      const fieldLower = field.name.toLowerCase();
+
+      // 1. Exact field name match
+      if (fieldNameLower === fieldLower) return true;
+
+      // 2. Field name is part of a combined field name (e.g., "SeriesDescription" in "SeriesDescription, ImageType")
+      if (fieldNameLower.includes(fieldLower)) return true;
+
+      // 3. Field path contains the field tag
+      if (r.fieldPath && r.fieldPath.includes(field.tag)) return true;
+
+      return false;
+    });
+
+    if (result) {
+      console.log(`✅ Found series validation result for field ${field.name}:`, result);
+    } else {
+      console.log(`❌ No series validation result found for field ${field.name} in ${complianceResults.length} results:`, complianceResults);
+    }
+
+    return result || {
+      fieldPath: field.tag,
+      fieldName: field.name,
+      status: 'unknown',
+      message: 'No validation result available',
+      actualValue: '',
+      expectedValue: '',
+      validationType: 'series',
+      seriesName: seriesName,
+      rule_name: undefined
+    };
+  };
+
+  const getStatusIcon = (status: ComplianceFieldResult['status']) => {
+    const iconProps = { className: "h-4 w-4" };
+
+    switch (status) {
+      case 'pass':
+        return <CheckCircle {...iconProps} className="h-4 w-4 text-green-600" />;
+      case 'fail':
+        return <XCircle {...iconProps} className="h-4 w-4 text-red-600" />;
+      case 'warning':
+        return <AlertTriangle {...iconProps} className="h-4 w-4 text-yellow-600" />;
+      case 'na':
+        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-500" />;
+      case 'unknown':
+        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-400" />;
+    }
+  };
 
   if (seriesFields.length === 0) {
     return (
@@ -64,8 +135,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 Series
               </th>
               {seriesFields.map((field) => (
-                <th 
-                  key={field.tag} 
+                <th
+                  key={field.tag}
                   className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]"
                   onMouseEnter={() => setHoveredHeader(field.tag)}
                   onMouseLeave={() => setHoveredHeader(null)}
@@ -91,6 +162,11 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                   </div>
                 </th>
               ))}
+              {isComplianceMode && (
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  Status
+                </th>
+              )}
               {isEditMode && (
                 <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
                   Actions
@@ -128,7 +204,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 {seriesFields.map((field) => {
                   const seriesFieldKey = `${acquisitionId}-series-${seriesIndex}-${field.tag}`;
                   const isIncomplete = incompleteFields.has(seriesFieldKey);
-                  
+                  const complianceResult = isComplianceMode ? getSeriesFieldComplianceResult(field, ser.name) : null;
+
                   return (
                     <td key={field.tag} className={`px-2 py-1.5 ${
                       isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''
@@ -137,10 +214,11 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                         className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
                         onClick={() => isEditMode && setEditingCell({ seriesIndex, fieldTag: field.tag })}
                       >
-                        <div>
-                          <p className="text-xs text-gray-900 break-words">
-                            {ser.fields[field.tag] ? formatSeriesFieldValue(ser.fields[field.tag]) : '-'}
-                          </p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-900 break-words">
+                              {ser.fields[field.tag] ? formatSeriesFieldValue(ser.fields[field.tag]) : '-'}
+                            </p>
                           {isEditMode && ser.fields[field.tag] && (
                             <p className="text-xs text-gray-500 mt-0.5">
                               {(() => {
@@ -158,14 +236,49 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                               })()}
                             </p>
                           )}
-                          {!isEditMode && (
+                          {!isEditMode && !isComplianceMode && (
                             <p className="text-xs mt-0.5 invisible">&nbsp;</p>
                           )}
+                          </div>
                         </div>
                       </div>
                     </td>
                   );
                 })}
+                {isComplianceMode && (
+                  <td className="px-2 py-1.5 text-center">
+                    {(() => {
+                      // Get the first validation result for this series (all fields share the same series validation result)
+                      const seriesResult = seriesFields.length > 0 ? getSeriesFieldComplianceResult(seriesFields[0], ser.name) : null;
+
+                      if (!seriesResult || seriesResult.status === 'unknown') {
+                        return (
+                          <CustomTooltip
+                            content="No validation result available"
+                            position="top"
+                            delay={100}
+                          >
+                            <div className="inline-flex items-center justify-center cursor-help">
+                              {getStatusIcon('unknown')}
+                            </div>
+                          </CustomTooltip>
+                        );
+                      }
+
+                      return (
+                        <CustomTooltip
+                          content={seriesResult.message}
+                          position="top"
+                          delay={100}
+                        >
+                          <div className="inline-flex items-center justify-center cursor-help">
+                            {getStatusIcon(seriesResult.status)}
+                          </div>
+                        </CustomTooltip>
+                      );
+                    })()}
+                  </td>
+                )}
                 {isEditMode && (
                   <td className="px-2 py-1.5 text-right">
                     <div className={`${

@@ -8,7 +8,6 @@ import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { SchemaUploadModal } from '../schema/SchemaUploadModal';
 import AcquisitionTable from '../generate/AcquisitionTable';
 import SchemaSelector from '../schema/SchemaSelector';
-import SchemaDetails from '../schema/SchemaDetails';
 
 const DataLoadingAndMatching: React.FC = () => {
   const navigate = useNavigate();
@@ -35,15 +34,299 @@ const DataLoadingAndMatching: React.FC = () => {
   const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
   const [isDragOver, setIsDragOver] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [schemaAcquisitions, setSchemaAcquisitions] = useState<Map<string, Acquisition>>(new Map());
+
+  // Clear cache for debugging - remove this later
+  useEffect(() => {
+    setSchemaAcquisitions(new Map());
+  }, []);
+
+  // Helper function to convert schema to acquisition format for display
+  const convertSchemaToAcquisition = async (binding: SchemaBinding): Promise<Acquisition> => {
+    const { schema, acquisitionId } = binding;
+    console.log('🔄 Converting schema to acquisition:', schema.name, 'acquisitionId:', acquisitionId);
+
+    try {
+      // Get schema content to extract fields
+      const schemaContent = await getSchemaContent(schema.id);
+      let schemaFields: any[] = [];
+      let seriesInstances: any[] = [];
+
+      if (schemaContent) {
+        const parsedSchema = JSON.parse(schemaContent);
+        // Extract fields from schema structure - this depends on your schema format
+        if (parsedSchema.acquisitions && typeof parsedSchema.acquisitions === 'object') {
+
+          // Handle acquisitions as an object with named keys (e.g., "QSM", "0")
+          let targetAcquisition = null;
+
+          if (acquisitionId === undefined || acquisitionId === null) {
+            throw new Error(`No acquisitionId provided. Available acquisitions: ${Object.keys(parsedSchema.acquisitions).join(', ')}`);
+          }
+
+          const acquisitionKeys = Object.keys(parsedSchema.acquisitions);
+          const index = parseInt(acquisitionId, 10);
+
+          if (isNaN(index) || index < 0 || index >= acquisitionKeys.length) {
+            throw new Error(`Invalid acquisition index "${acquisitionId}". Must be 0-${acquisitionKeys.length - 1}. Available: ${acquisitionKeys.map((key, i) => `${i}: ${key}`).join(', ')}`);
+          }
+
+          const acquisitionName = acquisitionKeys[index];
+          targetAcquisition = parsedSchema.acquisitions[acquisitionName];
+          console.log('✅ Found acquisition by index:', index, '→', acquisitionName);
+
+          if (targetAcquisition) {
+            // Extract acquisition-level fields
+            if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
+              // Convert schema format fields to DicomField format
+              schemaFields = targetAcquisition.fields.map(f => ({
+                name: f.field || f.name,
+                tag: f.tag,
+                value: f.value,
+                level: 'acquisition',
+                dataType: f.dataType,
+                validationRule: f.validationRule
+              }));
+            } else {
+              schemaFields = [
+                ...(targetAcquisition.acquisitionFields || targetAcquisition.acquisition_fields || [])
+              ];
+            }
+
+            // Extract series-level fields and series instances separately
+            if (targetAcquisition.series && Array.isArray(targetAcquisition.series)) {
+              console.log('Found series array with', targetAcquisition.series.length, 'series');
+
+              // Collect unique field definitions for seriesFields
+              const fieldMap = new Map();
+
+              targetAcquisition.series.forEach(series => {
+                console.log('Processing series:', series);
+                const seriesData = { name: series.name, fields: {} };
+
+                if (series.fields && Array.isArray(series.fields)) {
+                  console.log('Found', series.fields.length, 'fields in series');
+                  series.fields.forEach(f => {
+                    // Add to unique field definitions
+                    if (!fieldMap.has(f.tag)) {
+                      fieldMap.set(f.tag, {
+                        name: f.field || f.name,
+                        tag: f.tag,
+                        value: '', // No default value for series fields
+                        level: 'series',
+                        dataType: f.dataType,
+                        validationRule: f.validationRule
+                      });
+                    }
+
+                    // Add value to this series instance (use tag as key, matching SeriesTable expectation)
+                    seriesData.fields[f.tag] = f.value;
+                  });
+                }
+
+                seriesInstances.push(seriesData);
+              });
+
+              const uniqueSeriesFields = Array.from(fieldMap.values());
+              console.log('Extracted', uniqueSeriesFields.length, 'unique series fields and', seriesInstances.length, 'series instances');
+              console.log('Series instances:', seriesInstances);
+              console.log('Unique series fields:', uniqueSeriesFields);
+              schemaFields = [...schemaFields, ...uniqueSeriesFields];
+            } else {
+              console.log('No series array found in target acquisition');
+            }
+          }
+        } else if (parsedSchema.fields) {
+          schemaFields = parsedSchema.fields;
+        } else {
+          // Maybe it's at the top level?
+          if (parsedSchema.acquisition_fields || parsedSchema.acquisitionFields) {
+            schemaFields = [
+              ...(parsedSchema.acquisition_fields || parsedSchema.acquisitionFields || []),
+              ...(parsedSchema.series_fields || parsedSchema.seriesFields || [])
+            ];
+          }
+        }
+      }
+
+      // Extract validation rules
+      let validationRules = [];
+      if (schemaContent) {
+        const parsedSchema = JSON.parse(schemaContent);
+        if (parsedSchema.acquisitions && typeof parsedSchema.acquisitions === 'object') {
+          let targetAcquisition = null;
+
+          if (acquisitionId === undefined || acquisitionId === null) {
+            throw new Error(`No acquisitionId provided. Available acquisitions: ${Object.keys(parsedSchema.acquisitions).join(', ')}`);
+          }
+
+          const acquisitionKeys = Object.keys(parsedSchema.acquisitions);
+          const index = parseInt(acquisitionId, 10);
+
+          if (isNaN(index) || index < 0 || index >= acquisitionKeys.length) {
+            throw new Error(`Invalid acquisition index "${acquisitionId}". Must be 0-${acquisitionKeys.length - 1}. Available: ${acquisitionKeys.map((key, i) => `${i}: ${key}`).join(', ')}`);
+          }
+
+          const acquisitionName = acquisitionKeys[index];
+          targetAcquisition = parsedSchema.acquisitions[acquisitionName];
+          console.log('✅ Found acquisition by index:', index, '→', acquisitionName);
+
+          if (targetAcquisition && targetAcquisition.rules && Array.isArray(targetAcquisition.rules)) {
+            validationRules = targetAcquisition.rules.map(rule => ({
+              id: rule.id,
+              name: rule.name,
+              description: rule.description,
+              implementation: rule.implementation,
+              fields: rule.fields || [],
+              category: 'Custom',
+              testCases: rule.testCases || []
+            }));
+            console.log('Extracted validation rules:', validationRules.length, 'rules from acquisition:', acquisitionId || acquisitionKeys[0]);
+          } else {
+            console.log('No validation rules found in target acquisition:', targetAcquisition);
+          }
+        }
+      }
+
+      // Convert to acquisition format
+      return {
+        id: `schema-${schema.id}-${acquisitionId || 'default'}`,
+        protocolName: schema.name,
+        seriesDescription: schema.description || 'Schema requirements',
+        acquisitionFields: schemaFields.filter(f => !f.level || f.level === 'acquisition') || [],
+        seriesFields: schemaFields.filter(f => f.level === 'series') || [],
+        series: seriesInstances,
+        totalFiles: 0,
+        validationFunctions: (() => {
+          const functions = validationRules.map(rule => ({
+            ...rule,
+            customName: rule.name,
+            customDescription: rule.description,
+            customFields: rule.fields || [],
+            customImplementation: rule.implementation,
+            customTestCases: [],
+            enabledSystemFields: []
+          }));
+          console.log('Converting validation rules to functions:', validationRules.length, '→', functions.length);
+          console.log('Sample function:', functions[0]);
+          return functions;
+        })()
+      };
+    } catch (error) {
+      console.error('Failed to convert schema to acquisition:', error);
+      // Return minimal acquisition if conversion fails
+      return {
+        id: `schema-${schema.id}-${acquisitionId || 'default'}`,
+        protocolName: schema.name,
+        seriesDescription: schema.description || 'Schema requirements',
+        acquisitionFields: [],
+        seriesFields: [],
+        series: [],
+        totalFiles: 0,
+        validationFunctions: []
+      };
+    }
+  };
+
+  // Component to handle async schema loading
+  const SchemaAcquisitionDisplay: React.FC<{
+    binding: SchemaBinding;
+    realAcquisition?: Acquisition;
+    isCollapsed?: boolean;
+    onToggleCollapse?: () => void;
+    onDeselect?: () => void;
+  }> = ({ binding, realAcquisition, isCollapsed, onToggleCollapse, onDeselect }) => {
+    const [schemaAcquisition, setSchemaAcquisition] = useState<Acquisition | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+      const loadSchema = async () => {
+        console.log('📡 SchemaAcquisitionDisplay loading schema:', binding.schema.name);
+        setIsLoading(true);
+        const acquisition = await getSchemaAcquisition(binding);
+        console.log('📡 SchemaAcquisitionDisplay loaded acquisition:', acquisition);
+        setSchemaAcquisition(acquisition);
+        setIsLoading(false);
+      };
+      loadSchema();
+    }, [binding.schemaId, binding.acquisitionId]);
+
+    if (isLoading) {
+      return (
+        <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600 mx-auto mb-2"></div>
+          <span className="text-sm text-gray-600">Loading schema...</span>
+        </div>
+      );
+    }
+
+    if (!schemaAcquisition) {
+      return (
+        <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
+          <span className="text-sm text-red-600">Failed to load schema</span>
+        </div>
+      );
+    }
+
+    return (
+      <AcquisitionTable
+        acquisition={schemaAcquisition}
+        isEditMode={false}
+        mode="compliance"
+        realAcquisition={realAcquisition}
+        schemaId={binding.schemaId}
+        schemaAcquisitionId={binding.acquisitionId}
+        getSchemaContent={getSchemaContent}
+        title={binding.schema.name}
+        subtitle="Schema Requirements"
+        version={binding.schema.version}
+        authors={binding.schema.authors}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={onToggleCollapse}
+        onDeselect={onDeselect}
+        // Disabled handlers for compliance mode
+        onUpdate={() => {}}
+        onDelete={() => {}}
+        onFieldUpdate={() => {}}
+        onFieldConvert={() => {}}
+        onFieldDelete={() => {}}
+        onFieldAdd={() => {}}
+        onSeriesUpdate={() => {}}
+        onSeriesAdd={() => {}}
+        onSeriesDelete={() => {}}
+        onSeriesNameUpdate={() => {}}
+      />
+    );
+  };
+
+  // Helper to get or load schema acquisition
+  const getSchemaAcquisition = async (binding: SchemaBinding): Promise<Acquisition | null> => {
+    const key = `${binding.schemaId}-${binding.acquisitionId || 'default'}`;
+    console.log('🔍 Cache lookup for key:', key, 'exists:', schemaAcquisitions.has(key));
+
+    if (schemaAcquisitions.has(key)) {
+      console.log('💾 Using cached acquisition');
+      return schemaAcquisitions.get(key)!;
+    }
+
+    try {
+      const acquisition = await convertSchemaToAcquisition(binding);
+      setSchemaAcquisitions(prev => new Map(prev.set(key, acquisition)));
+      return acquisition;
+    } catch (error) {
+      console.error('Failed to get schema acquisition:', error);
+      return null;
+    }
+  };
 
   // Schema pairing helpers
-  const pairSchemaWithAcquisition = (acquisitionId: string, schemaId: string, schemaAcquisitionId?: string) => {
+  const pairSchemaWithAcquisition = (acquisitionId: string, schemaId: string, schemaAcquisitionId?: number) => {
     const schema = getUnifiedSchema(schemaId);
     if (!schema) return;
 
     const binding: SchemaBinding = {
       schemaId,
-      acquisitionId: schemaAcquisitionId,
+      acquisitionId: schemaAcquisitionId?.toString(),
       schema
     };
 
@@ -332,9 +615,9 @@ const DataLoadingAndMatching: React.FC = () => {
     // Library schemas can't be deleted
   };
 
-  const handleSchemaSelect = (schemaId: string, acquisitionId?: string) => {
+  const handleSchemaSelect = (schemaId: string, acquisitionId?: number) => {
     setPreSelectedSchemaId(schemaId);
-    setPreSelectedAcquisitionId(acquisitionId || null);
+    setPreSelectedAcquisitionId(acquisitionId?.toString() || null);
   };
 
   const toggleSchemaCollapse = (key: string) => {
@@ -477,11 +760,13 @@ const DataLoadingAndMatching: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea()}
             {preSelectedSchemaId ? (
-              <SchemaDetails
-                schema={getUnifiedSchema(preSelectedSchemaId)!}
-                acquisitionId={preSelectedAcquisitionId || undefined}
+              <SchemaAcquisitionDisplay
+                binding={{
+                  schemaId: preSelectedSchemaId,
+                  acquisitionId: preSelectedAcquisitionId,
+                  schema: getUnifiedSchema(preSelectedSchemaId)!
+                }}
                 isCollapsed={collapsedSchemas.has('preselected')}
-                getSchemaContent={getSchemaContent}
                 onToggleCollapse={() => toggleSchemaCollapse('preselected')}
                 onDeselect={() => {
                   setPreSelectedSchemaId(null);
@@ -496,6 +781,7 @@ const DataLoadingAndMatching: React.FC = () => {
                 onSchemaSelect={handleSchemaSelect}
                 onSchemaDelete={handleSchemaDelete}
                 onSchemaUpload={handleSchemaUpload}
+                getSchemaContent={getSchemaContent}
                 title="Select Validation Schema"
               />
             )}
@@ -535,13 +821,10 @@ const DataLoadingAndMatching: React.FC = () => {
 
               {/* Right - Schema */}
               {pairing ? (
-                <SchemaDetails
-                  schema={pairing.schema}
-                  acquisitionId={pairing.acquisitionId}
-                  acquisition={acquisition}
-                  fields={acquisition.acquisitionFields}
+                <SchemaAcquisitionDisplay
+                  binding={pairing}
+                  realAcquisition={acquisition}
                   isCollapsed={collapsedSchemas.has(acquisition.id)}
-                  getSchemaContent={getSchemaContent}
                   onToggleCollapse={() => toggleSchemaCollapse(acquisition.id)}
                   onDeselect={() => unpairAcquisition(acquisition.id)}
                 />
@@ -554,6 +837,7 @@ const DataLoadingAndMatching: React.FC = () => {
                   }
                   onSchemaDelete={handleSchemaDelete}
                   onSchemaUpload={handleSchemaUpload}
+                  getSchemaContent={getSchemaContent}
                   title={`Select template for: ${acquisition.protocolName}`}
                 />
               )}
@@ -566,11 +850,13 @@ const DataLoadingAndMatching: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea(true)}
             {preSelectedSchemaId ? (
-              <SchemaDetails
-                schema={getUnifiedSchema(preSelectedSchemaId)!}
-                acquisitionId={preSelectedAcquisitionId || undefined}
+              <SchemaAcquisitionDisplay
+                binding={{
+                  schemaId: preSelectedSchemaId,
+                  acquisitionId: preSelectedAcquisitionId,
+                  schema: getUnifiedSchema(preSelectedSchemaId)!
+                }}
                 isCollapsed={collapsedSchemas.has('preselected_bottom')}
-                getSchemaContent={getSchemaContent}
                 onToggleCollapse={() => toggleSchemaCollapse('preselected_bottom')}
                 onDeselect={() => {
                   setPreSelectedSchemaId(null);
@@ -585,6 +871,7 @@ const DataLoadingAndMatching: React.FC = () => {
                 onSchemaSelect={handleSchemaSelect}
                 onSchemaDelete={handleSchemaDelete}
                 onSchemaUpload={handleSchemaUpload}
+                getSchemaContent={getSchemaContent}
                 title="Select Validation Schema"
               />
             )}

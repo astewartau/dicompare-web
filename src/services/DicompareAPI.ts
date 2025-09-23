@@ -1201,7 +1201,7 @@ json.dumps(formatted_result)
         validationRules.push(...rules);
       }
       
-      // Store validation rules in a way that ComplianceFieldTable can access them
+      // Store validation rules for compliance validation
       if (validationRules.length > 0) {
         console.log(`Found ${validationRules.length} validation rules in schema`);
         // We'll need to pass these to the UI component
