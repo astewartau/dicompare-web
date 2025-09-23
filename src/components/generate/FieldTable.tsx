@@ -19,6 +19,7 @@ interface FieldTableProps {
   acquisition?: Acquisition;
   realAcquisition?: Acquisition; // The actual DICOM data for compliance validation
   getSchemaContent?: (id: string) => Promise<string | null>;
+  isDataProcessing?: boolean; // Prevent validation during DICOM upload
   // Compliance callback to share results with parent
   onComplianceResults?: (results: ComplianceFieldResult[]) => void;
   // Edit mode props
@@ -38,6 +39,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
   acquisition,
   realAcquisition,
   getSchemaContent,
+  isDataProcessing = false,
   onComplianceResults,
   onFieldUpdate,
   onFieldConvert,
@@ -53,10 +55,10 @@ const FieldTable: React.FC<FieldTableProps> = ({
 
   // Compliance validation effect
   useEffect(() => {
-    if (isComplianceMode && schemaId && realAcquisition && getSchemaContent) {
+    if (isComplianceMode && schemaId && realAcquisition && getSchemaContent && !isDataProcessing) {
       performComplianceValidation();
     }
-  }, [isComplianceMode, schemaId, realAcquisition, schemaAcquisitionId]);
+  }, [isComplianceMode, schemaId, realAcquisition, schemaAcquisitionId, isDataProcessing]);
 
   const performComplianceValidation = async () => {
     if (!schemaId || !realAcquisition || !getSchemaContent) return;

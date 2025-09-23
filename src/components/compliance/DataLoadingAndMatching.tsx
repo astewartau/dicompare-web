@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Database, Loader, CheckCircle, Plus, X, Trash2 } from 'lucide-react';
 import { Acquisition, ProcessingProgress } from '../../types';
@@ -8,6 +8,141 @@ import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { SchemaUploadModal } from '../schema/SchemaUploadModal';
 import AcquisitionTable from '../generate/AcquisitionTable';
 import SchemaSelector from '../schema/SchemaSelector';
+
+// ✅ MOVE COMPONENT OUTSIDE TO PREVENT RECREATION!
+const SchemaAcquisitionDisplay = React.memo<{
+  binding: SchemaBinding;
+  realAcquisition?: Acquisition;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  onDeselect?: () => void;
+  isDataProcessing?: boolean;
+  getSchemaContent: (schemaId: string) => Promise<string | null>;
+  getSchemaAcquisition: (binding: SchemaBinding) => Promise<Acquisition | null>;
+}>(({ binding, realAcquisition, isCollapsed, onToggleCollapse, onDeselect, isDataProcessing, getSchemaContent, getSchemaAcquisition }) => {
+  const [schemaAcquisition, setSchemaAcquisition] = useState<Acquisition | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    console.log('🔥 useEffect triggered:', {
+      isDataProcessing,
+      schemaId: binding.schemaId,
+      acquisitionId: binding.acquisitionId,
+      hasExistingSchema: !!schemaAcquisition
+    });
+
+    // Skip loading during data processing to prevent interference
+    if (isDataProcessing) {
+      console.log('🔥 Skipping useEffect - data processing');
+      return;
+    }
+
+    // Don't reload if we already have the right schema
+    if (schemaAcquisition) {
+      console.log('🔥 Already have schema, skipping reload');
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('🔥 Loading schema...');
+    const loadSchema = async () => {
+      setIsLoading(true);
+      try {
+        const acquisition = await getSchemaAcquisition(binding);
+        setSchemaAcquisition(acquisition);
+        console.log('🔥 Schema loaded successfully');
+      } catch (error) {
+        console.error('Failed to load schema:', error);
+        setSchemaAcquisition(null);
+      }
+      setIsLoading(false);
+    };
+
+    loadSchema();
+  }, [binding.schemaId, binding.acquisitionId]);
+
+  // Debug what's happening
+  console.log('🔥 SCHEMA DEBUG:', {
+    hasSchema: !!schemaAcquisition,
+    isLoading,
+    isDataProcessing,
+    bindingId: binding.schemaId,
+    acquisitionId: binding.acquisitionId
+  });
+
+  // If we have a schema, ALWAYS show it regardless of any other state
+  if (schemaAcquisition) {
+    return (
+      <AcquisitionTable
+        acquisition={schemaAcquisition}
+        isEditMode={false}
+        mode="compliance"
+        realAcquisition={realAcquisition}
+        isDataProcessing={isDataProcessing}
+        schemaId={binding.schemaId}
+        schemaAcquisitionId={binding.acquisitionId}
+        getSchemaContent={getSchemaContent}
+        title={binding.schema.name}
+        subtitle="Schema Requirements"
+        version={binding.schema.version}
+        authors={binding.schema.authors}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={onToggleCollapse}
+        onDeselect={onDeselect}
+        // Disabled handlers for compliance mode
+        onUpdate={() => {}}
+        onDelete={() => {}}
+        onFieldUpdate={() => {}}
+        onFieldConvert={() => {}}
+        onFieldDelete={() => {}}
+        onFieldAdd={() => {}}
+        onSeriesUpdate={() => {}}
+        onSeriesAdd={() => {}}
+        onSeriesDelete={() => {}}
+        onSeriesNameUpdate={() => {}}
+      />
+    );
+  }
+
+  // Only show loading when we don't have schema and we're not processing
+  if (isLoading && !isDataProcessing) {
+    return (
+      <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600 mx-auto mb-2"></div>
+        <span className="text-sm text-gray-600">Loading schema...</span>
+      </div>
+    );
+  }
+
+  // Error state when not processing
+  if (!isDataProcessing) {
+    return (
+      <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
+        <span className="text-sm text-red-600">Failed to load schema</span>
+      </div>
+    );
+  }
+
+  // During processing without schema - minimal loading
+  return (
+    <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
+      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600 mx-auto mb-2"></div>
+      <span className="text-sm text-gray-600">Loading schema...</span>
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Only re-render if meaningful props have changed
+  // Completely ignore isDataProcessing, callback functions to prevent re-renders
+  const bindingChanged = (
+    prevProps.binding.schemaId !== nextProps.binding.schemaId ||
+    prevProps.binding.acquisitionId !== nextProps.binding.acquisitionId
+  );
+  const realAcquisitionChanged = prevProps.realAcquisition?.id !== nextProps.realAcquisition?.id;
+  const collapsedChanged = prevProps.isCollapsed !== nextProps.isCollapsed;
+
+  // Only re-render if binding, realAcquisition, or collapsed state actually changed
+  return !bindingChanged && !realAcquisitionChanged && !collapsedChanged;
+});
 
 const DataLoadingAndMatching: React.FC = () => {
   const navigate = useNavigate();
@@ -228,76 +363,6 @@ const DataLoadingAndMatching: React.FC = () => {
     }
   };
 
-  // Component to handle async schema loading
-  const SchemaAcquisitionDisplay: React.FC<{
-    binding: SchemaBinding;
-    realAcquisition?: Acquisition;
-    isCollapsed?: boolean;
-    onToggleCollapse?: () => void;
-    onDeselect?: () => void;
-  }> = ({ binding, realAcquisition, isCollapsed, onToggleCollapse, onDeselect }) => {
-    const [schemaAcquisition, setSchemaAcquisition] = useState<Acquisition | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-      const loadSchema = async () => {
-        console.log('📡 SchemaAcquisitionDisplay loading schema:', binding.schema.name);
-        setIsLoading(true);
-        const acquisition = await getSchemaAcquisition(binding);
-        console.log('📡 SchemaAcquisitionDisplay loaded acquisition:', acquisition);
-        setSchemaAcquisition(acquisition);
-        setIsLoading(false);
-      };
-      loadSchema();
-    }, [binding.schemaId, binding.acquisitionId]);
-
-    if (isLoading) {
-      return (
-        <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600 mx-auto mb-2"></div>
-          <span className="text-sm text-gray-600">Loading schema...</span>
-        </div>
-      );
-    }
-
-    if (!schemaAcquisition) {
-      return (
-        <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
-          <span className="text-sm text-red-600">Failed to load schema</span>
-        </div>
-      );
-    }
-
-    return (
-      <AcquisitionTable
-        acquisition={schemaAcquisition}
-        isEditMode={false}
-        mode="compliance"
-        realAcquisition={realAcquisition}
-        schemaId={binding.schemaId}
-        schemaAcquisitionId={binding.acquisitionId}
-        getSchemaContent={getSchemaContent}
-        title={binding.schema.name}
-        subtitle="Schema Requirements"
-        version={binding.schema.version}
-        authors={binding.schema.authors}
-        isCollapsed={isCollapsed}
-        onToggleCollapse={onToggleCollapse}
-        onDeselect={onDeselect}
-        // Disabled handlers for compliance mode
-        onUpdate={() => {}}
-        onDelete={() => {}}
-        onFieldUpdate={() => {}}
-        onFieldConvert={() => {}}
-        onFieldDelete={() => {}}
-        onFieldAdd={() => {}}
-        onSeriesUpdate={() => {}}
-        onSeriesAdd={() => {}}
-        onSeriesDelete={() => {}}
-        onSeriesNameUpdate={() => {}}
-      />
-    );
-  };
 
   // Helper to get or load schema acquisition
   const getSchemaAcquisition = async (binding: SchemaBinding): Promise<Acquisition | null> => {
@@ -636,6 +701,25 @@ const DataLoadingAndMatching: React.FC = () => {
     // Navigate to analysis or export
   };
 
+  // Memoize the preselected schema binding to prevent unnecessary re-renders
+  const preSelectedBinding = useMemo(() => {
+    if (!preSelectedSchemaId) return null;
+    const schema = getUnifiedSchema(preSelectedSchemaId);
+    if (!schema) return null;
+    return {
+      schemaId: preSelectedSchemaId,
+      acquisitionId: preSelectedAcquisitionId,
+      schema: schema
+    };
+  }, [preSelectedSchemaId, preSelectedAcquisitionId]);
+
+  // Memoize callback functions to prevent React.memo from failing
+  const handlePreselectedToggleCollapse = useCallback(() => toggleSchemaCollapse('preselected'), []);
+  const handlePreselectedDeselect = useCallback(() => {
+    setPreSelectedSchemaId(null);
+    setPreSelectedAcquisitionId(null);
+  }, []);
+
   // Upload area component
   const renderUploadArea = (isExtra: boolean = false) => (
     <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6">
@@ -759,19 +843,16 @@ const DataLoadingAndMatching: React.FC = () => {
         {loadedData.length === 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea()}
-            {preSelectedSchemaId ? (
+            {preSelectedBinding ? (
               <SchemaAcquisitionDisplay
-                binding={{
-                  schemaId: preSelectedSchemaId,
-                  acquisitionId: preSelectedAcquisitionId,
-                  schema: getUnifiedSchema(preSelectedSchemaId)!
-                }}
+                key={`preselected-${preSelectedBinding.schemaId}-${preSelectedBinding.acquisitionId}`}
+                binding={preSelectedBinding}
+                isDataProcessing={isProcessing}
                 isCollapsed={collapsedSchemas.has('preselected')}
-                onToggleCollapse={() => toggleSchemaCollapse('preselected')}
-                onDeselect={() => {
-                  setPreSelectedSchemaId(null);
-                  setPreSelectedAcquisitionId(null);
-                }}
+                onToggleCollapse={handlePreselectedToggleCollapse}
+                onDeselect={handlePreselectedDeselect}
+                getSchemaContent={getSchemaContent}
+                getSchemaAcquisition={getSchemaAcquisition}
               />
             ) : (
               <SchemaSelector
@@ -822,11 +903,15 @@ const DataLoadingAndMatching: React.FC = () => {
               {/* Right - Schema */}
               {pairing ? (
                 <SchemaAcquisitionDisplay
+                  key={`${pairing.schemaId}-${pairing.acquisitionId}-${acquisition.id}`}
                   binding={pairing}
                   realAcquisition={acquisition}
                   isCollapsed={collapsedSchemas.has(acquisition.id)}
                   onToggleCollapse={() => toggleSchemaCollapse(acquisition.id)}
                   onDeselect={() => unpairAcquisition(acquisition.id)}
+                  isDataProcessing={isProcessing}
+                  getSchemaContent={getSchemaContent}
+                  getSchemaAcquisition={getSchemaAcquisition}
                 />
               ) : (
                 <SchemaSelector
@@ -849,19 +934,19 @@ const DataLoadingAndMatching: React.FC = () => {
         {loadedData.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {renderUploadArea(true)}
-            {preSelectedSchemaId ? (
+            {preSelectedBinding ? (
               <SchemaAcquisitionDisplay
-                binding={{
-                  schemaId: preSelectedSchemaId,
-                  acquisitionId: preSelectedAcquisitionId,
-                  schema: getUnifiedSchema(preSelectedSchemaId)!
-                }}
+                key={`${preSelectedBinding.schemaId}-${preSelectedBinding.acquisitionId}`}
+                binding={preSelectedBinding}
+                isDataProcessing={isProcessing}
                 isCollapsed={collapsedSchemas.has('preselected_bottom')}
                 onToggleCollapse={() => toggleSchemaCollapse('preselected_bottom')}
                 onDeselect={() => {
                   setPreSelectedSchemaId(null);
                   setPreSelectedAcquisitionId(null);
                 }}
+                getSchemaContent={getSchemaContent}
+                getSchemaAcquisition={getSchemaAcquisition}
               />
             ) : (
               <SchemaSelector

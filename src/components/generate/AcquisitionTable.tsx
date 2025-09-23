@@ -18,6 +18,7 @@ interface AcquisitionTableProps {
   incompleteFields?: Set<string>;
   mode?: 'edit' | 'view' | 'compliance';
   realAcquisition?: Acquisition; // The actual DICOM data for compliance validation
+  isDataProcessing?: boolean; // Prevent validation during DICOM upload
   // Schema/compliance specific props
   schemaId?: string;
   schemaAcquisitionId?: string;
@@ -53,6 +54,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   incompleteFields = new Set(),
   mode = 'edit',
   realAcquisition,
+  isDataProcessing = false,
   schemaId,
   schemaAcquisitionId,
   getSchemaContent,
@@ -530,6 +532,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
               acquisition={acquisition}
               realAcquisition={realAcquisition}
               getSchemaContent={getSchemaContent}
+              isDataProcessing={isDataProcessing}
               onComplianceResults={(results) => {
                 console.log('📋 Received compliance results from FieldTable:', results.length);
                 setAllComplianceResults(results);
