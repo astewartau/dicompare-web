@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Tag, X, Plus } from 'lucide-react';
+import { User, Tag, X, Plus, Edit } from 'lucide-react';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
+import { useSchemaContext } from '../../contexts/SchemaContext';
 
 interface SchemaMetadata {
   name: string;
@@ -13,6 +14,7 @@ interface SchemaMetadata {
 const EnterMetadata: React.FC = () => {
   const navigate = useNavigate();
   const { schemaMetadata, setSchemaMetadata } = useAcquisitions();
+  const { originSchema } = useSchemaContext();
   
   const [metadata, setMetadata] = useState<SchemaMetadata>({
     name: '',
@@ -23,12 +25,21 @@ const EnterMetadata: React.FC = () => {
   const [newAuthor, setNewAuthor] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Load metadata from context on mount
+  // Load metadata from context on mount, prioritizing origin schema if available
   useEffect(() => {
-    if (schemaMetadata) {
+    if (originSchema) {
+      // Pre-fill from origin schema
+      setMetadata({
+        name: originSchema.metadata.title || originSchema.metadata.name || originSchema.name,
+        description: originSchema.metadata.description || '',
+        authors: originSchema.metadata.authors || [],
+        version: originSchema.metadata.version || '1.0'
+      });
+    } else if (schemaMetadata) {
+      // Fall back to existing schema metadata
       setMetadata(schemaMetadata);
     }
-  }, [schemaMetadata]);
+  }, [schemaMetadata, originSchema]);
 
   const addAuthor = () => {
     if (newAuthor.trim() && !metadata.authors.includes(newAuthor.trim())) {
@@ -91,10 +102,30 @@ const EnterMetadata: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">Enter Metadata - Step 2</h2>
+        <h2 className="text-3xl font-bold text-gray-900 mb-4">
+          Enter Metadata - Step 3
+        </h2>
         <p className="text-gray-600">
-          Provide essential information about your schema including name, description, and authors.
+          {originSchema
+            ? 'Review and modify the metadata from your template schema. You can save as a new schema or update the original.'
+            : 'Provide essential information about your schema including name, description, and authors.'
+          }
         </p>
+        {originSchema && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center">
+              <Edit className="h-4 w-4 text-blue-600 mr-2" />
+              <span className="text-sm text-blue-800">
+                <strong>Template source:</strong> {originSchema.type === 'library' ? 'Library' : 'Custom'} schema "{originSchema.name}"
+              </span>
+            </div>
+            {originSchema.type === 'library' && (
+              <p className="text-xs text-blue-600 mt-1">
+                Library schemas are read-only. Your changes will be saved as a new schema.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-md p-8">

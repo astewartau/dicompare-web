@@ -4,9 +4,11 @@ import { Upload, Plus, Loader2, Database, Copy } from 'lucide-react';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import { useSchemaService } from '../../hooks/useSchemaService';
+import { useSchemaContext } from '../../contexts/SchemaContext';
 import AcquisitionTable from './AcquisitionTable';
 import { processFieldForUI, processSeriesFieldValue } from '../../utils/fieldProcessing';
 import { processUploadedFiles } from '../../utils/fileUploadUtils';
+import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
 
 // Schema Card Component for the modal
 const SchemaCard: React.FC<{
@@ -136,6 +138,7 @@ const BuildSchema: React.FC = () => {
     librarySchemas,
     uploadedSchemas
   } = useSchemaService();
+  const { editingSchema, setEditingSchema } = useSchemaContext();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<string>('');
@@ -144,6 +147,71 @@ const BuildSchema: React.FC = () => {
   const [showSchemaModal, setShowSchemaModal] = useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = useState(false);
   const [activeTab, setActiveTab] = useState<'library' | 'uploaded'>('library');
+
+  // Load editing schema when available
+  useEffect(() => {
+    const loadEditingSchema = async () => {
+      if (editingSchema && editingSchema.content) {
+        try {
+          // Convert schema to acquisitions format
+          const schemaAcquisitions = await convertSchemaToAcquisitions(
+            {
+              id: editingSchema.id,
+              name: editingSchema.metadata?.name || 'Editing Schema',
+              ...editingSchema.metadata
+            },
+            async (schemaId: string) => JSON.stringify(editingSchema.content)
+          );
+
+          // Convert to acquisition context format
+          const contextAcquisitions = schemaAcquisitions.map(acq => ({
+            ...acq,
+            acquisitionFields: acq.acquisitionFields.map(field => processFieldForUI(field)),
+            seriesFields: acq.seriesFields.map(field => processFieldForUI({
+              ...field,
+              value: field.values?.[0] || field.value
+            })),
+            series: acq.series.map(series => ({
+              name: series.name,
+              fields: Object.fromEntries(
+                Object.entries(series.fields).map(([tag, value]) => {
+                  const matchingField = acq.seriesFields.find(sf => sf.tag === tag);
+                  const fieldName = matchingField?.name || tag;
+
+                  return [
+                    tag,
+                    processSeriesFieldValue(
+                      (typeof value === 'object' && value !== null && 'value' in value) ? {
+                        ...value,
+                        field: fieldName
+                      } : {
+                        value,
+                        field: fieldName,
+                        dataType: typeof value === 'number' ? 'number' :
+                                 Array.isArray(value) ? 'list_string' : 'string'
+                      },
+                      fieldName,
+                      tag
+                    )
+                  ];
+                })
+              )
+            }))
+          }));
+
+          setAcquisitions(contextAcquisitions);
+          console.log('✅ Schema loaded for editing');
+
+          // Clear editing schema since we've loaded it
+          setEditingSchema(null);
+        } catch (error) {
+          console.error('❌ Failed to load editing schema:', error);
+        }
+      }
+    };
+
+    loadEditingSchema();
+  }, [editingSchema, setAcquisitions, setEditingSchema]);
 
   // Initialize Pyodide only when needed
   const initializePyodideIfNeeded = useCallback(async () => {
@@ -748,23 +816,43 @@ const BuildSchema: React.FC = () => {
     <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6 h-fit col-span-3">
       <div
         className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
-          isDragOver 
-            ? 'border-medical-500 bg-medical-50' 
+          isDragOver
+            ? 'border-medical-500 bg-medical-50'
             : 'border-medical-300 hover:border-medical-400'
         }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <Upload className="h-10 w-10 text-medical-500 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2 text-center">
-          {isAdditional ? 'Add More Content' : 'Create Acquisitions'}
-        </h3>
-        <p className="text-sm text-gray-600 mb-6 text-center">
-          {isAdditional ? 'Upload more files or add manual acquisitions' : 'Upload files, drag and drop, or create acquisitions manually'}
-        </p>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {isUploading ? (
+          <>
+            <Loader2 className="h-12 w-12 text-medical-600 mx-auto mb-4 animate-spin" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 text-center">Processing Files</h3>
+            <p className="text-gray-600 mb-4 text-center">{uploadStatus}</p>
+
+            <div className="max-w-md mx-auto space-y-3 mb-4">
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-medical-600 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-sm text-gray-600 text-center">
+                {Math.round(uploadProgress)}% complete
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <Upload className="h-10 w-10 text-medical-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 text-center">
+              {isAdditional ? 'Add More Content' : 'Create Acquisitions'}
+            </h3>
+            <p className="text-sm text-gray-600 mb-6 text-center">
+              {isAdditional ? 'Upload more files or add manual acquisitions' : 'Upload files, drag and drop, or create acquisitions manually'}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* DICOM Upload Section */}
           <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/50 hover:bg-blue-50 transition-colors">
             <div className="text-center">
@@ -866,51 +954,33 @@ const BuildSchema: React.FC = () => {
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
 
 
 
-  // Status display component
-  const renderStatusDisplay = () => (
-    <>
-      {uploadStatus && uploadStatus.includes('Starting Python environment') && (
-        <div className="col-span-full mb-4 text-xs text-amber-600 flex items-center justify-center">
-          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-          Starting Python environment...
-        </div>
-      )}
-      
-      {isUploading && (
-        <div className="col-span-full mt-4">
-          <div className="flex items-center justify-center mb-2">
-            <Loader2 className="h-4 w-4 animate-spin text-medical-600 mr-2" />
-            <span className="text-sm font-medium text-gray-700">{uploadStatus}</span>
-          </div>
-          <div className="bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-medical-600 h-2 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${uploadProgress}%` }}
-            />
-          </div>
-          <p className="text-xs text-gray-500 mt-2">
-            {Math.round(uploadProgress)}% complete
-          </p>
-        </div>
-      )}
-    </>
-  );
 
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Build Schema - Step 1</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Build Schema - Step 2
+              {editingSchema && (
+                <span className="text-lg font-normal text-blue-600 ml-2">
+                  (Editing: {editingSchema.metadata?.name || 'Schema'})
+                </span>
+              )}
+            </h2>
             <p className="text-gray-600">
               {acquisitions.length > 0 ? (
-                'Review detected acquisitions and configure which DICOM fields to include in your validation schema.'
+                editingSchema ?
+                  'Review and modify the loaded schema acquisitions and configure which DICOM fields to include.' :
+                  'Review detected acquisitions and configure which DICOM fields to include in your validation schema.'
               ) : (
                 'Upload DICOM files to automatically extract metadata and create acquisition schemas, or manually add acquisitions.'
               )}
@@ -938,9 +1008,6 @@ const BuildSchema: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Status Display */}
-      {renderStatusDisplay()}
 
       {/* Upload Card when no acquisitions exist */}
       {acquisitions.length === 0 && (
@@ -1050,7 +1117,7 @@ const BuildSchema: React.FC = () => {
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    Uploaded Schemas
+                    Custom Schemas
                     {uploadedSchemas && uploadedSchemas.length > 0 && (
                       <span className="ml-2 bg-gray-100 text-gray-900 rounded-full px-2 py-1 text-xs">
                         {uploadedSchemas.length}
@@ -1086,7 +1153,7 @@ const BuildSchema: React.FC = () => {
                 </div>
               )}
 
-              {/* Uploaded Schemas Tab */}
+              {/* Custom Schemas Tab */}
               {activeTab === 'uploaded' && (
                 <div>
                   {uploadedSchemas && uploadedSchemas.length > 0 ? (
@@ -1103,7 +1170,7 @@ const BuildSchema: React.FC = () => {
                   ) : (
                     <div className="text-center py-8 text-gray-500">
                       <Copy className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                      <p>No uploaded schemas available.</p>
+                      <p>No custom schemas available.</p>
                       <p className="text-sm mt-1">Upload some schemas in the Check Compliance page or save schemas from the Schema Builder.</p>
                     </div>
                   )}

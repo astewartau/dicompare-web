@@ -83,7 +83,6 @@ const SchemaAcquisitionDisplay = React.memo<{
         schemaAcquisitionId={binding.acquisitionId}
         getSchemaContent={getSchemaContent}
         title={binding.schema.name}
-        subtitle="Schema Requirements"
         version={binding.schema.version}
         authors={binding.schema.authors}
         isCollapsed={isCollapsed}
@@ -892,12 +891,6 @@ const DataLoadingAndMatching: React.FC = () => {
                   onSeriesNameUpdate={() => {}}
                 />
 
-                {pairing && (
-                  <div className="absolute top-2 right-10 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium flex items-center">
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    Paired
-                  </div>
-                )}
               </div>
 
               {/* Right - Schema */}

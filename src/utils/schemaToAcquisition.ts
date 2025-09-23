@@ -51,6 +51,27 @@ export const convertSchemaToAcquisition = async (
     // Only use actual defined fields, not fields extracted from rules
     const allFields = acquisitionData.fields || [];
 
+    // Build unique series field definitions from all series
+    const seriesFieldMap = new Map();
+    if (acquisitionData.series) {
+      acquisitionData.series.forEach((series: any) => {
+        if (series.fields && Array.isArray(series.fields)) {
+          series.fields.forEach((field: any) => {
+            if (!seriesFieldMap.has(field.tag)) {
+              seriesFieldMap.set(field.tag, {
+                tag: field.tag,
+                name: field.field || field.name || field.tag,
+                vr: field.vr || 'UN',
+                level: 'series',
+                dataType: field.dataType || 'string',
+                validationRule: field.validationRule || { type: 'exact' as const }
+              });
+            }
+          });
+        }
+      });
+    }
+
     // Build the acquisition object
     const acquisition: Acquisition = {
       id: `schema-${schema.id}-${acquisitionId}`,
@@ -58,11 +79,11 @@ export const convertSchemaToAcquisition = async (
       seriesDescription: acquisitionData.description || '',
       totalFiles: 0, // Schema templates don't have files
       acquisitionFields: convertFields(allFields.filter((f: any) => !f.level || f.level === 'acquisition'), 'acquisition'),
-      seriesFields: convertFields(allFields.filter((f: any) => f.level === 'series'), 'series'),
+      seriesFields: convertFields(Array.from(seriesFieldMap.values()), 'series'),
       series: acquisitionData.series?.map((series: any, index: number) => ({
         name: series.name || `Series ${index + 1}`,
         fields: Object.fromEntries(
-          (allFields.filter((f: any) => f.level === 'series') || []).map((field: any) => [
+          (series.fields || []).map((field: any) => [
             field.tag,
             {
               value: field.value || field.defaultValue || '',

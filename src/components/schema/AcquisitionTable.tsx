@@ -305,9 +305,11 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 <h3 className="text-sm font-semibold text-gray-900 truncate">
                   {title || acquisition.protocolName}
                 </h3>
-                <p className="text-xs text-gray-600 truncate">
-                  {subtitle || (isSchemaMode ? 'Schema Requirements' : acquisition.seriesDescription)}
-                </p>
+                {(subtitle || (!isSchemaMode && acquisition.seriesDescription)) && (
+                  <p className="text-xs text-gray-600 truncate">
+                    {subtitle || acquisition.seriesDescription}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -347,11 +349,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           {isSchemaMode ? (
             <>
               v{version || '1.0.0'} • {authors?.join(', ') || 'Schema Template'}
-              {schemaAcquisitionId && (
-                <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                  Acquisition {schemaAcquisitionId}
-                </span>
-              )}
             </>
           ) : acquisition.totalFiles > 0 ? (
             <>

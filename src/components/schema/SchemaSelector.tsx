@@ -102,10 +102,6 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 h-fit">
-      <div className="mb-4">
-        <h4 className="font-medium text-gray-900 text-base mb-2">{title}</h4>
-      </div>
-
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-4">
         <nav className="-mb-px flex space-x-8">
@@ -137,7 +133,7 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
           >
             <div className="flex items-center">
               <FolderOpen className="h-4 w-4 mr-2" />
-              Uploaded
+              Custom
               {uploadedSchemas.length > 0 && (
                 <span className="ml-2 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
                   {uploadedSchemas.length}
@@ -296,7 +292,7 @@ const SchemaSelector: React.FC<SchemaSelectorProps> = ({
         <p className="text-sm text-gray-500 text-center py-4">
           {activeTab === 'library'
             ? 'No library schemas available.'
-            : 'No uploaded schemas. Upload a schema to get started.'}
+            : 'No custom schemas. Upload a schema to get started.'}
         </p>
       )}
     </div>

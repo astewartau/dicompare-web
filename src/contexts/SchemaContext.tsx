@@ -2,18 +2,36 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { SchemaMetadata } from '../types/schema';
 import { schemaCacheManager } from '../services/SchemaCacheManager';
 
+interface EditingSchema {
+  id: string;
+  content: any;
+  metadata?: any;
+}
+
+interface OriginSchema {
+  id: string;
+  name: string;
+  type: 'library' | 'uploaded';
+  metadata: any;
+}
+
 interface SchemaContextValue {
   schemas: SchemaMetadata[];
   selectedSchema: SchemaMetadata | null;
+  editingSchema: EditingSchema | null;
+  originSchema: OriginSchema | null;
   isLoading: boolean;
   error: string | null;
-  
+
   selectSchema: (schema: SchemaMetadata | null) => void;
+  setEditingSchema: (schema: EditingSchema | null) => void;
+  setOriginSchema: (schema: OriginSchema | null) => void;
   uploadSchema: (file: File, metadata?: Partial<SchemaMetadata>) => Promise<SchemaMetadata>;
   deleteSchema: (id: string) => Promise<void>;
   refreshSchemas: () => Promise<void>;
   getSchemaContent: (id: string) => Promise<string | null>;
   updateSchemaMetadata: (id: string, updates: Partial<SchemaMetadata>) => Promise<void>;
+  updateExistingSchema: (originId: string, newContent: any, newMetadata: any) => Promise<void>;
   clearCache: () => Promise<void>;
   getCacheSize: () => Promise<number>;
 }
@@ -35,6 +53,8 @@ interface SchemaProviderProps {
 export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
   const [schemas, setSchemas] = useState<SchemaMetadata[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<SchemaMetadata | null>(null);
+  const [editingSchema, setEditingSchema] = useState<EditingSchema | null>(null);
+  const [originSchema, setOriginSchema] = useState<OriginSchema | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -156,6 +176,37 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
     }
   };
 
+  const updateExistingSchema = async (originId: string, newContent: any, newMetadata: any) => {
+    try {
+      setError(null);
+
+      // Get the existing schema metadata to merge with new metadata
+      const existingSchema = await schemaCacheManager.getSchema(originId);
+      if (!existingSchema) {
+        throw new Error('Original schema not found');
+      }
+
+      // Create updated metadata by merging existing with new
+      const updatedMetadata = {
+        ...existingSchema.metadata,
+        ...newMetadata,
+        id: originId, // Keep the same ID
+        uploadDate: new Date().toISOString() // Update the modification time
+      };
+
+      // Use storeSchema to update both content and metadata
+      await schemaCacheManager.storeSchema(updatedMetadata, JSON.stringify(newContent));
+
+      await refreshSchemas();
+
+      console.log('✅ Successfully updated existing schema');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update existing schema';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
   useEffect(() => {
     const initializeContext = async () => {
       setIsLoading(true);
@@ -175,14 +226,19 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
   const value: SchemaContextValue = {
     schemas,
     selectedSchema,
+    editingSchema,
+    originSchema,
     isLoading,
     error,
     selectSchema,
+    setEditingSchema,
+    setOriginSchema,
     uploadSchema,
     deleteSchema,
     refreshSchemas,
     getSchemaContent,
     updateSchemaMetadata,
+    updateExistingSchema,
     clearCache,
     getCacheSize,
   };

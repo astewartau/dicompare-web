@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, FileText } from 'lucide-react';
 import { AcquisitionProvider } from '../contexts/AcquisitionContext';
 import { SchemaProvider } from '../contexts/SchemaContext';
+import SchemaStartPage from '../components/schema/SchemaStartPage';
 import BuildSchema from '../components/schema/BuildSchema';
 import EnterMetadata from '../components/schema/EnterMetadata';
 import DownloadSchema from '../components/schema/DownloadSchema';
@@ -12,6 +13,7 @@ const SchemaBuilder: React.FC = () => {
   const currentStep = location.pathname.split('/').pop();
 
   const steps = [
+    { id: 'start', name: 'Choose Starting Point', path: '/schema-builder/start' },
     { id: 'build-schema', name: 'Build Schema', path: '/schema-builder/build-schema' },
     { id: 'enter-metadata', name: 'Enter Metadata', path: '/schema-builder/enter-metadata' },
     { id: 'download-schema', name: 'Download Schema', path: '/schema-builder/download-schema' }
@@ -75,7 +77,8 @@ const SchemaBuilder: React.FC = () => {
         {/* Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Routes>
-            <Route path="/" element={<BuildSchema />} />
+            <Route path="/" element={<SchemaStartPage />} />
+            <Route path="/start" element={<SchemaStartPage />} />
             <Route path="/build-schema" element={<BuildSchema />} />
             <Route path="/enter-metadata" element={<EnterMetadata />} />
             <Route path="/download-schema" element={<DownloadSchema />} />
