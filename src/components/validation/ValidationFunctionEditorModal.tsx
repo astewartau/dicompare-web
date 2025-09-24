@@ -32,11 +32,28 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
   const [pandasInstalled, setPandasInstalled] = useState(false);
   const [dicompareInstalled, setDicompareInstalled] = useState(false);
   const [testResults, setTestResults] = useState<Record<string, { passed: boolean; error?: string; stdout?: string; loading?: boolean }>>({});
+  const [activeTestDataTabs, setActiveTestDataTabs] = useState<Record<string, 'table' | 'code'>>({});
+  const [testDataCode, setTestDataCode] = useState<Record<string, string>>({});
+  const [codeExecutionResults, setCodeExecutionResults] = useState<Record<string, { loading?: boolean; error?: string; data?: any }>>({});
+
+  const getDefaultCodeTemplate = (fields: string[]) => {
+    return `import pandas as pd
+import numpy as np
+
+# Example: Generate test data for your fields
+# Modify this code to create your test data
+
+test_data = {
+${fields.map(field => `    '${field}': [${field === 'DiffusionBValue' ? '1000, 2000' : field === 'SeriesDescription' ? '"series1", "series2"' : '"value1", "value2"'}],`).join('\n')}
+}
+
+return test_data`;
+  };
 
   // Initialize edited function when modal opens or func changes
   useEffect(() => {
     if (func) {
-      setEditedFunc({
+      const editedFunction = {
         ...func,
         customName: func.customName || func.name,
         customDescription: func.customDescription || func.description,
@@ -44,7 +61,23 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
         customImplementation: func.customImplementation || func.implementation,
         customTestCases: func.customTestCases || func.testCases || [],
         enabledSystemFields: func.enabledSystemFields || []
+      };
+
+      setEditedFunc(editedFunction);
+
+      // Initialize tab states and code for existing test cases
+      const allFields = [...(editedFunction.customFields || editedFunction.fields), ...(editedFunction.enabledSystemFields || [])];
+      const initialTabs: Record<string, 'table' | 'code'> = {};
+      const initialCode: Record<string, string> = {};
+
+      (editedFunction.customTestCases || []).forEach(testCase => {
+        initialTabs[testCase.id] = 'table';
+        initialCode[testCase.id] = getDefaultCodeTemplate(allFields);
       });
+
+      setActiveTestDataTabs(initialTabs);
+      setTestDataCode(initialCode);
+      setCodeExecutionResults({});
     }
   }, [func]);
 
@@ -115,7 +148,7 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
 
   const addTestCase = () => {
     if (!editedFunc) return;
-    
+
     const allFields = [...(editedFunc.customFields || editedFunc.fields), ...(editedFunc.enabledSystemFields || [])];
     const newTestCase: TestCase = {
       id: `test_${Date.now()}`,
@@ -125,11 +158,131 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
       expectedToPass: true,
       description: ''
     };
-    
+
     setEditedFunc(prev => prev ? ({
       ...prev,
       customTestCases: [...(prev.customTestCases || []), newTestCase]
     }) : null);
+
+    // Initialize tab state and code for new test case
+    setActiveTestDataTabs(prev => ({ ...prev, [newTestCase.id]: 'table' }));
+    setTestDataCode(prev => ({ ...prev, [newTestCase.id]: getDefaultCodeTemplate(allFields) }));
+  };
+
+  const executeTestDataCode = async (testCaseId: string, code: string) => {
+    if (!editedFunc) return;
+
+    setCodeExecutionResults(prev => ({
+      ...prev,
+      [testCaseId]: { loading: true }
+    }));
+
+    try {
+      await initializePyodideIfNeeded();
+
+      if (!pandasInstalled) {
+        await pyodideManager.loadPackage('pandas');
+        setPandasInstalled(true);
+      }
+
+      const wrappedCode = `
+import pandas as pd
+import numpy as np
+import json
+
+def generate_test_data():
+${code.split('\n').map(line => '    ' + line).join('\n')}
+
+output = None
+try:
+    result = generate_test_data()
+    if not isinstance(result, dict):
+        raise ValueError("Code must return a dictionary")
+
+    # Convert numpy arrays and other non-serializable types to lists
+    cleaned_result = {}
+    for key, value in result.items():
+        if hasattr(value, 'tolist'):  # numpy array
+            cleaned_result[key] = value.tolist()
+        elif isinstance(value, list):
+            # Handle lists that might contain numpy types
+            cleaned_list = []
+            for item in value:
+                if hasattr(item, 'tolist'):
+                    cleaned_list.append(item.tolist())
+                elif hasattr(item, 'item'):  # numpy scalar
+                    cleaned_list.append(item.item())
+                else:
+                    cleaned_list.append(item)
+            cleaned_result[key] = cleaned_list
+        elif hasattr(value, 'item'):  # numpy scalar
+            cleaned_result[key] = [value.item()]
+        else:
+            cleaned_result[key] = [value] if not isinstance(value, list) else value
+
+    # Validate all arrays have same length
+    if cleaned_result:
+        lengths = [len(v) for v in cleaned_result.values()]
+        if len(set(lengths)) > 1:
+            field_lengths = {k: len(v) for k, v in cleaned_result.items()}
+            raise ValueError(f"All fields must have the same number of values. Found: {field_lengths}")
+
+    output = json.dumps({"success": True, "data": cleaned_result})
+except Exception as e:
+    output = json.dumps({"success": False, "error": str(e)})
+
+# Return the JSON output
+output
+`;
+
+      const result = await pyodideManager.runPython(wrappedCode);
+
+      // Check if result is undefined or null
+      if (result === undefined || result === null) {
+        throw new Error('No output from Python code execution');
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(result as string);
+      } catch (parseErr) {
+        console.error('Failed to parse Python output:', result);
+        throw new Error(`Invalid JSON output from Python: ${result}`);
+      }
+
+      if (parsed.success) {
+        // Convert the data to the format expected by the test case
+        const convertedData: Record<string, any[]> = {};
+        for (const [field, values] of Object.entries(parsed.data)) {
+          if (Array.isArray(values)) {
+            convertedData[field] = values;
+          } else {
+            convertedData[field] = [values];
+          }
+        }
+
+        // Update the test case data
+        const testIndex = (editedFunc.customTestCases || []).findIndex(tc => tc.id === testCaseId);
+        if (testIndex >= 0) {
+          updateTestCase(testIndex, { data: convertedData });
+        }
+
+        setCodeExecutionResults(prev => ({
+          ...prev,
+          [testCaseId]: { data: convertedData }
+        }));
+      } else {
+        setCodeExecutionResults(prev => ({
+          ...prev,
+          [testCaseId]: { error: parsed.error }
+        }));
+      }
+    } catch (error) {
+      setCodeExecutionResults(prev => ({
+        ...prev,
+        [testCaseId]: { error: `Execution failed: ${error.message}` }
+      }));
+    }
   };
 
   const updateTestCase = (testIndex: number, updates: Partial<TestCase>) => {
@@ -151,7 +304,34 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
     }
   };
 
+  const getActiveTab = (testCaseId: string): 'table' | 'code' => {
+    return activeTestDataTabs[testCaseId] || 'table';
+  };
+
+  const setActiveTab = (testCaseId: string, tab: 'table' | 'code') => {
+    setActiveTestDataTabs(prev => ({ ...prev, [testCaseId]: tab }));
+  };
+
   const deleteTestCase = (testIndex: number) => {
+    const testCase = editedFunc?.customTestCases?.[testIndex];
+    if (testCase) {
+      // Clean up related state
+      setActiveTestDataTabs(prev => {
+        const newState = { ...prev };
+        delete newState[testCase.id];
+        return newState;
+      });
+      setTestDataCode(prev => {
+        const newState = { ...prev };
+        delete newState[testCase.id];
+        return newState;
+      });
+      setCodeExecutionResults(prev => {
+        const newState = { ...prev };
+        delete newState[testCase.id];
+        return newState;
+      });
+    }
     setEditedFunc(prev => prev ? ({
       ...prev,
       customTestCases: prev.customTestCases?.filter((_, i) => i !== testIndex) || []
@@ -176,7 +356,17 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
           [newField]: [''] // Initialize with one empty row
         }
       }));
-      
+
+      // Update code templates for all test cases
+      const allFields = [...updatedFields, ...(prev.enabledSystemFields || [])];
+      setTestDataCode(prevCode => {
+        const newCode = { ...prevCode };
+        (prev.customTestCases || []).forEach(testCase => {
+          newCode[testCase.id] = getDefaultCodeTemplate(allFields);
+        });
+        return newCode;
+      });
+
       return {
         ...prev,
         customFields: updatedFields,
@@ -202,7 +392,17 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
           Object.entries(testCase.data).filter(([fieldName]) => fieldName !== fieldToRemove)
         )
       }));
-      
+
+      // Update code templates for all test cases
+      const allFields = [...updatedFields, ...(prev.enabledSystemFields || [])];
+      setTestDataCode(prevCode => {
+        const newCode = { ...prevCode };
+        (prev.customTestCases || []).forEach(testCase => {
+          newCode[testCase.id] = getDefaultCodeTemplate(allFields);
+        });
+        return newCode;
+      });
+
       return {
         ...prev,
         customFields: updatedFields,
@@ -729,27 +929,54 @@ json.dumps({
                     </div>
 
                     <div className="space-y-2">
+                      {/* Tab Navigation */}
                       <div className="flex items-center justify-between">
-                        <label className="block text-xs font-medium text-gray-700">Test Data (DataFrame)</label>
-                        <button
-                          onClick={() => {
-                            // Add a new row to all fields
-                            const newData = { ...testCase.data };
-                            const allFields = [...(editedFunc.customFields || editedFunc.fields), ...(editedFunc.enabledSystemFields || [])];
-                            allFields.forEach(field => {
-                              if (!newData[field]) newData[field] = [];
-                              newData[field].push(''); // Add empty value for new row
-                            });
-                            updateTestCase(testIndex, { data: newData });
-                          }}
-                          className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                        >
-                          + Add Row
-                        </button>
+                        <div className="flex space-x-1">
+                          <button
+                            onClick={() => setActiveTab(testCase.id, 'table')}
+                            className={`px-3 py-1 text-xs font-medium rounded-t-md border-b-2 ${
+                              getActiveTab(testCase.id) === 'table'
+                                ? 'text-blue-600 border-blue-600 bg-blue-50'
+                                : 'text-gray-500 border-transparent hover:text-gray-700'
+                            }`}
+                          >
+                            Table Editor
+                          </button>
+                          <button
+                            onClick={() => setActiveTab(testCase.id, 'code')}
+                            className={`px-3 py-1 text-xs font-medium rounded-t-md border-b-2 ${
+                              getActiveTab(testCase.id) === 'code'
+                                ? 'text-green-600 border-green-600 bg-green-50'
+                                : 'text-gray-500 border-transparent hover:text-gray-700'
+                            }`}
+                          >
+                            Code Editor
+                          </button>
+                        </div>
+
+                        {getActiveTab(testCase.id) === 'table' && (
+                          <button
+                            onClick={() => {
+                              // Add a new row to all fields
+                              const newData = { ...testCase.data };
+                              const allFields = [...(editedFunc.customFields || editedFunc.fields), ...(editedFunc.enabledSystemFields || [])];
+                              allFields.forEach(field => {
+                                if (!newData[field]) newData[field] = [];
+                                newData[field].push(''); // Add empty value for new row
+                              });
+                              updateTestCase(testIndex, { data: newData });
+                            }}
+                            className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                          >
+                            + Add Row
+                          </button>
+                        )}
                       </div>
-                      
-                      {/* DataFrame-like table */}
-                      <div className="border border-gray-300 rounded-md overflow-hidden">
+
+                      {/* Table Editor */}
+                      {getActiveTab(testCase.id) === 'table' && (
+                        <>
+                        <div className="border border-gray-300 rounded-md overflow-hidden">
                         {/* Header */}
                         <div className="bg-gray-50 border-b border-gray-300 flex">
                           <div className="w-8 px-2 py-1 text-xs font-medium text-gray-700 border-r border-gray-300">#</div>
@@ -765,14 +992,15 @@ json.dumps({
                           ))}
                           <div className="w-8"></div>
                         </div>
-                        
-                        {/* Rows */}
+
+                        {/* Rows - Scrollable container */}
+                        <div className="max-h-[320px] overflow-y-auto">
                         {(() => {
                           const regularFields = editedFunc.customFields || editedFunc.fields;
                           const systemFields = editedFunc.enabledSystemFields || [];
                           const allFields = [...regularFields, ...systemFields];
                           const maxRows = Math.max(1, ...allFields.map(field => (testCase.data[field] || []).length));
-                          
+
                           return Array.from({ length: maxRows }, (_, rowIndex) => (
                             <div key={rowIndex} className="flex border-b border-gray-200 last:border-b-0">
                               <div className="w-8 px-2 py-1 text-xs text-gray-500 border-r border-gray-300 bg-gray-50">
@@ -859,12 +1087,80 @@ json.dumps({
                             </div>
                           ));
                         })()}
+                        </div>
                       </div>
-                      
+
                       <div className="text-xs text-gray-500">
-                        Rows: {Math.max(1, ...[...(editedFunc.customFields || editedFunc.fields), ...(editedFunc.enabledSystemFields || [])].map(field => (testCase.data[field] || []).length))} | 
+                        Rows: {Math.max(1, ...[...(editedFunc.customFields || editedFunc.fields), ...(editedFunc.enabledSystemFields || [])].map(field => (testCase.data[field] || []).length))} |
                         Each row represents one record in the DataFrame
                       </div>
+                      </>
+                      )}
+
+                      {/* Code Editor */}
+                      {getActiveTab(testCase.id) === 'code' && (
+                        <div className="space-y-2">
+                          <div className="border border-gray-300 rounded-md overflow-hidden">
+                            <CodeMirror
+                              value={testDataCode[testCase.id] || ''}
+                              onChange={(value) => setTestDataCode(prev => ({ ...prev, [testCase.id]: value }))}
+                              extensions={[python()]}
+                              theme="light"
+                              height="200px"
+                              basicSetup={{
+                                lineNumbers: true,
+                                foldGutter: true,
+                                dropCursor: false,
+                                allowMultipleSelections: false,
+                                indentOnInput: true,
+                                bracketMatching: true,
+                                closeBrackets: true,
+                                autocompletion: true,
+                                highlightSelectionMatches: false,
+                                searchKeymap: false,
+                              }}
+                              className="text-xs"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <button
+                              onClick={() => executeTestDataCode(testCase.id, testDataCode[testCase.id] || '')}
+                              disabled={codeExecutionResults[testCase.id]?.loading}
+                              className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                            >
+                              {codeExecutionResults[testCase.id]?.loading ? (
+                                <>
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                  Running...
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-3 w-3 mr-1" />
+                                  Run Code
+                                </>
+                              )}
+                            </button>
+
+                            <div className="text-xs text-gray-500">
+                              Returns a pandas DataFrame with test data
+                            </div>
+                          </div>
+
+                          {/* Code Execution Results */}
+                          {codeExecutionResults[testCase.id]?.error && (
+                            <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                              <strong>Error:</strong> {codeExecutionResults[testCase.id].error}
+                            </div>
+                          )}
+
+                          {codeExecutionResults[testCase.id]?.data && (
+                            <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+                              <strong>Success:</strong> Generated data with {Object.keys(codeExecutionResults[testCase.id].data).length} fields and {Object.values(codeExecutionResults[testCase.id].data)[0]?.length || 0} rows
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Test Result */}

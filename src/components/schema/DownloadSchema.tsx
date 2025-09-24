@@ -102,11 +102,11 @@ const DownloadSchema: React.FC = () => {
           // Transform validation functions
           const validationRules = acquisition.validationFunctions?.map((rule: any) => ({
             id: rule.id,
-            name: rule.name,
-            description: rule.description,
-            implementation: rule.implementation || rule.customImplementation,
-            fields: rule.fields || rule.customFields || [],
-            testCases: rule.testCases || rule.customTestCases || []
+            name: rule.customName || rule.name,
+            description: rule.customDescription || rule.description,
+            implementation: rule.customImplementation || rule.implementation,
+            fields: rule.customFields || rule.fields || [],
+            testCases: rule.customTestCases || rule.testCases || []
           })) || [];
 
           schemaAcquisitions[acquisitionName] = {
