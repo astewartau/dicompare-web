@@ -5,12 +5,12 @@ import { SchemaProvider } from '../contexts/SchemaContext';
 import DataLoadingAndMatching from '../components/compliance/DataLoadingAndMatching';
 import ComplianceAnalysis from '../components/compliance/ComplianceAnalysis';
 
-const CheckCompliance: React.FC = () => {
+const ComplianceChecker: React.FC = () => {
   const location = useLocation();
   const currentStep = location.pathname.split('/').pop();
 
   const steps = [
-    { id: 'load-and-match', name: 'Load & Analyze Compliance', path: '/check-compliance/load-and-match' }
+    { id: 'load-and-match', name: 'Load & Analyze Compliance', path: '/compliance-checker/load-and-match' }
   ];
 
   const getCurrentStepIndex = () => {
@@ -30,7 +30,7 @@ const CheckCompliance: React.FC = () => {
                 Back to Home
               </Link>
               <CheckCircle className="h-8 w-8 text-medical-600 mr-3" />
-              <h1 className="text-2xl font-bold text-gray-900">Check Compliance</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Compliance Checker</h1>
             </div>
           </div>
         </header>
@@ -80,4 +80,4 @@ const CheckCompliance: React.FC = () => {
   );
 };
 
-export default CheckCompliance;
+export default ComplianceChecker;

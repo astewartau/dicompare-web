@@ -41,12 +41,12 @@ const LandingPage: React.FC = () => {
               </p>
             </Link>
 
-            <Link 
-              to="/check-compliance" 
+            <Link
+              to="/compliance-checker"
               className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-2 border-transparent hover:border-medical-200"
             >
               <CheckCircle className="h-10 w-10 text-medical-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Check Compliance</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">Compliance Checker</h3>
               <p className="text-gray-600 text-sm">
                 Validate DICOM files against existing schemas. 
                 Get detailed compliance reports and identify data issues.

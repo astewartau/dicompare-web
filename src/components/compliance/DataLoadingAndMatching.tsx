@@ -7,7 +7,7 @@ import { processUploadedFiles } from '../../utils/fileUploadUtils';
 import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { SchemaUploadModal } from '../schema/SchemaUploadModal';
 import AcquisitionTable from '../schema/AcquisitionTable';
-import SchemaSelector from '../schema/SchemaSelector';
+import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import ComplianceReportModal from './ComplianceReportModal';
 
 // ✅ MOVE COMPONENT OUTSIDE TO PREVENT RECREATION!
@@ -880,15 +880,15 @@ const DataLoadingAndMatching: React.FC = () => {
                 getSchemaAcquisition={getSchemaAcquisition}
               />
             ) : (
-              <SchemaSelector
+              <UnifiedSchemaSelector
                 librarySchemas={librarySchemas}
                 uploadedSchemas={uploadedSchemas}
+                selectionMode="acquisition"
                 selectedSchemaId={preSelectedSchemaId}
-                onSchemaSelect={handleSchemaSelect}
-                onSchemaDelete={handleSchemaDelete}
-                onSchemaUpload={handleSchemaUpload}
+                onAcquisitionSelect={handleSchemaSelect}
+                                onSchemaUpload={handleSchemaUpload}
+                expandable={true}
                 getSchemaContent={getSchemaContent}
-                title="Select Validation Schema"
               />
             )}
           </div>
@@ -933,16 +933,16 @@ const DataLoadingAndMatching: React.FC = () => {
                   getSchemaAcquisition={getSchemaAcquisition}
                 />
               ) : (
-                <SchemaSelector
+                <UnifiedSchemaSelector
                   librarySchemas={librarySchemas}
                   uploadedSchemas={uploadedSchemas}
-                  onSchemaSelect={(schemaId, acquisitionId) =>
+                  selectionMode="acquisition"
+                  onAcquisitionSelect={(schemaId, acquisitionId) =>
                     pairSchemaWithAcquisition(acquisition.id, schemaId, acquisitionId)
                   }
-                  onSchemaDelete={handleSchemaDelete}
-                  onSchemaUpload={handleSchemaUpload}
+                                    onSchemaUpload={handleSchemaUpload}
+                  expandable={true}
                   getSchemaContent={getSchemaContent}
-                  title={`Select template for: ${acquisition.protocolName}`}
                 />
               )}
             </div>
@@ -968,15 +968,15 @@ const DataLoadingAndMatching: React.FC = () => {
                 getSchemaAcquisition={getSchemaAcquisition}
               />
             ) : (
-              <SchemaSelector
+              <UnifiedSchemaSelector
                 librarySchemas={librarySchemas}
                 uploadedSchemas={uploadedSchemas}
+                selectionMode="acquisition"
                 selectedSchemaId={preSelectedSchemaId}
-                onSchemaSelect={handleSchemaSelect}
-                onSchemaDelete={handleSchemaDelete}
-                onSchemaUpload={handleSchemaUpload}
+                onAcquisitionSelect={handleSchemaSelect}
+                                onSchemaUpload={handleSchemaUpload}
+                expandable={true}
                 getSchemaContent={getSchemaContent}
-                title="Select Validation Schema"
               />
             )}
           </div>

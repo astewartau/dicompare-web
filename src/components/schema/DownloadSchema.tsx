@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, FileText, Code, Eye, ArrowLeft, Loader2, Save, CheckCircle, Edit, AlertCircle } from 'lucide-react';
+import { Download, FileText, Code, Eye, ArrowLeft, Loader2, Save, CheckCircle, Edit, AlertCircle, Copy, Check } from 'lucide-react';
+import CodeMirror from '@uiw/react-codemirror';
+import { json } from '@codemirror/lang-json';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { dicompareAPI } from '../../services/DicompareAPI';
@@ -16,6 +18,7 @@ const DownloadSchema: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveOption, setSaveOption] = useState<'new' | 'update' | null>(null);
   const [showConfirmUpdate, setShowConfirmUpdate] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // Generate schema when component mounts
   useEffect(() => {
@@ -251,6 +254,39 @@ const DownloadSchema: React.FC = () => {
     navigate('/schema-builder/build-schema');
   };
 
+  const handleCopyToClipboard = async () => {
+    if (!schema) return;
+
+    try {
+      // Separate the schema from statistics for copying
+      const { statistics, ...schemaContent } = schema;
+      const jsonContent = JSON.stringify(schemaContent, null, 2);
+
+      await navigator.clipboard.writeText(jsonContent);
+      setCopySuccess(true);
+
+      // Auto-hide success message after 2 seconds
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      // Fallback for older browsers
+      try {
+        const { statistics, ...schemaContent } = schema;
+        const jsonContent = JSON.stringify(schemaContent, null, 2);
+        const textArea = document.createElement('textarea');
+        textArea.value = jsonContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+      } catch (fallbackErr) {
+        console.error('Fallback copy failed:', fallbackErr);
+      }
+    }
+  };
+
   // Show loading state
   if (isGenerating) {
     return (
@@ -371,16 +407,6 @@ const DownloadSchema: React.FC = () => {
               </div>
             </div>
             
-            {schema.statistics && (
-              <div>
-                <h4 className="font-medium text-gray-700">Statistics</h4>
-                <div className="mt-2 space-y-1 text-sm text-gray-600">
-                  <p>Total acquisitions: {schema.statistics.total_acquisitions}</p>
-                  <p>Total validation fields: {schema.statistics.total_validation_fields}</p>
-                  <p>Estimated validation time: {schema.statistics.estimated_validation_time}</p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -421,7 +447,7 @@ const DownloadSchema: React.FC = () => {
           {saveSuccess && saveOption === 'new' && (
             <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center">
               <CheckCircle className="h-4 w-4 mr-2" />
-              New schema saved to library successfully! It's now available in Check Compliance.
+              New schema saved to library successfully! It's now available in Compliance Checker.
             </div>
           )}
 
@@ -450,7 +476,7 @@ const DownloadSchema: React.FC = () => {
                 ) : (
                   <>
                     <Save className="h-5 w-5 mr-2" />
-                    Save as New Schema
+                    Save to library
                   </>
                 )}
               </button>
@@ -491,18 +517,57 @@ const DownloadSchema: React.FC = () => {
 
       {/* Schema Preview */}
       <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-          <FileText className="h-6 w-6 mr-2 text-medical-600" />
-          Schema Content Preview
-        </h3>
-        
-        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
-          <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-            {schema ? JSON.stringify((() => {
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-semibold text-gray-900 flex items-center">
+            <FileText className="h-6 w-6 mr-2 text-medical-600" />
+            Schema Content Preview
+          </h3>
+
+          <button
+            onClick={handleCopyToClipboard}
+            className="flex items-center px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            title="Copy JSON to clipboard"
+          >
+            {copySuccess ? (
+              <>
+                <Check className="h-4 w-4 mr-2" />
+                Copied!
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4 mr-2" />
+                Copy JSON
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="border border-gray-300 rounded-lg overflow-hidden">
+          <CodeMirror
+            value={schema ? JSON.stringify((() => {
               const { statistics, ...schemaContent } = schema;
               return schemaContent;
             })(), null, 2) : 'Loading...'}
-          </pre>
+            extensions={[json()]}
+            theme="light"
+            height="400px"
+            editable={false}
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              dropCursor: false,
+              allowMultipleSelections: false,
+              indentOnInput: false,
+              bracketMatching: true,
+              closeBrackets: false,
+              autocompletion: false,
+              highlightSelectionMatches: false,
+              searchKeymap: false,
+            }}
+          />
+        </div>
+        <div className="mt-2 text-xs text-gray-500">
+          JSON syntax highlighting enabled • Read-only preview • Scrollable content
         </div>
       </div>
 
