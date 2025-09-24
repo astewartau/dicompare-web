@@ -1,24 +1,23 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AlertProvider } from './components/Alert';
-import { PyodideProvider } from './components/PyodideContext';
-import LandingPage from './pages/LandingPage/LandingPage';
-import GenerateTemplate from './pages/GenerateTemplate/GenerateTemplate';
-import CheckCompliance from './pages/CheckCompliance/CheckCompliance';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
+import SchemaBuilder from './pages/SchemaBuilder';
+import ComplianceChecker from './pages/ComplianceChecker';
+import PythonSchemaBuilder from './pages/PythonSchemaBuilder';
 
-const App = () => {
-    return (
-        <AlertProvider>
-            <PyodideProvider>
-                <BrowserRouter>
-                    <Routes>
-                        <Route path="/" element={<LandingPage />} />
-                        <Route path="/generate-template" element={<GenerateTemplate />} />
-                        <Route path="/check-compliance" element={<CheckCompliance />} />
-                    </Routes>
-                </BrowserRouter>
-            </PyodideProvider>
-        </AlertProvider>
-    );
-};
+function App() {
+  return (
+    <Router>
+      <div className="min-h-screen bg-gray-50">
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/schema-builder/*" element={<SchemaBuilder />} />
+          <Route path="/compliance-checker/*" element={<ComplianceChecker />} />
+          <Route path="/python-schema-builder" element={<PythonSchemaBuilder />} />
+        </Routes>
+      </div>
+    </Router>
+  );
+}
 
 export default App;

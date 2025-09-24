@@ -1,22 +1,25 @@
-import { defineConfig, loadEnv } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, process.cwd(), '');
-
-    return {
-        server: {
-            port: env.VITE_PORT || 2000,
-            strictPort: false, // Allow port fallback
-            host: true,
-        },
-        plugins: [react()],
-        test: {
-            globals: true,
-            environment: 'jsdom',
-            setupFiles: ['./src/setupTests.ts'],
-            include: ['**/*.test.{ts,tsx}'],
-        },
-    };
-});
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3001,
+    open: true
+  },
+  build: {
+    outDir: 'build',
+    sourcemap: true
+  },
+  resolve: {
+    alias: {
+      '@': '/src',
+    },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.ts',
+  },
+})
