@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 
 // Types for validation functions (extracted from PythonSchemaBuilder)
+export type TestCaseExpectation = 'pass' | 'fail' | 'warning';
+
 export interface TestCase {
   id: string;
   name: string;
   data: Record<string, any[]>; // field name -> array of values (each index is a row)
-  expectedToPass: boolean;
+  expectedToPass: boolean; // Kept for backward compatibility
+  expectedResult?: TestCaseExpectation; // New field for three-way expectation
   description?: string;
 }
 

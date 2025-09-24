@@ -3,7 +3,7 @@ import { X, Plus, Trash2, Play, Loader2 } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { linter, lintGutter } from '@codemirror/lint';
-import { SelectedFunction, TestCase } from './ValidationFunctionLibraryModal';
+import { SelectedFunction, TestCase, TestCaseExpectation } from './ValidationFunctionLibraryModal';
 import { pyodideManager } from '../../services/PyodideManager';
 
 interface ValidationFunctionEditorModalProps {
@@ -31,7 +31,7 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
   const [pyodideReady, setPyodideReady] = useState(false);
   const [pandasInstalled, setPandasInstalled] = useState(false);
   const [dicompareInstalled, setDicompareInstalled] = useState(false);
-  const [testResults, setTestResults] = useState<Record<string, { passed: boolean; error?: string; stdout?: string; loading?: boolean }>>({});
+  const [testResults, setTestResults] = useState<Record<string, { passed: boolean; error?: string; warning?: string; stdout?: string; loading?: boolean }>>({});
   const [activeTestDataTabs, setActiveTestDataTabs] = useState<Record<string, 'table' | 'code'>>({});
   const [testDataCode, setTestDataCode] = useState<Record<string, string>>({});
   const [codeExecutionResults, setCodeExecutionResults] = useState<Record<string, { loading?: boolean; error?: string; data?: any }>>({});
@@ -137,7 +137,7 @@ return test_data`;
             from: view.state.doc.line(lineIndex + 1).from,
             to: view.state.doc.line(lineIndex + 1).to,
             severity: 'warning',
-            message: 'Validation functions should not return anything - raise ValidationError for failures'
+            message: 'Validation functions should not return anything - raise ValidationError for failures or ValidationWarning for warnings'
           });
         }
       });
@@ -155,7 +155,8 @@ return test_data`;
       name: 'New Test Case',
       data: Object.fromEntries(allFields.map(field => [field, ['']]) // Start with one empty row
       ),
-      expectedToPass: true,
+      expectedToPass: true, // Keep for backward compatibility
+      expectedResult: 'pass', // Default to pass
       description: ''
     };
 
@@ -574,7 +575,7 @@ import pandas as pd
 import math
 import sys
 from io import StringIO
-from dicompare.validation import ValidationError, BaseValidationModel, validator
+from dicompare.validation import ValidationError, ValidationWarning, BaseValidationModel, validator
 
 # Capture stdout
 captured_output = StringIO()
@@ -627,6 +628,7 @@ try:
         'pd': pd,
         'math': math,
         'ValidationError': ValidationError,
+        'ValidationWarning': ValidationWarning,
         'value': value
     }
     
@@ -639,16 +641,24 @@ try:
     # If we reach here without exception, the function passed
     test_passed = True
     error_message = None
-        
+    warning_message = None
+
 except SyntaxError as e:
     test_passed = False
     error_message = f"Syntax error in function: {str(e)}"
+    warning_message = None
 except ValidationError as e:
     test_passed = False
     error_message = str(e)
+    warning_message = None
+except ValidationWarning as e:
+    test_passed = True  # Warning means it passed but with issues
+    error_message = None
+    warning_message = str(e)
 except Exception as e:
     test_passed = False
     error_message = f"Unexpected error: {str(e)}"
+    warning_message = None
 
 # Get captured output
 stdout_content = captured_output.getvalue()
@@ -661,8 +671,9 @@ import json
 
 # Return result as JSON
 json.dumps({
-    "passed": test_passed, 
+    "passed": test_passed,
     "error": error_message,
+    "warning": warning_message,
     "expected_to_pass": ${testCase.expectedToPass ? 'True' : 'False'},
     "stdout": stdout_content
 })
@@ -702,16 +713,26 @@ json.dumps({
       }
       
       const testResult = JSON.parse(result);
-      
+
       // Check if test result matches expectation
-      // If expectedToPass is true and test passed, or expectedToPass is false and test failed, then the test was successful
-      const testSuccessful = testResult.passed === testCase.expectedToPass;
+      // Use new expectedResult if available, otherwise fall back to expectedToPass
+      let testSuccessful = false;
+      const expectedResult = testCase.expectedResult || (testCase.expectedToPass ? 'pass' : 'fail');
+
+      if (expectedResult === 'pass') {
+        testSuccessful = testResult.passed && !testResult.warning;
+      } else if (expectedResult === 'fail') {
+        testSuccessful = !testResult.passed;
+      } else if (expectedResult === 'warning') {
+        testSuccessful = testResult.passed && testResult.warning;
+      }
       
       setTestResults(prev => ({
         ...prev,
-        [testCase.id]: { 
-          passed: testSuccessful, 
+        [testCase.id]: {
+          passed: testSuccessful,
           error: testResult.error || undefined,
+          warning: testResult.warning || undefined,
           stdout: testResult.stdout || undefined,
           loading: false
         }
@@ -908,23 +929,24 @@ json.dumps({
 
                     <div className="mb-3">
                       <div className="flex items-center space-x-3">
-                        <button
-                          type="button"
-                          onClick={() => updateTestCase(testIndex, { expectedToPass: !testCase.expectedToPass })}
-                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-medical-500 focus:ring-offset-2 ${
-                            testCase.expectedToPass ? 'bg-medical-600' : 'bg-red-600'
-                          }`}
-                          aria-pressed={testCase.expectedToPass}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                              testCase.expectedToPass ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                        <span className="text-sm text-gray-700">
-                          {testCase.expectedToPass ? 'Expected to pass' : 'Expected to fail'}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-700 font-medium">Expected Result:</span>
+                          <select
+                            value={testCase.expectedResult || (testCase.expectedToPass ? 'pass' : 'fail')}
+                            onChange={(e) => {
+                              const newExpectedResult = e.target.value as TestCaseExpectation;
+                              updateTestCase(testIndex, {
+                                expectedResult: newExpectedResult,
+                                expectedToPass: newExpectedResult === 'pass' // Keep backward compatibility
+                              });
+                            }}
+                            className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-medical-500"
+                          >
+                            <option value="pass">Pass</option>
+                            <option value="fail">Fail</option>
+                            <option value="warning">Warning</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 
@@ -1164,38 +1186,79 @@ json.dumps({
                     </div>
 
                     {/* Test Result */}
-                    {testResults[testCase.id] && (
-                      <div className={`mt-2 p-2 text-xs rounded ${
-                        testResults[testCase.id].loading ? 'bg-blue-50 text-blue-700' :
-                        testResults[testCase.id].passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center">
-                            {testResults[testCase.id].loading ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                Running...
-                              </>
-                            ) : (
-                              testResults[testCase.id].passed ? (
-                                testCase.expectedToPass ? '✓ Passed' : '✓ Failed as expected'
+                    {testResults[testCase.id] && (() => {
+                      const result = testResults[testCase.id];
+                      const expectedResult = testCase.expectedResult || (testCase.expectedToPass ? 'pass' : 'fail');
+
+                      // Determine the color based on whether test passed its expectation
+                      let bgColor = 'bg-blue-50 text-blue-700'; // Loading
+                      if (!result.loading) {
+                        if (result.passed) {
+                          // Test met expectations - always green (even for warnings)
+                          bgColor = 'bg-green-100 text-green-700';
+                        } else {
+                          // Test didn't meet expectations - always red
+                          bgColor = 'bg-red-100 text-red-700';
+                        }
+                      }
+
+                      // Determine the message based on whether test met expectation
+                      let message = 'Running...';
+                      if (!result.loading) {
+                        if (result.passed) {
+                          // Test met its expectation
+                          if (expectedResult === 'pass') {
+                            message = '✓ Passed';
+                          } else if (expectedResult === 'fail') {
+                            message = '✓ Failed as expected';
+                          } else if (expectedResult === 'warning') {
+                            message = '✓ Warning as expected';
+                          }
+                        } else {
+                          // Test did NOT meet its expectation
+                          if (expectedResult === 'pass') {
+                            message = result.warning ? '⚠ Passed with warning (expected clean pass)' : '✗ Failed (expected pass)';
+                          } else if (expectedResult === 'fail') {
+                            message = '✗ Did not fail as expected';
+                          } else if (expectedResult === 'warning') {
+                            message = '✗ Did not produce warning as expected';
+                          }
+                        }
+                      }
+
+                      return (
+                        <div className={`mt-2 p-2 text-xs rounded ${bgColor}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center">
+                              {result.loading ? (
+                                <>
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                  {message}
+                                </>
                               ) : (
-                                testCase.expectedToPass ? '✗ Failed' : '✗ Did not fail as expected'
-                              )
-                            )}
-                          </span>
-                        </div>
-                        {testResults[testCase.id].error && (
-                          <div className="mt-1 opacity-75">{testResults[testCase.id].error}</div>
-                        )}
-                        {testResults[testCase.id].stdout && testResults[testCase.id].stdout!.trim() && (
-                          <div className="mt-1 p-1 bg-gray-900 text-gray-100 rounded text-xs font-mono overflow-x-auto">
-                            <div className="text-gray-400 mb-0.5">stdout:</div>
-                            <pre className="whitespace-pre-wrap">{testResults[testCase.id].stdout!.trim()}</pre>
+                                message
+                              )}
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    )}
+                          {result.error && (
+                            <div className="mt-1 opacity-75">
+                              <strong>Error:</strong> {result.error}
+                            </div>
+                          )}
+                          {result.warning && (
+                            <div className="mt-1 opacity-75">
+                              <strong>Warning:</strong> {result.warning}
+                            </div>
+                          )}
+                          {result.stdout && result.stdout.trim() && (
+                            <div className="mt-1 p-1 bg-gray-900 text-gray-100 rounded text-xs font-mono overflow-x-auto">
+                              <div className="text-gray-400 mb-0.5">stdout:</div>
+                              <pre className="whitespace-pre-wrap">{result.stdout.trim()}</pre>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
