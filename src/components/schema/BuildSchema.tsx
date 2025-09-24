@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, Loader2, Copy } from 'lucide-react';
+import { Upload, Plus, Loader2, Copy, AlertTriangle, FileText } from 'lucide-react';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import { useSchemaService } from '../../hooks/useSchemaService';
@@ -46,6 +46,22 @@ const BuildSchema: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [showSchemaModal, setShowSchemaModal] = useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = useState(false);
+  const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
+  const ADD_NEW_ID = '__add_new__';
+
+  // Auto-select logic for new workflow
+  useEffect(() => {
+    if (acquisitions.length === 0) {
+      // Start with "Add New" selected when no acquisitions
+      setSelectedAcquisitionId(ADD_NEW_ID);
+    } else if (selectedAcquisitionId === ADD_NEW_ID) {
+      // Keep "Add New" selected if it was previously selected, even when acquisitions exist
+      // This allows user to create multiple acquisitions
+    } else if (!selectedAcquisitionId || !acquisitions.find(a => a.id === selectedAcquisitionId)) {
+      // Select first acquisition if none selected or selected one was deleted
+      setSelectedAcquisitionId(acquisitions[0].id);
+    }
+  }, [acquisitions, selectedAcquisitionId]);
 
   // Load editing schema when available
   useEffect(() => {
@@ -199,6 +215,43 @@ const BuildSchema: React.FC = () => {
   const incompleteFields = getIncompleteFields();
   const hasIncompleteFields = incompleteFields.size > 0;
 
+  // Helper to check if a specific acquisition has incomplete fields
+  const getAcquisitionIncompleteFields = (acquisitionId: string) => {
+    const acquisitionIncomplete = new Set<string>();
+
+    const acquisition = acquisitions.find(a => a.id === acquisitionId);
+    if (!acquisition) return acquisitionIncomplete;
+
+    // Check acquisition-level fields
+    acquisition.acquisitionFields.forEach(field => {
+      if (!isFieldValueValid(field)) {
+        acquisitionIncomplete.add(`${acquisition.id}-${field.tag}`);
+      }
+    });
+
+    // Check series field values only if there are series-level fields
+    if (acquisition.seriesFields.length > 0) {
+      const minSeriesCount = Math.max(2, acquisition.series?.length || 0);
+
+      for (let seriesIndex = 0; seriesIndex < minSeriesCount; seriesIndex++) {
+        const series = acquisition.series?.[seriesIndex];
+
+        acquisition.seriesFields.forEach(field => {
+          const fieldValue = series?.fields?.[field.tag];
+          if (fieldValue === undefined || !isFieldValueValid(fieldValue)) {
+            acquisitionIncomplete.add(`${acquisition.id}-series-${seriesIndex}-${field.tag}`);
+          }
+        });
+      }
+    }
+
+    return acquisitionIncomplete;
+  };
+
+  const selectedAcquisition = selectedAcquisitionId && selectedAcquisitionId !== ADD_NEW_ID
+    ? acquisitions.find(a => a.id === selectedAcquisitionId)
+    : null;
+
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files) return;
 
@@ -277,8 +330,14 @@ const BuildSchema: React.FC = () => {
       }));
       
       setAcquisitions(prev => [...prev, ...contextAcquisitions]);
+
+      // Auto-select the first newly created acquisition
+      if (contextAcquisitions.length > 0) {
+        setSelectedAcquisitionId(contextAcquisitions[0].id);
+      }
+
       setUploadProgress(100);
-      
+
       console.log('✅ Analysis complete');
       
     } catch (error) {
@@ -342,8 +401,12 @@ const BuildSchema: React.FC = () => {
       };
       
       setAcquisitions(prev => [...prev, processedAcquisition]);
+
+      // Auto-select the newly created acquisition
+      setSelectedAcquisitionId(processedAcquisition.id);
+
       setUploadProgress(100);
-      
+
       console.log('✅ Protocol file uploaded successfully');
       
     } catch (error) {
@@ -627,6 +690,10 @@ const BuildSchema: React.FC = () => {
 
       // Add to acquisitions
       setAcquisitions(prev => [...prev, newAcquisition]);
+
+      // Auto-select the newly created acquisition
+      setSelectedAcquisitionId(newAcquisition.id);
+
       setShowSchemaModal(false);
 
       console.log('✅ Successfully imported acquisition from schema');
@@ -643,9 +710,80 @@ const BuildSchema: React.FC = () => {
     navigate('/schema-builder/enter-metadata');
   };
 
+  // Component to render compact acquisition preview card
+  const renderAcquisitionPreview = (acquisition: any) => {
+    const incompleteFields = getAcquisitionIncompleteFields(acquisition.id);
+    const hasIncomplete = incompleteFields.size > 0;
+    const isSelected = selectedAcquisitionId === acquisition.id;
+
+    return (
+      <div
+        key={acquisition.id}
+        onClick={() => setSelectedAcquisitionId(acquisition.id)}
+        className={`border rounded-lg p-4 cursor-pointer transition-all ${
+          isSelected
+            ? 'border-medical-500 bg-medical-50 shadow-md'
+            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+        }`}
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center space-x-2">
+              <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
+              <h3 className="text-sm font-medium text-gray-900 truncate">
+                {acquisition.protocolName || 'Untitled Acquisition'}
+              </h3>
+              {hasIncomplete && (
+                <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" title={`${incompleteFields.size} incomplete fields`} />
+              )}
+            </div>
+            <p className="text-xs text-gray-600 mt-1 truncate">
+              {acquisition.seriesDescription || 'No description'}
+            </p>
+            <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+              <span>{acquisition.acquisitionFields.length} fields</span>
+              {acquisition.series && acquisition.series.length > 0 && (
+                <span>{acquisition.series.length} series</span>
+              )}
+              {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                <span>{acquisition.validationFunctions.length} rules</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Component to render "Add New Acquisition" selectable item
+  const renderAddNewItem = () => {
+    const isSelected = selectedAcquisitionId === ADD_NEW_ID;
+
+    return (
+      <div
+        onClick={() => setSelectedAcquisitionId(ADD_NEW_ID)}
+        className={`border rounded-lg p-4 cursor-pointer transition-all ${
+          isSelected
+            ? 'border-medical-500 bg-medical-50 shadow-md'
+            : 'border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+        }`}
+      >
+        <div className="flex items-center space-x-2">
+          <Plus className="h-4 w-4 text-medical-500 flex-shrink-0" />
+          <h3 className="text-sm font-medium text-gray-900">
+            Add New Acquisition
+          </h3>
+        </div>
+        <p className="text-xs text-gray-600 mt-1">
+          Upload files or create acquisition manually
+        </p>
+      </div>
+    );
+  };
+
   // Component to render unified upload card
   const renderUnifiedUploadCard = (isAdditional: boolean = false) => (
-    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6 h-fit col-span-3">
+    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6 h-fit">
       <div
         className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
           isDragOver
@@ -747,7 +885,27 @@ const BuildSchema: React.FC = () => {
               <h4 className="text-sm font-medium text-gray-900 mb-1">Manual Entry</h4>
               <p className="text-xs text-gray-600 mb-3">Create acquisition manually</p>
               <button
-                onClick={addNewAcquisition}
+                onClick={() => {
+                  // Create a new acquisition manually here so we can get its ID
+                  const newAcquisitionId = `acq_${Date.now()}`;
+                  const newAcquisition = {
+                    id: newAcquisitionId,
+                    protocolName: 'New Acquisition',
+                    seriesDescription: '',
+                    totalFiles: 0,
+                    acquisitionFields: [],
+                    seriesFields: [],
+                    series: [],
+                    metadata: {},
+                    validationFunctions: []
+                  };
+
+                  // Add to acquisitions
+                  setAcquisitions(prev => [...prev, newAcquisition]);
+
+                  // Auto-select the newly created acquisition
+                  setSelectedAcquisitionId(newAcquisitionId);
+                }}
                 className="inline-flex items-center justify-center w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
               >
                 <Plus className="h-3 w-3 mr-1" />
@@ -832,45 +990,68 @@ const BuildSchema: React.FC = () => {
         </div>
       </div>
 
-      {/* Upload Card when no acquisitions exist */}
-      {acquisitions.length === 0 && (
-        <div className="mb-8">
-          {renderUnifiedUploadCard(false)}
-        </div>
-      )}
+      {/* Master-Detail Layout - Always Visible */}
+      <div className="grid grid-cols-12 gap-6 min-h-[600px]">
+        {/* Left Panel - Acquisition Selector */}
+        <div className="col-span-12 md:col-span-4 lg:col-span-3">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Acquisitions</h3>
+              <p className="text-sm text-gray-600">Select an acquisition to edit or create new</p>
+            </div>
 
-      {/* Acquisitions Grid */}
-      {acquisitions.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Show existing acquisitions */}
-          {acquisitions.map((acquisition) => (
-            <AcquisitionTable
-              key={acquisition.id}
-              acquisition={acquisition}
-              isEditMode={true}
-              incompleteFields={incompleteFields}
-              onUpdate={(field, value) => updateAcquisition(acquisition.id, { [field]: value })}
-              onDelete={() => deleteAcquisition(acquisition.id)}
-              onFieldUpdate={(fieldTag, updates) => updateField(acquisition.id, fieldTag, updates)}
-              onFieldConvert={(fieldTag, toLevel, mode) => convertFieldLevel(acquisition.id, fieldTag, toLevel, mode)}
-              onFieldDelete={(fieldTag) => deleteField(acquisition.id, fieldTag)}
-              onFieldAdd={(fields) => addFields(acquisition.id, fields)}
-              onSeriesUpdate={(seriesIndex, fieldTag, value) => updateSeries(acquisition.id, seriesIndex, fieldTag, value)}
-              onSeriesAdd={() => addSeries(acquisition.id)}
-              onSeriesDelete={(seriesIndex) => deleteSeries(acquisition.id, seriesIndex)}
-              onSeriesNameUpdate={(seriesIndex, name) => updateSeriesName(acquisition.id, seriesIndex, name)}
-              onValidationFunctionAdd={(func) => addValidationFunction(acquisition.id, func)}
-              onValidationFunctionUpdate={(index, func) => updateValidationFunction(acquisition.id, index, func)}
-              onValidationFunctionDelete={(index) => deleteValidationFunction(acquisition.id, index)}
-            />
-          ))}
+            {/* Acquisition List */}
+            <div className="p-2 space-y-2 max-h-[500px] overflow-y-auto">
+              {/* Add New Acquisition - Always first */}
+              {renderAddNewItem()}
 
-          {/* Always show unified upload card for additional uploads */}
-          <div className="col-span-1">
-            {renderUnifiedUploadCard(true)}
+              {/* Existing Acquisitions */}
+              {acquisitions.map((acquisition) => renderAcquisitionPreview(acquisition))}
+            </div>
           </div>
         </div>
-      )}
+
+        {/* Right Panel - Detail View */}
+        <div className="col-span-12 md:col-span-8 lg:col-span-9">
+          {selectedAcquisitionId === ADD_NEW_ID ? (
+            /* Show upload options when "Add New" is selected */
+            renderUnifiedUploadCard(false)
+          ) : selectedAcquisition ? (
+            /* Show selected acquisition details - Clean editing mode */
+            <AcquisitionTable
+              acquisition={selectedAcquisition}
+              isEditMode={true}
+              incompleteFields={incompleteFields}
+              onUpdate={(field, value) => updateAcquisition(selectedAcquisition.id, { [field]: value })}
+              onDelete={() => {
+                deleteAcquisition(selectedAcquisition.id);
+                // Auto-selection will handle selecting next acquisition
+              }}
+              onFieldUpdate={(fieldTag, updates) => updateField(selectedAcquisition.id, fieldTag, updates)}
+              onFieldConvert={(fieldTag, toLevel, mode) => convertFieldLevel(selectedAcquisition.id, fieldTag, toLevel, mode)}
+              onFieldDelete={(fieldTag) => deleteField(selectedAcquisition.id, fieldTag)}
+              onFieldAdd={(fields) => addFields(selectedAcquisition.id, fields)}
+              onSeriesUpdate={(seriesIndex, fieldTag, value) => updateSeries(selectedAcquisition.id, seriesIndex, fieldTag, value)}
+              onSeriesAdd={() => addSeries(selectedAcquisition.id)}
+              onSeriesDelete={(seriesIndex) => deleteSeries(selectedAcquisition.id, seriesIndex)}
+              onSeriesNameUpdate={(seriesIndex, name) => updateSeriesName(selectedAcquisition.id, seriesIndex, name)}
+              onValidationFunctionAdd={(func) => addValidationFunction(selectedAcquisition.id, func)}
+              onValidationFunctionUpdate={(index, func) => updateValidationFunction(selectedAcquisition.id, index, func)}
+              onValidationFunctionDelete={(index) => deleteValidationFunction(selectedAcquisition.id, index)}
+            />
+          ) : (
+            /* Fallback - should rarely happen */
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 h-full flex items-center justify-center">
+              <div className="text-center">
+                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Nothing Selected</h3>
+                <p className="text-gray-600">Select an option from the left panel</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Continue Button */}
       <div className="mt-8 flex flex-col items-end">

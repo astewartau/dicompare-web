@@ -194,9 +194,9 @@ const FieldTable: React.FC<FieldTableProps> = ({
                   onMouseEnter={() => setHoveredRow(field.tag)}
                   onMouseLeave={() => setHoveredRow(null)}
                 >
-                <td className="px-2 py-1.5 whitespace-nowrap">
-                  <div className="max-w-32">
-                    <p className="text-xs font-medium text-gray-900 truncate">{field.name}</p>
+                <td className="px-2 py-1.5">
+                  <div>
+                    <p className="text-xs font-medium text-gray-900">{field.name}</p>
                     <p className="text-xs text-gray-500 font-mono">{field.tag}</p>
                   </div>
                 </td>
