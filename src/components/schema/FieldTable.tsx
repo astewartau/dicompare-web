@@ -3,7 +3,6 @@ import { Trash2, ArrowRightLeft, CheckCircle, XCircle, AlertTriangle, HelpCircle
 import { DicomField, Acquisition } from '../../types';
 import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 import { ComplianceFieldResult } from '../../types/schema';
-import { dicompareAPI } from '../../services/DicompareAPI';
 import CustomTooltip from '../common/CustomTooltip';
 import FieldEditModal from './FieldEditModal';
 
@@ -20,8 +19,8 @@ interface FieldTableProps {
   realAcquisition?: Acquisition; // The actual DICOM data for compliance validation
   getSchemaContent?: (id: string) => Promise<string | null>;
   isDataProcessing?: boolean; // Prevent validation during DICOM upload
-  // Compliance callback to share results with parent
-  onComplianceResults?: (results: ComplianceFieldResult[]) => void;
+  // Pass validation results from parent instead of computing them here
+  complianceResultsProp?: ComplianceFieldResult[];
   // Edit mode props
   onFieldUpdate: (fieldTag: string, updates: Partial<DicomField>) => void;
   onFieldConvert: (fieldTag: string) => void;
@@ -40,66 +39,19 @@ const FieldTable: React.FC<FieldTableProps> = ({
   realAcquisition,
   getSchemaContent,
   isDataProcessing = false,
-  onComplianceResults,
+  complianceResultsProp,
   onFieldUpdate,
   onFieldConvert,
   onFieldDelete,
 }) => {
   const [editingField, setEditingField] = useState<DicomField | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
-  const [complianceResults, setComplianceResults] = useState<ComplianceFieldResult[]>([]);
-  const [isValidating, setIsValidating] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-
   const isComplianceMode = mode === 'compliance';
 
-  // Compliance validation effect
-  useEffect(() => {
-    if (isComplianceMode && schemaId && realAcquisition && getSchemaContent && !isDataProcessing) {
-      performComplianceValidation();
-    }
-  }, [isComplianceMode, schemaId, realAcquisition, schemaAcquisitionId, isDataProcessing]);
-
-  const performComplianceValidation = async () => {
-    if (!schemaId || !realAcquisition || !getSchemaContent) return;
-
-    setIsValidating(true);
-    setValidationError(null);
-
-    try {
-      const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
-        realAcquisition,
-        schemaId,
-        getSchemaContent,
-        schemaAcquisitionId
-      );
-
-      const complianceResults: ComplianceFieldResult[] = validationResults.map(result => ({
-        fieldPath: result.fieldPath,
-        fieldName: result.fieldName,
-        status: result.status,
-        message: result.message,
-        actualValue: result.actualValue,
-        expectedValue: result.expectedValue,
-        validationType: result.validationType,
-        seriesName: result.seriesName,
-        rule_name: result.rule_name
-      }));
-
-      setComplianceResults(complianceResults);
-
-      // Share all validation results with parent component
-      if (onComplianceResults) {
-        onComplianceResults(validationResults);
-      }
-    } catch (err) {
-      console.error('Compliance validation error:', err);
-      setValidationError(`Validation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      setComplianceResults([]);
-    } finally {
-      setIsValidating(false);
-    }
-  };
+  // Use compliance results from props instead of computing them
+  const complianceResults = complianceResultsProp || [];
+  const isValidating = false; // Validation now happens at parent level
+  const validationError = null;
 
   const getFieldComplianceResult = (field: DicomField): ComplianceFieldResult => {
     const result = complianceResults.find(r =>

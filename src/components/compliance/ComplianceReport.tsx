@@ -219,11 +219,14 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
                               <XCircle className="h-4 w-4 text-red-600 mt-0.5 mr-2 flex-shrink-0" />
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-red-900">
-                                  {error.fieldName || error.rule_name}
+                                  {error.rule_name || error.fieldName}
                                   {error.seriesName && (
                                     <span className="ml-2 text-red-700">({error.seriesName})</span>
                                   )}
                                 </p>
+                                {error.rule_name && error.fieldName && (
+                                  <p className="text-xs text-red-600 mt-0.5">{error.fieldName}</p>
+                                )}
                                 <p className="text-sm text-red-700 mt-1">{error.message}</p>
                               </div>
                             </div>
@@ -247,11 +250,14 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
                               <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-yellow-900">
-                                  {warning.fieldName || warning.rule_name}
+                                  {warning.rule_name || warning.fieldName}
                                   {warning.seriesName && (
                                     <span className="ml-2 text-yellow-700">({warning.seriesName})</span>
                                   )}
                                 </p>
+                                {warning.rule_name && warning.fieldName && (
+                                  <p className="text-xs text-yellow-600 mt-0.5">{warning.fieldName}</p>
+                                )}
                                 <p className="text-sm text-yellow-700 mt-1">{warning.message}</p>
                               </div>
                             </div>

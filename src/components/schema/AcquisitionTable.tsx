@@ -124,10 +124,10 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
         schemaAcquisitionId
       );
 
-      // Store all results for sharing between field and series tables
+      // Store ALL validation results
       setAllComplianceResults(validationResults);
 
-      // Filter results to only include validation rule results
+      // Filter to get validation rule results only
       const ruleResults = validationResults.filter(result =>
         result.validationType === 'validation_rule' ||
         validationFunctions.some(func =>
@@ -519,10 +519,10 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
               realAcquisition={realAcquisition}
               getSchemaContent={getSchemaContent}
               isDataProcessing={isDataProcessing}
-              onComplianceResults={(results) => {
-                console.log('📋 Received compliance results from FieldTable:', results.length);
-                setAllComplianceResults(results);
-              }}
+              complianceResultsProp={allComplianceResults.filter(r =>
+                r.validationType !== 'validation_rule' &&
+                r.validationType !== 'series'
+              )}
               onFieldUpdate={onFieldUpdate}
               onFieldConvert={(fieldTag) => handleFieldConvert(fieldTag, 'series')}
               onFieldDelete={onFieldDelete}
@@ -553,11 +553,8 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           {isComplianceMode && realAcquisition && (
             <div className="mt-4 border-t border-gray-200 pt-4">
               {(() => {
-                // Combine all compliance results
-                const allResults = [
-                  ...allComplianceResults,
-                  ...validationRuleResults
-                ];
+                // Use all compliance results directly (no combination needed)
+                const allResults = allComplianceResults;
 
                 // Count by status
                 const statusCounts = {
@@ -658,11 +655,14 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                   <div className="flex items-start">
                                     <div className="flex-1">
                                       <p className="text-xs font-medium text-red-900">
-                                        {error.fieldName || error.rule_name}
+                                        {error.rule_name || error.fieldName}
                                         {error.seriesName && (
                                           <span className="ml-2 text-red-700">({error.seriesName})</span>
                                         )}
                                       </p>
+                                      {error.rule_name && error.fieldName && (
+                                        <p className="text-xs text-red-600 mt-0.5">{error.fieldName}</p>
+                                      )}
                                       <p className="text-xs text-red-700 mt-0.5">{error.message}</p>
                                     </div>
                                   </div>
@@ -685,11 +685,14 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                   <div className="flex items-start">
                                     <div className="flex-1">
                                       <p className="text-xs font-medium text-yellow-900">
-                                        {warning.fieldName || warning.rule_name}
+                                        {warning.rule_name || warning.fieldName}
                                         {warning.seriesName && (
                                           <span className="ml-2 text-yellow-700">({warning.seriesName})</span>
                                         )}
                                       </p>
+                                      {warning.rule_name && warning.fieldName && (
+                                        <p className="text-xs text-yellow-600 mt-0.5">{warning.fieldName}</p>
+                                      )}
                                       <p className="text-xs text-yellow-700 mt-0.5">{warning.message}</p>
                                     </div>
                                   </div>
