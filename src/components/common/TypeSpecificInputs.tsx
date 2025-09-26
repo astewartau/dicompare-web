@@ -25,16 +25,24 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
 
   const handleStringListChange = (input: string) => {
     setStringListInput(input);
-    // Parse comma-separated values
-    const values = input.split(',').map(v => v.trim()).filter(v => v.length > 0);
+    // Don't parse immediately - wait for blur (similar to number list)
+  };
+
+  const handleStringListBlur = () => {
+    // Parse comma-separated values on blur
+    const values = stringListInput.split(',').map(v => v.trim()).filter(v => v.length > 0);
     onChange(values);
   };
 
   const handleNumberListChange = (input: string) => {
     setNumberListInput(input);
+    // Don't parse immediately - wait for blur
+  };
+
+  const handleNumberListBlur = () => {
     try {
       // Parse comma-separated numbers
-      const values = input.split(',')
+      const values = numberListInput.split(',')
         .map(v => v.trim())
         .filter(v => v.length > 0)
         .map(v => {
@@ -183,6 +191,7 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
             type="text"
             value={stringListInput}
             onChange={(e) => handleStringListChange(e.target.value)}
+            onBlur={handleStringListBlur}
             disabled={disabled}
             placeholder={placeholder || 'value1, value2, value3'}
             className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -217,6 +226,7 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
             type="text"
             value={numberListInput}
             onChange={(e) => handleNumberListChange(e.target.value)}
+            onBlur={handleNumberListBlur}
             disabled={disabled}
             placeholder={placeholder || '1.25, 1.25, 2.5'}
             className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${

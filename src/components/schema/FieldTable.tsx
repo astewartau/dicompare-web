@@ -55,11 +55,11 @@ const FieldTable: React.FC<FieldTableProps> = ({
 
   const getFieldComplianceResult = (field: DicomField): ComplianceFieldResult => {
     const result = complianceResults.find(r =>
-      r.fieldName === field.name || r.fieldPath.includes(field.tag)
+      r.fieldName === (field.keyword || field.name) || r.fieldPath.includes(field.tag)
     );
     return result || {
       fieldPath: field.tag,
-      fieldName: field.name,
+      fieldName: field.keyword || field.name,
       status: 'unknown',
       message: 'No validation result available',
       actualValue: '',
@@ -148,7 +148,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 >
                 <td className="px-2 py-1.5">
                   <div>
-                    <p className="text-xs font-medium text-gray-900">{field.name}</p>
+                    <p className="text-xs font-medium text-gray-900">{field.keyword || field.name}</p>
                     <p className="text-xs text-gray-500 font-mono">{field.tag}</p>
                   </div>
                 </td>

@@ -130,6 +130,7 @@ export const useAcquisitions = () => {
         return {
           tag,
           name,
+          keyword: fieldDef?.keyword,
           value: '',
           vr,
           level: 'acquisition' as const,

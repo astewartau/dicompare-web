@@ -10,6 +10,7 @@ import UnifiedSchemaSelector from './UnifiedSchemaSelector';
 import { processFieldForUI, processSeriesFieldValue } from '../../utils/fieldProcessing';
 import { processUploadedFiles } from '../../utils/fileUploadUtils';
 import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
+import { processSchemaFieldForUI, processSchemaSeriesFieldValue } from '../../utils/datatypeInference';
 
 
 const BuildSchema: React.FC = () => {
@@ -78,41 +79,8 @@ const BuildSchema: React.FC = () => {
             async (schemaId: string) => JSON.stringify(editingSchema.content)
           );
 
-          // Convert to acquisition context format
-          const contextAcquisitions = schemaAcquisitions.map(acq => ({
-            ...acq,
-            acquisitionFields: acq.acquisitionFields.map(field => processFieldForUI(field)),
-            seriesFields: acq.seriesFields.map(field => processFieldForUI({
-              ...field,
-              value: field.values?.[0] || field.value
-            })),
-            series: acq.series.map(series => ({
-              name: series.name,
-              fields: Object.fromEntries(
-                Object.entries(series.fields).map(([tag, value]) => {
-                  const matchingField = acq.seriesFields.find(sf => sf.tag === tag);
-                  const fieldName = matchingField?.name || tag;
-
-                  return [
-                    tag,
-                    processSeriesFieldValue(
-                      (typeof value === 'object' && value !== null && 'value' in value) ? {
-                        ...value,
-                        field: fieldName
-                      } : {
-                        value,
-                        field: fieldName,
-                        dataType: typeof value === 'number' ? 'number' :
-                                 Array.isArray(value) ? 'list_string' : 'string'
-                      },
-                      fieldName,
-                      tag
-                    )
-                  ];
-                })
-              )
-            }))
-          }));
+          // Schema acquisitions are already properly formatted by convertSchemaToAcquisitions
+          const contextAcquisitions = schemaAcquisitions;
 
           setAcquisitions(contextAcquisitions);
           console.log('✅ Schema loaded for editing');
@@ -618,15 +586,13 @@ const BuildSchema: React.FC = () => {
 
       // Process acquisition-level fields
       if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
-        newAcquisition.acquisitionFields = targetAcquisition.fields.map(field => processFieldForUI({
-          tag: field.tag,
-          name: field.field || field.name,
-          value: field.value || '',
-          vr: field.vr || 'UN',
-          level: 'acquisition',
-          dataType: field.dataType || 'string',
-          validationRule: field.validationRule || { type: 'exact' }
-        }));
+        newAcquisition.acquisitionFields = targetAcquisition.fields.map(field => {
+          const processedField = processSchemaFieldForUI(field);
+          return {
+            ...processedField,
+            level: 'acquisition'
+          };
+        });
       }
 
       // Process series-level fields and instances
@@ -653,19 +619,20 @@ const BuildSchema: React.FC = () => {
               }
 
               // Add value to this series instance
-              seriesData.fields[f.tag] = processSeriesFieldValue({
-                value: f.value,
-                field: f.field || f.name,
-                dataType: f.dataType || 'string',
-                validationRule: f.validationRule
-              }, f.field || f.name, f.tag);
+              seriesData.fields[f.tag] = processSchemaSeriesFieldValue(f, f.field || f.name, f.tag);
             });
           }
 
           seriesInstances.push(seriesData);
         });
 
-        newAcquisition.seriesFields = Array.from(fieldMap.values()).map(field => processFieldForUI(field));
+        newAcquisition.seriesFields = Array.from(fieldMap.values()).map(field => {
+          const processedField = processSchemaFieldForUI(field);
+          return {
+            ...processedField,
+            level: 'series'
+          };
+        });
         newAcquisition.series = seriesInstances;
       }
 

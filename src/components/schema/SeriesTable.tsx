@@ -54,7 +54,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
       // Check if this field is part of the validation result
       // The fieldName might be a combined field like "SeriesDescription, ImageType"
       const fieldNameLower = r.fieldName.toLowerCase();
-      const fieldLower = field.name.toLowerCase();
+      const fieldLower = (field.keyword || field.name).toLowerCase();
 
       // 1. Exact field name match
       if (fieldNameLower === fieldLower) return true;
@@ -69,14 +69,14 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
     });
 
     if (result) {
-      console.log(`✅ Found series validation result for field ${field.name}:`, result);
+      console.log(`✅ Found series validation result for field ${field.keyword || field.name}:`, result);
     } else {
-      console.log(`❌ No series validation result found for field ${field.name} in ${complianceResults.length} results:`, complianceResults);
+      console.log(`❌ No series validation result found for field ${field.keyword || field.name} in ${complianceResults.length} results:`, complianceResults);
     }
 
     return result || {
       fieldPath: field.tag,
-      fieldName: field.name,
+      fieldName: field.keyword || field.name,
       status: 'unknown',
       message: 'No validation result available',
       actualValue: '',
@@ -143,7 +143,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{field.name}</p>
+                      <p className="font-medium truncate">{field.keyword || field.name}</p>
                       <p className="text-xs font-normal text-gray-400 font-mono">{field.tag}</p>
                     </div>
                     {isEditMode && (

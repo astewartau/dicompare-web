@@ -56,9 +56,8 @@ const DownloadSchema: React.FC = () => {
               fieldEntry.value = field.value;
             }
 
-            // Add other field properties
-            if (field.vr) fieldEntry.vr = field.vr;
-            if (field.dataType) fieldEntry.dataType = field.dataType;
+            // Note: vr and dataType are intentionally omitted - not needed in final schema
+            // The schema should contain only: field, tag, value, and validation properties
 
             return fieldEntry;
           }) || [];
@@ -89,8 +88,7 @@ const DownloadSchema: React.FC = () => {
                   fieldEntry.value = fieldValue;
                 }
 
-                if (seriesField.vr) fieldEntry.vr = seriesField.vr;
-                if (seriesField.dataType) fieldEntry.dataType = seriesField.dataType;
+                // Note: vr and dataType are intentionally omitted - not needed in final schema
 
                 seriesEntry.fields.push(fieldEntry);
               }

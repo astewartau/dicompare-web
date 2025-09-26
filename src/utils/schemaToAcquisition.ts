@@ -1,5 +1,6 @@
 import { UnifiedSchema } from '../hooks/useSchemaService';
 import { Acquisition, DicomField } from '../types';
+import { inferDataTypeFromValue, processSchemaFieldForUI } from './datatypeInference';
 
 /**
  * Converts a UnifiedSchema and specific acquisition to a full Acquisition object
@@ -34,18 +35,16 @@ export const convertSchemaToAcquisition = async (
 
     const [acquisitionName, acquisitionData] = acquisitionEntry as [string, any];
 
-    // Convert schema fields to DicomField format
+    // Convert schema fields to DicomField format using proper inference
     const convertFields = (fields: any[] = [], level: 'acquisition' | 'series'): DicomField[] => {
-      return fields.map(field => ({
-        tag: field.tag || '',
-        name: field.name || field.field || field.tag || '',
-        keyword: field.keyword,
-        value: field.value || field.defaultValue || '',
-        vr: field.vr || 'CS',
-        level,
-        dataType: field.dataType || 'string',
-        validationRule: field.validationRule || { type: 'exact' as const }
-      }));
+      return fields.map(field => {
+        const processedField = processSchemaFieldForUI(field);
+        return {
+          ...processedField,
+          level, // Override level from parameter
+          value: processedField.value || field.defaultValue || ''
+        };
+      });
     };
 
     // Only use actual defined fields, not fields extracted from rules
@@ -58,13 +57,10 @@ export const convertSchemaToAcquisition = async (
         if (series.fields && Array.isArray(series.fields)) {
           series.fields.forEach((field: any) => {
             if (!seriesFieldMap.has(field.tag)) {
+              const processedField = processSchemaFieldForUI(field);
               seriesFieldMap.set(field.tag, {
-                tag: field.tag,
-                name: field.field || field.name || field.tag,
-                vr: field.vr || 'UN',
-                level: 'series',
-                dataType: field.dataType || 'string',
-                validationRule: field.validationRule || { type: 'exact' as const }
+                ...processedField,
+                level: 'series'
               });
             }
           });
@@ -87,7 +83,7 @@ export const convertSchemaToAcquisition = async (
             field.tag,
             {
               value: field.value || field.defaultValue || '',
-              dataType: field.dataType || 'string',
+              dataType: inferDataTypeFromValue(field.value || field.defaultValue || ''),
               validationRule: field.validationRule || { type: 'exact' as const }
             }
           ])
