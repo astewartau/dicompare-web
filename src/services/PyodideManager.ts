@@ -64,7 +64,7 @@ import micropip
 
 # Install dicompare from local wheel
 #await micropip.install('http://localhost:8000/dist/dicompare-0.1.32-py3-none-any.whl')
-await micropip.install('dicompare=0.1.32')
+await micropip.install('dicompare==0.1.32')
 
 # Import the real dicompare modules
 import dicompare
