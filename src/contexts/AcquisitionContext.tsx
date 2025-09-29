@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Acquisition, DicomField, Series, SelectedValidationFunction } from '../types';
+import { Acquisition, DicomField, Series, SeriesField, SelectedValidationFunction } from '../types';
 import { searchDicomFields, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
+import { convertValueToDataType, inferDataTypeFromValue } from '../utils/datatypeInference';
 import { getSuggestedToleranceValue } from '../utils/vrMapping';
 
 interface SchemaMetadata {
@@ -22,7 +23,7 @@ interface AcquisitionContextType {
   deleteField: (acquisitionId: string, fieldTag: string) => void;
   convertFieldLevel: (acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series', mode?: 'separate-series' | 'single-series') => void;
   addFields: (acquisitionId: string, fieldTags: string[]) => Promise<void>;
-  updateSeries: (acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => void;
+  updateSeries: (acquisitionId: string, seriesIndex: number, fieldTag: string, updates: Partial<SeriesField>) => void;
   addSeries: (acquisitionId: string) => void;
   deleteSeries: (acquisitionId: string, seriesIndex: number) => void;
   updateSeriesName: (acquisitionId: string, seriesIndex: number, name: string) => void;
@@ -59,7 +60,6 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
       seriesDescription: '',
       totalFiles: 0,
       acquisitionFields: [],
-      seriesFields: [],
       series: [],
       metadata: {}
     };
@@ -72,12 +72,16 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
       
       return {
         ...acq,
-        acquisitionFields: acq.acquisitionFields.map(f => 
+        acquisitionFields: acq.acquisitionFields.map(f =>
           f.tag === fieldTag ? { ...f, ...updates } : f
         ),
-        seriesFields: acq.seriesFields.map(f => 
-          f.tag === fieldTag ? { ...f, ...updates } : f
-        ),
+        // Update field in all series (new array format)
+        series: acq.series?.map(s => ({
+          ...s,
+          fields: Array.isArray(s.fields) ? s.fields.map(f =>
+            f.tag === fieldTag ? { ...f, ...updates } : f
+          ) : []
+        }))
       };
     }));
   }, []);
@@ -85,16 +89,14 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const deleteField = useCallback((acquisitionId: string, fieldTag: string) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       return {
         ...acq,
         acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
-        seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag),
+        // Remove field from all series (new array format)
         series: acq.series?.map(s => ({
           ...s,
-          fields: Object.fromEntries(
-            Object.entries(s.fields || {}).filter(([tag]) => tag !== fieldTag)
-          )
+          fields: Array.isArray(s.fields) ? s.fields.filter(f => f.tag !== fieldTag) : []
         }))
       };
     }));
@@ -103,98 +105,123 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const convertFieldLevel = useCallback((acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series', mode: 'separate-series' | 'single-series' = 'single-series') => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
+      // Find field in acquisition level
       const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTag);
-      const seriesField = acq.seriesFields.find(f => f.tag === fieldTag);
-      const field = acquisitionField || seriesField;
-      
+      // Find field in any series (handle both old and new formats)
+      let seriesField: SeriesField | undefined;
+      for (const series of acq.series || []) {
+        if (Array.isArray(series.fields)) {
+          // New format: fields is an array of SeriesField
+          seriesField = series.fields.find(f => f.tag === fieldTag);
+        } else if (series.fields && typeof series.fields === 'object') {
+          // Old format: fields is an object {tag: value}
+          const fieldValue = (series.fields as any)[fieldTag];
+          if (fieldValue !== undefined) {
+            // Convert old format to SeriesField
+            seriesField = {
+              name: fieldTag, // We'll use tag as name for now
+              tag: fieldTag,
+              value: typeof fieldValue === 'object' && fieldValue.value !== undefined ? fieldValue.value : fieldValue,
+              validationRule: typeof fieldValue === 'object' && fieldValue.validationRule ? fieldValue.validationRule : undefined
+            };
+          }
+        }
+        if (seriesField) break;
+      }
+
+      const field = acquisitionField || (seriesField ? {
+        tag: seriesField.tag,
+        name: seriesField.name,
+        value: seriesField.value,
+        vr: 'UN',
+        level: 'series' as const,
+        validationRule: seriesField.validationRule
+      } : null);
+
       if (!field) return acq;
-      
+
       if (toLevel === 'acquisition') {
-        // Remove field from series level
-        const updatedSeriesFields = acq.seriesFields.filter(f => f.tag !== fieldTag);
-        
-        // Clean up series data if no series-level fields remain
-        const updatedSeries = updatedSeriesFields.length > 0 
-          ? (acq.series || []).map(series => ({
-              ...series,
-              fields: Object.fromEntries(
-                Object.entries(series.fields || {}).filter(([tag]) => tag !== fieldTag)
-              )
-            }))
-          : []; // Clear all series if no series-level fields exist
-        
+        // Remove field from all series and add to acquisition level
+        const updatedSeries = (acq.series || []).map(series => ({
+          ...series,
+          fields: Array.isArray(series.fields)
+            ? series.fields.filter(f => f.tag !== fieldTag)
+            : [] // Convert old object format to new array format
+        }));
+
         return {
           ...acq,
           acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTag), { ...field, level: 'acquisition' }],
-          seriesFields: updatedSeriesFields,
           series: updatedSeries
         };
       } else {
-        // When converting to series level, handle different modes for list values
+        // Converting to series level
         const currentSeries = acq.series || [];
-        let updatedSeries = [];
-        
+        let updatedSeries: Series[] = [];
+
         if (Array.isArray(field.value) && mode === 'separate-series') {
-          // Create permutations of existing series with new field values
+          // Create separate series for each value
           if (currentSeries.length > 0) {
-            // Generate permutations: existing series × new field values
+            // Multiply existing series by field values
             let seriesCounter = 1;
             for (const existingSeries of currentSeries) {
               for (let i = 0; i < field.value.length; i++) {
                 updatedSeries.push({
                   name: `Series ${seriesCounter}`,
-                  fields: {
-                    ...existingSeries.fields,
-                    [fieldTag]: {
+                  fields: [
+                    ...(Array.isArray(existingSeries.fields)
+                        ? existingSeries.fields.filter(f => f.tag !== fieldTag)
+                        : []), // Handle old object format
+                    {
+                      name: field.name,
+                      tag: field.tag,
                       value: field.value[i],
-                      dataType: field.dataType === 'list_number' ? 'number' : 
-                               field.dataType === 'list_string' ? 'string' : field.dataType,
-                      validationRule: field.validationRule,
+                      validationRule: field.validationRule
                     }
-                  }
+                  ]
                 });
                 seriesCounter++;
               }
             }
           } else {
-            // No existing series - create one series per value
+            // No existing series - create one per value
             for (let i = 0; i < field.value.length; i++) {
               updatedSeries.push({
                 name: `Series ${i + 1}`,
-                fields: {
-                  [fieldTag]: {
-                    value: field.value[i],
-                    dataType: field.dataType === 'list_number' ? 'number' : 
-                             field.dataType === 'list_string' ? 'string' : field.dataType,
-                    validationRule: field.validationRule,
-                  }
-                }
+                fields: [{
+                  name: field.name,
+                  tag: field.tag,
+                  value: field.value[i],
+                  validationRule: field.validationRule
+                }]
               });
             }
           }
         } else {
-          // Single series mode - add field to all existing series or create minimum 2
-          const seriesCount = Math.max(2, currentSeries.length);
+          // Single series mode - add field to existing series or create one if none exist
+          const seriesCount = Math.max(1, currentSeries.length);
           for (let i = 0; i < seriesCount; i++) {
             const existingSeries = currentSeries[i];
             updatedSeries.push({
               name: existingSeries?.name || `Series ${i + 1}`,
-              fields: {
-                ...(existingSeries?.fields || {}),
-                [fieldTag]: {
+              fields: [
+                ...(existingSeries && Array.isArray(existingSeries.fields)
+                    ? existingSeries.fields.filter(f => f.tag !== fieldTag)
+                    : []), // Handle old object format
+                {
+                  name: field.name,
+                  tag: field.tag,
                   value: field.value,
-                  dataType: field.dataType,
-                  validationRule: field.validationRule,
+                  validationRule: field.validationRule
                 }
-              }
+              ]
             });
           }
         }
 
         return {
           ...acq,
-          seriesFields: [...acq.seriesFields.filter(f => f.tag !== fieldTag), { ...field, level: 'series' }],
           acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
           series: updatedSeries
         };
@@ -215,11 +242,14 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
         const vr = fieldDef?.vr || fieldDef?.valueRepresentation || 'UN';
         const name = fieldDef?.name || tag;
         const keyword = fieldDef?.keyword || name;
-        const dataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
+        const suggestedDataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
         const constraintType = fieldDef ? suggestValidationConstraint(fieldDef) : 'exact' as const;
-        
+
+        // Set appropriate default value based on suggested dataType
+        const defaultValue = convertValueToDataType('', suggestedDataType);
+
         let validationRule: any = { type: constraintType };
-        
+
         // Add tolerance value for fields that use tolerance validation
         if (constraintType === 'tolerance') {
           const toleranceValue = getSuggestedToleranceValue(name, tag);
@@ -227,15 +257,15 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
             validationRule.tolerance = toleranceValue;
           }
         }
-        
+
         return {
           tag,
           name,
           keyword,
-          value: '',
+          value: defaultValue,
           vr,
+          dataType: suggestedDataType, // Include the properly inferred data type
           level: 'acquisition' as const,
-          dataType,
           validationRule
         };
       } catch (error) {
@@ -244,10 +274,10 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
           tag,
           name: tag,
           keyword: tag,
-          value: '',
+          value: '', // Keep as empty string for unknown fields
           vr: 'UN',
+          dataType: 'string', // Default data type for unknown fields
           level: 'acquisition' as const,
-          dataType: 'string' as const,
           validationRule: { type: 'exact' as const }
         };
       }
@@ -265,23 +295,35 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
     }));
   }, []);
 
-  const updateSeries = useCallback((acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => {
+  const updateSeries = useCallback((acquisitionId: string, seriesIndex: number, fieldTag: string, updates: Partial<SeriesField>) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const updatedSeries = [...(acq.series || [])];
       if (!updatedSeries[seriesIndex]) {
-        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: {} };
+        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: [] };
       }
-      
-      updatedSeries[seriesIndex] = {
-        ...updatedSeries[seriesIndex],
-        fields: {
-          ...updatedSeries[seriesIndex].fields,
-          [fieldTag]: value
-        }
-      };
-      
+
+      // Find the field in the series
+      const existingFieldIndex = updatedSeries[seriesIndex].fields.findIndex(f => f.tag === fieldTag);
+
+      if (existingFieldIndex >= 0) {
+        // Update existing field
+        updatedSeries[seriesIndex].fields[existingFieldIndex] = {
+          ...updatedSeries[seriesIndex].fields[existingFieldIndex],
+          ...updates
+        };
+      } else {
+        // Create new field (should have name and tag at minimum)
+        const newField: SeriesField = {
+          tag: fieldTag,
+          name: updates.name || fieldTag,
+          value: updates.value || '',
+          validationRule: updates.validationRule
+        };
+        updatedSeries[seriesIndex].fields.push(newField);
+      }
+
       return { ...acq, series: updatedSeries };
     }));
   }, []);
@@ -289,13 +331,59 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const addSeries = useCallback((acquisitionId: string) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const currentSeries = acq.series || [];
+
+      // Copy fields from the last series (if exists) or create defaults
+      let newFields: SeriesField[] = [];
+
+      // First, try to copy from the last series with fields
+      if (currentSeries.length > 0) {
+        // Look for the most recent series with fields
+        for (let i = currentSeries.length - 1; i >= 0; i--) {
+          if (currentSeries[i].fields.length > 0) {
+            newFields = currentSeries[i].fields.map(field => ({
+              ...field,
+              value: field.value // Copy the actual value
+            }));
+            break;
+          }
+        }
+      }
+
+      // If no series with fields exist, create defaults based on all unique fields across all series
+      if (newFields.length === 0 && currentSeries.length > 0) {
+        const allFieldTags = new Set<string>();
+        const fieldMap = new Map<string, SeriesField>();
+
+        // Collect all unique fields from all series
+        currentSeries.forEach(s => {
+          s.fields.forEach(f => {
+            if (!fieldMap.has(f.tag)) {
+              fieldMap.set(f.tag, f);
+            }
+          });
+        });
+
+        // Create default fields with appropriate default values based on type
+        fieldMap.forEach((field) => {
+          const defaultValue = inferDataTypeFromValue(field.value) === 'number' ? 0 :
+                              inferDataTypeFromValue(field.value) === 'list_number' ? [] :
+                              inferDataTypeFromValue(field.value) === 'list_string' ? [] :
+                              '';
+
+          newFields.push({
+            ...field,
+            value: defaultValue
+          });
+        });
+      }
+
       const newSeries: Series = {
         name: `Series ${currentSeries.length + 1}`,
-        fields: {}
+        fields: newFields
       };
-      
+
       return { ...acq, series: [...currentSeries, newSeries] };
     }));
   }, []);

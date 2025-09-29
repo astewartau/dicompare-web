@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
 import { DicomField, FieldDataType, ValidationConstraint, ValidationRule } from '../../types';
+import { inferDataTypeFromValue, convertValueToDataType } from '../../utils/datatypeInference';
 import DataTypeSelector from '../common/DataTypeSelector';
 import ValidationConstraintSelector from '../common/ValidationConstraintSelector';
 import TypeSpecificInputs from '../common/TypeSpecificInputs';
@@ -23,16 +24,12 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 }) => {
   const [formData, setFormData] = useState({
     name: field.name,
-    dataType: isSeriesValue ? 
-      (typeof value === 'object' && value?.dataType ? value.dataType : 
-        // Auto-detect list type if value is an array and field type allows it
-        (Array.isArray(value) && field.dataType?.startsWith('list_') ? field.dataType : 
-          (Array.isArray(value) ? 'list_string' : (field.dataType || 'string')))) :
-      (field.dataType || 'string') as FieldDataType,
-    value: isSeriesValue ? 
-      (typeof value === 'object' && value?.value !== undefined ? value.value : (value || '')) : 
-      // For acquisition fields, check if field.values exists (varying field) and use it for list types
-      (field.values && (field.dataType === 'list_string' || field.dataType === 'list_number') ? field.values : field.value),
+    dataType: isSeriesValue ?
+      inferDataTypeFromValue(typeof value === 'object' && value?.value !== undefined ? value.value : value) :
+      (field.dataType || inferDataTypeFromValue(field.value)) as FieldDataType,
+    value: isSeriesValue ?
+      (typeof value === 'object' && value?.value !== undefined ? value.value : (value || '')) :
+      field.value,
     validationRule: isSeriesValue ?
       (typeof value === 'object' && value?.validationRule ? value.validationRule : { type: 'exact' as ValidationConstraint }) :
       (field.validationRule || { type: 'exact' as ValidationConstraint }),
@@ -125,23 +122,26 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
     const updates: Partial<DicomField> & { value?: any } = {};
 
-    if (isSeriesValue) {
-      // For series values, save as an object with value, dataType, and validationRule
-      updates.value = {
-        // Only include the main value for exact constraints
-        ...(formData.validationRule.type === 'exact' && { value: formData.value }),
-        dataType: formData.dataType,
-        validationRule: formData.validationRule,
-      };
-    } else {
-      // For field editing, update the field definition
-      // Only include the main value for exact constraints
-      if (formData.validationRule.type === 'exact') {
-        updates.value = formData.value;
-      }
-      updates.dataType = formData.dataType;
-      updates.validationRule = formData.validationRule;
+    // Both series values and field editing should save the same way:
+    // - value contains the actual DICOM field value (dataType is inferred from this)
+    // - validationRule is metadata at field level
+
+    // For exact match, use formData.value
+    // For tolerance, use the expected value from the validation rule
+    // For range, use the min value from the validation rule
+    // For other constraints, use formData.value as fallback
+    let fieldValue = formData.value;
+
+    if (formData.validationRule.type === 'tolerance') {
+      fieldValue = formData.validationRule.value;
+    } else if (formData.validationRule.type === 'range') {
+      fieldValue = formData.validationRule.min;
     }
+
+    updates.value = fieldValue;
+
+    // Save the validation rule
+    updates.validationRule = formData.validationRule;
 
     onSave(updates);
   };
@@ -150,8 +150,8 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
     setFormData(prev => ({
       ...prev,
       dataType: newDataType,
-      // Reset value when changing data type to avoid type mismatches
-      value: newDataType === 'list_string' || newDataType === 'list_number' ? [] : '',
+      // Convert current value to the new data type
+      value: convertValueToDataType(prev.value, newDataType),
     }));
   };
 

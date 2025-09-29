@@ -22,7 +22,6 @@ export const useAcquisitions = () => {
       seriesDescription: '',
       totalFiles: 0,
       acquisitionFields: [],
-      seriesFields: [],
       series: [],
       metadata: {}
     };
@@ -35,12 +34,16 @@ export const useAcquisitions = () => {
       
       return {
         ...acq,
-        acquisitionFields: acq.acquisitionFields.map(f => 
+        acquisitionFields: acq.acquisitionFields.map(f =>
           f.tag === fieldTag ? { ...f, ...updates } : f
         ),
-        seriesFields: acq.seriesFields.map(f => 
-          f.tag === fieldTag ? { ...f, ...updates } : f
-        ),
+        // Update series fields directly within series array
+        series: acq.series?.map(s => ({
+          ...s,
+          fields: Array.isArray(s.fields)
+            ? s.fields.map(f => f.tag === fieldTag ? { ...f, ...updates } : f)
+            : []
+        })),
       };
     }));
   }, []);
@@ -52,12 +55,11 @@ export const useAcquisitions = () => {
       return {
         ...acq,
         acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
-        seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag),
         series: acq.series?.map(s => ({
           ...s,
-          fields: Object.fromEntries(
-            Object.entries(s.fields || {}).filter(([tag]) => tag !== fieldTag)
-          )
+          fields: Array.isArray(s.fields)
+            ? s.fields.filter(f => f.tag !== fieldTag)
+            : []
         }))
       };
     }));
@@ -68,7 +70,19 @@ export const useAcquisitions = () => {
       if (acq.id !== acquisitionId) return acq;
       
       const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTag);
-      const seriesField = acq.seriesFields.find(f => f.tag === fieldTag);
+      // Find series field by searching through all series
+      let seriesField = null;
+      if (acq.series) {
+        for (const series of acq.series) {
+          if (Array.isArray(series.fields)) {
+            const foundField = series.fields.find(f => f.tag === fieldTag);
+            if (foundField) {
+              seriesField = foundField;
+              break;
+            }
+          }
+        }
+      }
       const field = acquisitionField || seriesField;
       
       if (!field) return acq;
@@ -77,7 +91,13 @@ export const useAcquisitions = () => {
         return {
           ...acq,
           acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTag), { ...field, level: 'acquisition' }],
-          seriesFields: acq.seriesFields.filter(f => f.tag !== fieldTag)
+          // Remove field from all series
+          series: acq.series?.map(s => ({
+            ...s,
+            fields: Array.isArray(s.fields)
+              ? s.fields.filter(f => f.tag !== fieldTag)
+              : []
+          }))
         };
       } else {
         // When converting to series level, ensure we have at least 2 series
@@ -87,22 +107,27 @@ export const useAcquisitions = () => {
         const updatedSeries = [];
         for (let i = 0; i < seriesCount; i++) {
           const existingSeries = currentSeries[i];
+          const existingFields = Array.isArray(existingSeries?.fields) ? existingSeries.fields : [];
+
+          // Remove any existing field with the same tag
+          const fieldsWithoutTag = existingFields.filter(f => f.tag !== fieldTag);
+
+          // Add the new field
+          const newField = {
+            name: field.name,
+            tag: fieldTag,
+            value: field.value,
+            validationRule: field.validationRule,
+          };
+
           updatedSeries.push({
             name: existingSeries?.name || `Series ${i + 1}`,
-            fields: {
-              ...(existingSeries?.fields || {}),
-              [fieldTag]: {
-                value: field.value,
-                dataType: field.dataType,
-                validationRule: field.validationRule,
-              }
-            }
+            fields: [...fieldsWithoutTag, newField]
           });
         }
 
         return {
           ...acq,
-          seriesFields: [...acq.seriesFields.filter(f => f.tag !== fieldTag), { ...field, level: 'series' }],
           acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
           series: updatedSeries
         };
@@ -112,29 +137,43 @@ export const useAcquisitions = () => {
 
   const addFields = useCallback(async (acquisitionId: string, fieldTags: string[]) => {
     if (fieldTags.length === 0) return;
-    
+
     // Process each field tag to get enhanced field data from local service
     const newFieldsPromises = fieldTags.map(async tag => {
       try {
         // Use local DICOM field service (no Pyodide needed!)
         const results = await searchDicomFields(tag, 1);
         const fieldDef = results.find(f => f.tag.replace(/[()]/g, '') === tag);
-        
+
         const vr = fieldDef?.vr || fieldDef?.valueRepresentation || 'UN';
+        const vm = fieldDef?.valueMultiplicity;
         const name = fieldDef?.name || tag;
-        const dataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
+
+        // Use suggestDataType to get the proper data type based on VR and VM
+        const dataType = fieldDef ? suggestDataType(vr, vm) : 'string';
+
+        // Set initial value based on data type
+        let initialValue: any = '';
+        if (dataType === 'list_number' || dataType === 'list_string') {
+          initialValue = []; // Empty array for multi-value fields
+        } else if (dataType === 'number') {
+          initialValue = ''; // Keep as string for now, will be converted when user enters value
+        } else if (dataType === 'json') {
+          initialValue = {};
+        }
+
         const validationRule = fieldDef ? {
           type: suggestValidationConstraint(fieldDef)
         } : { type: 'exact' as const };
-        
+
         return {
           tag,
           name,
           keyword: fieldDef?.keyword,
-          value: '',
+          value: initialValue,
           vr,
+          dataType, // Include the inferred data type
           level: 'acquisition' as const,
-          dataType,
           validationRule
         };
       } catch (error) {
@@ -144,8 +183,8 @@ export const useAcquisitions = () => {
           name: tag,
           value: '',
           vr: 'UN',
+          dataType: 'string',
           level: 'acquisition' as const,
-          dataType: 'string' as const,
           validationRule: { type: 'exact' as const }
         };
       }
@@ -169,16 +208,30 @@ export const useAcquisitions = () => {
       
       const updatedSeries = [...(acq.series || [])];
       if (!updatedSeries[seriesIndex]) {
-        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: {} };
+        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: [] };
       }
-      
-      updatedSeries[seriesIndex] = {
-        ...updatedSeries[seriesIndex],
-        fields: {
-          ...updatedSeries[seriesIndex].fields,
-          [fieldTag]: value
-        }
-      };
+
+      const existingFields = Array.isArray(updatedSeries[seriesIndex].fields)
+        ? updatedSeries[seriesIndex].fields
+        : [];
+
+      // Find and update existing field or add new one
+      const fieldIndex = existingFields.findIndex(f => f.tag === fieldTag);
+      if (fieldIndex >= 0) {
+        // Update existing field
+        const updatedFields = [...existingFields];
+        updatedFields[fieldIndex] = { ...updatedFields[fieldIndex], value };
+        updatedSeries[seriesIndex] = {
+          ...updatedSeries[seriesIndex],
+          fields: updatedFields
+        };
+      } else {
+        // Add new field (this shouldn't normally happen as fields should be predefined)
+        updatedSeries[seriesIndex] = {
+          ...updatedSeries[seriesIndex],
+          fields: [...existingFields, { name: fieldTag, tag: fieldTag, value }]
+        };
+      }
       
       return { ...acq, series: updatedSeries };
     }));
@@ -191,7 +244,7 @@ export const useAcquisitions = () => {
       const currentSeries = acq.series || [];
       const newSeries: Series = {
         name: `Series ${currentSeries.length + 1}`,
-        fields: {}
+        fields: []
       };
       
       return { ...acq, series: [...currentSeries, newSeries] };

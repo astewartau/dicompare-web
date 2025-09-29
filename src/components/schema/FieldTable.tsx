@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, ArrowRightLeft, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader } from 'lucide-react';
 import { DicomField, Acquisition } from '../../types';
+import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 import { ComplianceFieldResult } from '../../types/schema';
 import CustomTooltip from '../common/CustomTooltip';
@@ -53,10 +54,26 @@ const FieldTable: React.FC<FieldTableProps> = ({
   const isValidating = false; // Validation now happens at parent level
   const validationError = null;
 
+  // Debug logging for validation results
+  console.log(`FieldTable: received ${complianceResults.length} compliance results for ${fields.length} fields`);
+
   const getFieldComplianceResult = (field: DicomField): ComplianceFieldResult => {
-    const result = complianceResults.find(r =>
-      r.fieldName === (field.keyword || field.name) || r.fieldPath.includes(field.tag)
-    );
+    const result = complianceResults.find(r => {
+      // Try exact tag match first (most reliable)
+      if (r.fieldPath === field.tag) return true;
+
+      // Try exact keyword match
+      if (field.keyword && r.fieldName === field.keyword) return true;
+
+      // Try exact name match
+      if (r.fieldName === field.name) return true;
+
+      // Try tag inclusion as fallback
+      if (field.tag && r.fieldPath?.includes(field.tag)) return true;
+
+      return false;
+    });
+
     return result || {
       fieldPath: field.tag,
       fieldName: field.keyword || field.name,
@@ -158,9 +175,20 @@ const FieldTable: React.FC<FieldTableProps> = ({
                     onClick={() => isEditMode && setEditingField(field)}
                   >
                     <p className="text-xs text-gray-900 break-words">{formatFieldValue(field)}</p>
-                    {(isEditMode || isComplianceMode) && field.dataType && (
+                    {(isEditMode || isComplianceMode) && (
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {formatFieldTypeInfo(field.dataType, field.validationRule)}
+                        {(() => {
+                          const explicitDataType = field.dataType;
+                          const inferredDataType = inferDataTypeFromValue(field.value);
+                          const finalDataType = explicitDataType || inferredDataType;
+                          console.log('🎨 Field type display for', field.tag, ':', {
+                            explicitDataType,
+                            inferredDataType,
+                            finalDataType,
+                            value: field.value
+                          });
+                          return formatFieldTypeInfo(finalDataType, field.validationRule);
+                        })()}
                       </p>
                     )}
                     {!isEditMode && !isComplianceMode && (

@@ -46,14 +46,32 @@ const DownloadSchema: React.FC = () => {
               tag: field.tag
             };
 
-            // Handle field values (extract actual value from complex objects)
-            if (typeof field.value === 'object' && field.value !== null && 'value' in field.value) {
-              fieldEntry.value = field.value.value;
-              if (field.value.validationRule) {
-                fieldEntry.validationRule = field.value.validationRule;
+            // Set the field value
+            fieldEntry.value = field.value;
+
+            // Add validation rule properties to the field entry
+            if (field.validationRule) {
+              const rule = field.validationRule;
+              switch (rule.type) {
+                case 'tolerance':
+                  if (rule.tolerance !== undefined) {
+                    fieldEntry.tolerance = rule.tolerance;
+                  }
+                  break;
+                case 'range':
+                  if (rule.min !== undefined) fieldEntry.min = rule.min;
+                  if (rule.max !== undefined) fieldEntry.max = rule.max;
+                  break;
+                case 'contains':
+                  if (rule.contains !== undefined) fieldEntry.contains = rule.contains;
+                  break;
+                case 'contains_any':
+                  if (rule.contains_any !== undefined) fieldEntry.contains_any = rule.contains_any;
+                  break;
+                case 'contains_all':
+                  if (rule.contains_all !== undefined) fieldEntry.contains_all = rule.contains_all;
+                  break;
               }
-            } else {
-              fieldEntry.value = field.value;
             }
 
             // Note: vr and dataType are intentionally omitted - not needed in final schema
@@ -69,29 +87,40 @@ const DownloadSchema: React.FC = () => {
               fields: []
             };
 
-            // Convert series fields
-            acquisition.seriesFields?.forEach((seriesField: any) => {
-              const fieldValue = series.fields?.[seriesField.tag];
-              if (fieldValue !== undefined) {
-                const fieldEntry: any = {
-                  field: seriesField.keyword || seriesField.name || '',
-                  tag: seriesField.tag
-                };
+            // Convert series fields from the new array structure
+            (series.fields || []).forEach((seriesField: any) => {
+              const fieldEntry: any = {
+                field: seriesField.name || '',
+                tag: seriesField.tag,
+                value: seriesField.value
+              };
 
-                // Handle series field values
-                if (typeof fieldValue === 'object' && fieldValue !== null && 'value' in fieldValue) {
-                  fieldEntry.value = fieldValue.value;
-                  if (fieldValue.validationRule) {
-                    fieldEntry.validationRule = fieldValue.validationRule;
-                  }
-                } else {
-                  fieldEntry.value = fieldValue;
+              // Add validation rule properties to the series field entry
+              if (seriesField.validationRule) {
+                const rule = seriesField.validationRule;
+                switch (rule.type) {
+                  case 'tolerance':
+                    if (rule.tolerance !== undefined) {
+                      fieldEntry.tolerance = rule.tolerance;
+                    }
+                    break;
+                  case 'range':
+                    if (rule.min !== undefined) fieldEntry.min = rule.min;
+                    if (rule.max !== undefined) fieldEntry.max = rule.max;
+                    break;
+                  case 'contains':
+                    if (rule.contains !== undefined) fieldEntry.contains = rule.contains;
+                    break;
+                  case 'contains_any':
+                    if (rule.contains_any !== undefined) fieldEntry.contains_any = rule.contains_any;
+                    break;
+                  case 'contains_all':
+                    if (rule.contains_all !== undefined) fieldEntry.contains_all = rule.contains_all;
+                    break;
                 }
-
-                // Note: vr and dataType are intentionally omitted - not needed in final schema
-
-                seriesEntry.fields.push(fieldEntry);
               }
+
+              seriesEntry.fields.push(fieldEntry);
             });
 
             return seriesEntry;
@@ -393,7 +422,7 @@ const DownloadSchema: React.FC = () => {
                   <div key={acquisition.id} className="p-3 bg-gray-50 rounded-lg">
                     <p className="font-medium text-gray-900">{acquisition.protocolName}</p>
                     <p className="text-sm text-gray-600">
-                      {acquisition.acquisitionFields.length + acquisition.seriesFields.length} validation fields
+                      {acquisition.acquisitionFields.length + (acquisition.series?.reduce((count, s) => count + (s.fields?.length || 0), 0) || 0)} validation fields
                       {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
                         <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
                           {acquisition.validationFunctions.length} validator {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}

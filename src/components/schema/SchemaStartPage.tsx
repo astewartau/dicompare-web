@@ -4,11 +4,14 @@ import { Plus, Edit, ChevronRight } from 'lucide-react';
 import { useSchemaService } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import UnifiedSchemaSelector from './UnifiedSchemaSelector';
+import { SchemaUploadModal } from './SchemaUploadModal';
 
 const SchemaStartPage: React.FC = () => {
   const navigate = useNavigate();
   const { librarySchemas, uploadedSchemas, getSchemaContent } = useSchemaService();
   const { setEditingSchema, setOriginSchema } = useSchemaContext();
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
   const handleCreateNew = () => {
     setEditingSchema(null);
@@ -45,6 +48,33 @@ const SchemaStartPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to load schema for editing:', error);
       alert('Failed to load schema for editing. Please try again.');
+    }
+  };
+
+  const handleSchemaUpload = async (file: File) => {
+    try {
+      const content = await file.text();
+      let cleanContent = content.trim();
+
+      if (cleanContent.charCodeAt(0) === 0xFEFF) {
+        cleanContent = cleanContent.slice(1);
+      }
+
+      if (!cleanContent.startsWith('{') && !cleanContent.startsWith('[')) {
+        throw new Error('File does not appear to be valid JSON');
+      }
+
+      JSON.parse(cleanContent); // Validate JSON
+
+      setUploadedFile(file);
+      setShowUploadModal(true);
+    } catch (error) {
+      console.error('Failed to parse schema file:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to parse schema file: ${errorMessage}`);
+
+      setUploadedFile(file);
+      setShowUploadModal(true);
     }
   };
 
@@ -99,11 +129,26 @@ const SchemaStartPage: React.FC = () => {
             uploadedSchemas={uploadedSchemas}
             selectionMode="schema"
             onSchemaSelect={handleEditSchema}
+            onSchemaUpload={handleSchemaUpload}
             expandable={false}
             getSchemaContent={getSchemaContent}
           />
         </div>
       </div>
+
+      {/* Upload Modal */}
+      <SchemaUploadModal
+        isOpen={showUploadModal}
+        onClose={() => {
+          setShowUploadModal(false);
+          setUploadedFile(null);
+        }}
+        onUploadComplete={() => {
+          setShowUploadModal(false);
+          setUploadedFile(null);
+        }}
+        preloadedFile={uploadedFile}
+      />
     </div>
   );
 };

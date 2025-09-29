@@ -134,7 +134,10 @@ const getFallbackFieldList = (): DicomFieldDefinition[] => [
   { tag: '0028,0101', name: 'BitsStored', vr: 'US', description: 'Number of bits stored for each pixel sample' },
   { tag: '0028,0102', name: 'HighBit', vr: 'US', description: 'Most significant bit for pixel sample data' },
   { tag: '0028,0103', name: 'PixelRepresentation', vr: 'US', description: 'Data representation of the pixel samples' },
-  
+
+  // Additional fields for testing multi-value support
+  { tag: '(0018,1149)', name: 'Field of View Dimension(s)', keyword: 'FieldOfViewDimensions', valueRepresentation: 'IS', valueMultiplicity: '1-2', retired: 'N', id: '00181149', vr: 'IS', description: 'Dimensions of the Image Intensifier Field of View in mm' },
+
   // Siemens private tags commonly used
   { tag: '0019,1028', name: 'MultibandFactor', vr: 'IS', description: 'Multiband acceleration factor (Siemens private)' },
   { tag: '0051,1011', name: 'ParallelReductionFactorInPlane', vr: 'DS', description: 'In-plane parallel imaging factor (Siemens private)' }

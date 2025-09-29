@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader } from 'lucide-react';
+import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { dicompareAPI } from '../../services/DicompareAPI';
@@ -11,6 +11,7 @@ import ValidationFunctionEditorModal from '../validation/ValidationFunctionEdito
 import FieldConversionModal from './FieldConversionModal';
 import CustomTooltip from '../common/CustomTooltip';
 import { ValidationFunction } from '../validation/ValidationFunctionLibraryModal';
+import TestDicomGeneratorModal from './TestDicomGeneratorModal';
 
 interface AcquisitionTableProps {
   acquisition: Acquisition;
@@ -90,10 +91,21 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [validationRuleError, setValidationRuleError] = useState<string | null>(null);
   const [allComplianceResults, setAllComplianceResults] = useState<ComplianceFieldResult[]>([]);
   const [isComplianceSummaryExpanded, setIsComplianceSummaryExpanded] = useState(false);
+  const [showTestDicomGenerator, setShowTestDicomGenerator] = useState(false);
 
   const isComplianceMode = mode === 'compliance';
   const isSchemaMode = isComplianceMode || Boolean(schemaId);
-  const hasSeriesFields = acquisition.seriesFields && acquisition.seriesFields.length > 0;
+  const hasSeriesFields = acquisition.series && acquisition.series.length > 0 &&
+    acquisition.series.some(s => s.fields && s.fields.length > 0);
+
+  // Debug logging for series detection
+  console.log('🔍 Series Debug for', acquisition.id, {
+    hasSeries: Boolean(acquisition.series),
+    seriesLength: acquisition.series?.length || 0,
+    seriesData: acquisition.series,
+    hasSeriesFields,
+    firstSeriesFields: acquisition.series?.[0]?.fields
+  });
   const validationFunctions = acquisition.validationFunctions || [];
   console.log('AcquisitionTable validation functions:', validationFunctions.length, 'functions');
 
@@ -104,18 +116,26 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
   // Validation rule compliance effect
   useEffect(() => {
-    if (isComplianceMode && schemaId && realAcquisition && getSchemaContent && validationFunctions.length > 0) {
+    if (isComplianceMode && schemaId && realAcquisition && getSchemaContent && !isDataProcessing) {
       performValidationRuleCompliance();
     }
-  }, [isComplianceMode, schemaId, realAcquisition, schemaAcquisitionId, validationFunctions.length]);
+  }, [isComplianceMode, schemaId, realAcquisition, schemaAcquisitionId, validationFunctions.length, isDataProcessing]);
 
   const performValidationRuleCompliance = async () => {
-    if (!schemaId || !realAcquisition || !getSchemaContent || validationFunctions.length === 0) return;
+    if (!schemaId || !realAcquisition || !getSchemaContent) return;
 
     setIsValidatingRules(true);
     setValidationRuleError(null);
 
     try {
+      console.log('AcquisitionTable: Starting validation with:', {
+        realAcquisitionId: realAcquisition.id,
+        schemaId,
+        schemaAcquisitionId,
+        acquisitionFieldCount: acquisition.acquisitionFields?.length || 0,
+        seriesCount: acquisition.series?.length || 0
+      });
+
       // For validation rules, we need to validate the actual functions against the real data
       const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
         realAcquisition,
@@ -123,6 +143,8 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
         getSchemaContent,
         schemaAcquisitionId
       );
+
+      console.log(`AcquisitionTable: Validation completed with ${validationResults.length} results`);
 
       // Store ALL validation results
       setAllComplianceResults(validationResults);
@@ -316,6 +338,16 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           </div>
           
           <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
+            {/* Generate Test DICOMs button - show in schema edit mode or schema builder */}
+            {isEditMode && !isComplianceMode && (
+              <button
+                onClick={() => setShowTestDicomGenerator(true)}
+                className="p-1 text-gray-600 hover:text-medical-600 transition-colors"
+                title="Generate test DICOMs from schema"
+              >
+                <FileDown className="h-3 w-3" />
+              </button>
+            )}
             {onDeselect && (
               <button
                 onClick={onDeselect}
@@ -354,12 +386,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           ) : acquisition.totalFiles > 0 ? (
             <>
               {acquisition.totalFiles} files • {acquisition.acquisitionFields.length} fields
-              {hasSeriesFields && ` • ${acquisition.seriesFields.length} varying`}
+              {hasSeriesFields && ` • ${acquisition.series?.reduce((count, s) => count + (s.fields?.length || 0), 0) || 0} varying`}
             </>
           ) : (
             <>
               {acquisition.acquisitionFields.length} fields
-              {hasSeriesFields && ` • ${acquisition.seriesFields.length} varying`}
+              {hasSeriesFields && ` • ${acquisition.series?.reduce((count, s) => count + (s.fields?.length || 0), 0) || 0} varying`}
             </>
           )}
         </div>
@@ -533,7 +565,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           {hasSeriesFields && (
             <div>
               <SeriesTable
-                seriesFields={acquisition.seriesFields}
                 series={acquisition.series || []}
                 isEditMode={isEditMode && !isComplianceMode}
                 incompleteFields={incompleteFields}
@@ -565,9 +596,10 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   unknown: allResults.filter(r => r.status === 'unknown').length
                 };
 
-                // Get errors and warnings for detailed list
+                // Get errors, warnings, and N/A for detailed list
                 const errors = allResults.filter(r => r.status === 'fail');
                 const warnings = allResults.filter(r => r.status === 'warning');
+                const naResults = allResults.filter(r => r.status === 'na');
 
                 return (
                   <>
@@ -702,8 +734,35 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                           </div>
                         )}
 
+                        {/* N/A List */}
+                        {naResults.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
+                              <HelpCircle className="h-3.5 w-3.5 mr-1" />
+                              N/A ({naResults.length})
+                            </h5>
+                            <div className="space-y-1">
+                              {naResults.map((naResult, idx) => (
+                                <div key={idx} className="bg-gray-50 border border-gray-200 rounded px-3 py-2">
+                                  <div className="flex items-start">
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-gray-900">
+                                        {naResult.seriesName ? `Series ${naResult.seriesName}:` : (naResult.rule_name || naResult.fieldName)}
+                                      </p>
+                                      {naResult.rule_name && naResult.fieldName && (
+                                        <p className="text-xs text-gray-600 mt-0.5">{naResult.fieldName}</p>
+                                      )}
+                                      <p className="text-xs text-gray-700 mt-0.5">{naResult.message}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Success message if all pass */}
-                        {errors.length === 0 && warnings.length === 0 && statusCounts.pass > 0 && (
+                        {errors.length === 0 && warnings.length === 0 && naResults.length === 0 && statusCounts.pass > 0 && (
                           <div className="bg-green-50 border border-green-200 rounded px-4 py-3">
                             <div className="flex items-center">
                               <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
@@ -752,6 +811,14 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
               setConversionField(null);
             }}
             onConvert={handleConversionChoice}
+          />
+
+          <TestDicomGeneratorModal
+            isOpen={showTestDicomGenerator}
+            onClose={() => setShowTestDicomGenerator(false)}
+            acquisition={acquisition}
+            schemaId={schemaId}
+            getSchemaContent={getSchemaContent}
           />
         </>
       )}

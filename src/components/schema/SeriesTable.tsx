@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Edit2, ArrowLeftRight, CheckCircle, XCircle, AlertTriangle, HelpCircle } from 'lucide-react';
-import { DicomField, Series } from '../../types';
+import { Series, SeriesField } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
+import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { formatSeriesFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 import CustomTooltip from '../common/CustomTooltip';
 import FieldEditModal from './FieldEditModal';
 
 interface SeriesTableProps {
-  seriesFields: DicomField[];
+  // seriesFields removed - now embedded in series[].fields[]
   series: Series[];
   isEditMode: boolean;
   incompleteFields?: Set<string>;
@@ -15,7 +16,7 @@ interface SeriesTableProps {
   mode?: 'edit' | 'view' | 'compliance';
   // Compliance-specific props
   complianceResults?: any[];
-  onSeriesUpdate: (seriesIndex: number, fieldTag: string, value: any) => void;
+  onSeriesUpdate: (seriesIndex: number, fieldTag: string, updates: Partial<SeriesField>) => void;
   onSeriesAdd: () => void;
   onSeriesDelete: (seriesIndex: number) => void;
   onFieldConvert: (fieldTag: string) => void;
@@ -23,7 +24,6 @@ interface SeriesTableProps {
 }
 
 const SeriesTable: React.FC<SeriesTableProps> = ({
-  seriesFields,
   series,
   isEditMode,
   incompleteFields = new Set(),
@@ -36,47 +36,31 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   onFieldConvert,
   onSeriesNameUpdate,
 }) => {
-  const [editingCell, setEditingCell] = useState<{ seriesIndex: number; fieldTag: string } | null>(null);
+  const [editingCell, setEditingCell] = useState<{
+    seriesIndex: number;
+    fieldIndex: number;
+    fieldTag?: string;
+    fieldName?: string;
+  } | null>(null);
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
 
   const isComplianceMode = mode === 'compliance';
 
   // Helper function to get compliance result for a specific field and series
-  const getSeriesFieldComplianceResult = (field: DicomField, seriesName: string): ComplianceFieldResult => {
+  const getSeriesFieldComplianceResult = (field: SeriesField, seriesName: string): ComplianceFieldResult => {
     // For series validation, find any result that includes this field
-    // Note: Series validation results may use generic series names (Series_001, Series_002)
-    // while the UI uses actual SeriesDescription values
     const result = complianceResults.find(r => {
-      // Check if this is a series-level validation result
       if (r.validationType !== 'series') return false;
-
-      // Check if this field is part of the validation result
-      // The fieldName might be a combined field like "SeriesDescription, ImageType"
       const fieldNameLower = r.fieldName.toLowerCase();
-      const fieldLower = (field.keyword || field.name).toLowerCase();
-
-      // 1. Exact field name match
-      if (fieldNameLower === fieldLower) return true;
-
-      // 2. Field name is part of a combined field name (e.g., "SeriesDescription" in "SeriesDescription, ImageType")
-      if (fieldNameLower.includes(fieldLower)) return true;
-
-      // 3. Field path contains the field tag
-      if (r.fieldPath && r.fieldPath.includes(field.tag)) return true;
-
-      return false;
+      const fieldLower = field.name.toLowerCase();
+      return fieldNameLower === fieldLower || fieldNameLower.includes(fieldLower) ||
+             (r.fieldPath && r.fieldPath.includes(field.tag));
     });
-
-    if (result) {
-      console.log(`✅ Found series validation result for field ${field.keyword || field.name}:`, result);
-    } else {
-      console.log(`❌ No series validation result found for field ${field.keyword || field.name} in ${complianceResults.length} results:`, complianceResults);
-    }
 
     return result || {
       fieldPath: field.tag,
-      fieldName: field.keyword || field.name,
+      fieldName: field.name,
       status: 'unknown',
       message: 'No validation result available',
       actualValue: '',
@@ -104,7 +88,11 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
     }
   };
 
-  if (seriesFields.length === 0) {
+  // Get all unique field tags from all series
+  const allFieldTags = new Set<string>();
+  series.forEach(s => s.fields.forEach(f => allFieldTags.add(f.tag)));
+
+  if (allFieldTags.size === 0) {
     return (
       <div className="border border-gray-200 rounded-md p-4 text-center">
         <p className="text-gray-500 text-xs">No series-level fields defined</p>
@@ -115,15 +103,28 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
     );
   }
 
-  // Ensure at least 2 series exist, but preserve any existing data
+  // Display all existing series (no minimum requirement)
   const displaySeries = [];
-  for (let i = 0; i < Math.max(2, series.length); i++) {
+  for (let i = 0; i < series.length; i++) {
     if (series[i]) {
       displaySeries.push(series[i]);
     } else {
-      displaySeries.push({ name: `Series ${i + 1}`, fields: {} });
+      displaySeries.push({ name: `Series ${i + 1}`, fields: [] });
     }
   }
+
+  // Get all unique field definitions across series for table headers
+  const allFields: SeriesField[] = [];
+  const fieldMap = new Map<string, SeriesField>();
+
+  series.forEach(s => {
+    s.fields.forEach(f => {
+      if (!fieldMap.has(f.tag)) {
+        fieldMap.set(f.tag, f);
+        allFields.push(f);
+      }
+    });
+  });
 
   return (
     <div className="border border-gray-200 rounded-md overflow-hidden">
@@ -134,7 +135,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
               <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 min-w-[140px]">
                 Series
               </th>
-              {seriesFields.map((field) => (
+              {allFields.map((field) => (
                 <th
                   key={field.tag}
                   className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]"
@@ -143,7 +144,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{field.keyword || field.name}</p>
+                      <p className="font-medium truncate">{field.name}</p>
                       <p className="text-xs font-normal text-gray-400 font-mono">{field.tag}</p>
                     </div>
                     {isEditMode && (
@@ -201,44 +202,49 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                     <span className="text-xs">{ser.name}</span>
                   )}
                 </td>
-                {seriesFields.map((field) => {
-                  const seriesFieldKey = `${acquisitionId}-series-${seriesIndex}-${field.tag}`;
+                {allFields.map((headerField) => {
+                  // Find the specific field in this series
+                  const seriesFieldIndex = ser.fields.findIndex(f => f.tag === headerField.tag);
+                  const seriesField = seriesFieldIndex >= 0 ? ser.fields[seriesFieldIndex] : null;
+
+                  const seriesFieldKey = `${acquisitionId}-series-${seriesIndex}-${headerField.tag}`;
                   const isIncomplete = incompleteFields.has(seriesFieldKey);
-                  const complianceResult = isComplianceMode ? getSeriesFieldComplianceResult(field, ser.name) : null;
+                  const complianceResult = isComplianceMode && seriesField ? getSeriesFieldComplianceResult(seriesField, ser.name) : null;
 
                   return (
-                    <td key={field.tag} className={`px-2 py-1.5 ${
+                    <td key={headerField.tag} className={`px-2 py-1.5 ${
                       isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''
                     }`}>
                       <div
                         className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
-                        onClick={() => isEditMode && setEditingCell({ seriesIndex, fieldTag: field.tag })}
+                        onClick={() => {
+                          if (isEditMode) {
+                            // If field doesn't exist in this series, we'll handle creating it
+                            setEditingCell({
+                              seriesIndex,
+                              fieldIndex: seriesFieldIndex,
+                              fieldTag: headerField.tag,
+                              fieldName: headerField.name
+                            });
+                          }
+                        }}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <p className="text-xs text-gray-900 break-words">
-                              {ser.fields[field.tag] ? formatSeriesFieldValue(ser.fields[field.tag]) : '-'}
+                              {seriesField ? formatSeriesFieldValue(seriesField.value) : '-'}
                             </p>
-                          {isEditMode && ser.fields[field.tag] && (
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {(() => {
-                                const fieldValue = ser.fields[field.tag];
-                                if (typeof fieldValue === 'object' && fieldValue !== null && 'dataType' in fieldValue) {
-                                  // Use individual series value's dataType and constraint
-                                  return formatFieldTypeInfo(
-                                    fieldValue.dataType || field.dataType || 'string',
-                                    fieldValue.validationRule
-                                  );
-                                } else {
-                                  // Fallback to field-level info for legacy values
-                                  return formatFieldTypeInfo(field.dataType || 'string');
-                                }
-                              })()}
-                            </p>
-                          )}
-                          {!isEditMode && !isComplianceMode && (
-                            <p className="text-xs mt-0.5 invisible">&nbsp;</p>
-                          )}
+                            {isEditMode && seriesField && (
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {formatFieldTypeInfo(
+                                  inferDataTypeFromValue(seriesField.value),
+                                  seriesField.validationRule
+                                )}
+                              </p>
+                            )}
+                            {!isEditMode && !isComplianceMode && (
+                              <p className="text-xs mt-0.5 invisible">&nbsp;</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -248,8 +254,10 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 {isComplianceMode && (
                   <td className="px-2 py-1.5 text-center">
                     {(() => {
-                      // Get the first validation result for this series (all fields share the same series validation result)
-                      const seriesResult = seriesFields.length > 0 ? getSeriesFieldComplianceResult(seriesFields[0], ser.name) : null;
+                      // Find series validation result by series name
+                      const seriesResult = complianceResults.find(r =>
+                        r.validationType === 'series' && r.seriesName === ser.name
+                      );
 
                       if (!seriesResult || seriesResult.status === 'unknown') {
                         return (
@@ -288,7 +296,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                         onClick={() => onSeriesDelete(seriesIndex)}
                         className="p-0.5 text-gray-600 hover:text-red-600 transition-colors"
                         title="Delete series"
-                        disabled={displaySeries.length <= 2}
+                        disabled={false}
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -315,14 +323,52 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
       )}
 
       {/* Edit Modal for Series Values */}
-      {editingCell && (
+      {editingCell && displaySeries[editingCell.seriesIndex] && (
         <FieldEditModal
-          field={seriesFields.find(f => f.tag === editingCell.fieldTag)!}
-          value={displaySeries[editingCell.seriesIndex]?.fields[editingCell.fieldTag]}
-          onSave={(updates) => {
-            if ('value' in updates && updates.value !== undefined) {
-              onSeriesUpdate(editingCell.seriesIndex, editingCell.fieldTag, updates.value);
+          field={(() => {
+            // If field exists in series, use it
+            if (editingCell.fieldIndex >= 0) {
+              const existingField = displaySeries[editingCell.seriesIndex].fields[editingCell.fieldIndex];
+              return {
+                tag: existingField.tag,
+                name: existingField.name,
+                value: existingField.value,
+                vr: 'UN',
+                level: 'series' as const,
+                validationRule: existingField.validationRule
+              };
             }
+            // Otherwise create a new field with defaults
+            return {
+              tag: editingCell.fieldTag || '',
+              name: editingCell.fieldName || editingCell.fieldTag || '',
+              value: '',
+              vr: 'UN',
+              level: 'series' as const,
+              validationRule: { type: 'exact' as const }
+            };
+          })()}
+          value={editingCell.fieldIndex >= 0
+            ? displaySeries[editingCell.seriesIndex].fields[editingCell.fieldIndex].value
+            : ''}
+          onSave={(updates) => {
+            const fieldTag = editingCell.fieldIndex >= 0
+              ? displaySeries[editingCell.seriesIndex].fields[editingCell.fieldIndex].tag
+              : editingCell.fieldTag || '';
+
+            const fieldUpdate: Partial<SeriesField> = {
+              name: editingCell.fieldName || editingCell.fieldTag || '',
+              tag: fieldTag
+            };
+
+            if ('value' in updates && updates.value !== undefined) {
+              fieldUpdate.value = updates.value;
+            }
+            if ('validationRule' in updates && updates.validationRule !== undefined) {
+              fieldUpdate.validationRule = updates.validationRule;
+            }
+
+            onSeriesUpdate(editingCell.seriesIndex, fieldTag, fieldUpdate);
             setEditingCell(null);
           }}
           onClose={() => setEditingCell(null)}

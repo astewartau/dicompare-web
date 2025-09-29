@@ -1,6 +1,7 @@
 import React from 'react';
 import { Trash2, ArrowRightLeft } from 'lucide-react';
 import { DicomField } from '../../types';
+import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 
 interface FieldRowProps {
@@ -47,9 +48,12 @@ const FieldRow: React.FC<FieldRowProps> = ({
           onClick={() => isEditMode && onEdit(field)}
         >
           <p className="text-sm text-gray-900">{formatFieldValue(field)}</p>
-          {isEditMode && field.dataType && (
+          {isEditMode && (
             <p className="text-xs text-gray-500 mt-0.5">
-              {formatFieldTypeInfo(field.dataType, field.validationRule)}
+              {formatFieldTypeInfo(
+                field.dataType || inferDataTypeFromValue(field.value),
+                field.validationRule
+              )}
             </p>
           )}
         </div>

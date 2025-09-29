@@ -1326,6 +1326,13 @@ try:
     
     # Load session to create DataFrame
     session_df = await async_load_dicom_session(dicom_bytes=all_dicom_bytes)
+
+    # Debug: Check PixelSpacing data format right after loading
+    if 'PixelSpacing' in session_df.columns:
+        pixel_spacing_sample = session_df['PixelSpacing'].iloc[0] if len(session_df) > 0 else None
+        print(f"🔍 DEBUG (after loading): PixelSpacing in DataFrame: {pixel_spacing_sample} (type: {type(pixel_spacing_sample)})")
+    else:
+        print("🔍 DEBUG (after loading): PixelSpacing not found in DataFrame columns")
     session_df = assign_acquisition_and_run_numbers(session_df)
     
     # Cache the session DataFrame globally for validation use
@@ -1689,109 +1696,111 @@ try:
         # Get acquisition DataFrame for field analysis
         acq_df = session_df[session_df['Acquisition'] == acq_name] if 'Acquisition' in session_df.columns else session_df
         
-        # Extract acquisition and series fields using dicompare's Series column
+        # Extract acquisition and series fields directly from dicompare analysis
         acquisition_fields = []
         series_fields = []
-        
-        # Check if this acquisition has multiple series (dicompare detected varying parameters)
-        has_multiple_series = 'Series' in acq_df.columns and acq_df['Series'].nunique() > 1
-        print(f"Acquisition {acq_name}: has_multiple_series = {has_multiple_series}")
-        if 'Series' in acq_df.columns:
-            print(f"  Series found: {list(acq_df['Series'].unique())}")
-        
-        for field in DEFAULT_DICOM_FIELDS:
-            if field in acq_df.columns:
-                unique_vals = acq_df[field].dropna().unique()
-                tag_info = get_tag_info(field)
-                print(f"🔍 DEBUG Field analysis for '{field}': tag_info = {tag_info}")
-                data_type = determine_field_type_from_values(field, acq_df[field])
-                
-                # Use dicompare's series detection to classify fields
-                if not has_multiple_series or len(unique_vals) == 1:
-                    # Acquisition-level field (constant across all files)
-                    value = unique_vals[0]
-                    if hasattr(value, 'item'):
-                        value = value.item()
-                    elif pd.isna(value):
-                        value = None
-                    else:
-                        # Keep lists as lists for proper handling in React
-                        if isinstance(value, (list, tuple)):
-                            value = list(value)  # Ensure it's a list, not tuple
-                        else:
-                            value = str(value) if not isinstance(value, (int, float, bool)) else value
-                    
-                    acquisition_fields.append({
-                        "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field}",
-                        "name": field,
-                        "keyword": tag_info.get("keyword", field),
-                        "value": value,
-                        "vr": _get_vr_for_field(field),
-                        "level": "acquisition",
-                        "dataType": data_type,
-                        "consistency": "constant"
-                    })
-                else:
-                    # Series-level field (varies between series within this acquisition)
-                    values_list = []
-                    for val in unique_vals:
-                        if hasattr(val, 'item'):
-                            val = val.item()
-                        elif pd.isna(val):
-                            val = None
-                        else:
-                            # Keep lists as lists for proper handling in React
-                            if isinstance(val, (list, tuple)):
-                                val = list(val)  # Ensure it's a list, not tuple
-                            else:
-                                val = str(val) if not isinstance(val, (int, float, bool)) else val
-                        values_list.append(val)
-                    
-                    series_fields.append({
-                        "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field}",
-                        "name": field,
-                        "keyword": tag_info.get("keyword", field),
-                        "values": values_list,
-                        "vr": _get_vr_for_field(field),
-                        "level": "series", 
-                        "dataType": data_type,
-                        "consistency": "varying"
-                    })
-        
-        # Use dicompare's built-in Series column for much simpler series handling
-        series = []
-        if 'Series' in acq_df.columns and len(series_fields) > 0:
-            unique_series = acq_df['Series'].unique()
-            for series_name in unique_series:
-                series_data = acq_df[acq_df['Series'] == series_name]
-                
-                # Build series fields dict with values from this specific series
-                series_fields_dict = {}
-                for series_field in series_fields:
-                    field_name = series_field['name']
-                    tag = series_field['tag']
-                    
-                    if field_name in series_data.columns:
-                        # Get the value for this field in this series
-                        field_values = series_data[field_name].dropna().unique()
-                        if len(field_values) > 0:
-                            value = field_values[0]
-                            if hasattr(value, 'item'):
-                                value = value.item()
-                            elif not pd.isna(value):
-                                if isinstance(value, (list, tuple)):
-                                    value = list(value)
-                                else:
-                                    value = str(value) if not isinstance(value, (int, float, bool)) else value
-                            series_fields_dict[tag] = value
-                
-                # Extract a clean series name from dicompare's series naming
-                clean_name = series_name.split('_Series_')[-1] if '_Series_' in series_name else f"Series_{len(series) + 1}"
-                
-                series.append({
-                    "name": f"Series_{clean_name}",
-                    "fields": series_fields_dict
+
+        # Get fields from dicompare analysis result (new format)
+        dicompare_acq_fields = acq_data.get('fields', [])
+        dicompare_series = acq_data.get('series', [])
+
+        print(f"Acquisition {acq_name}: Found {len(dicompare_acq_fields)} acquisition fields, {len(dicompare_series)} series")
+
+        # Process acquisition-level fields from dicompare
+        for field_data in dicompare_acq_fields:
+            field_name = field_data.get('field')
+            field_value = field_data.get('value')
+
+            if field_name:
+                tag_info = get_tag_info(field_name)
+                data_type = determine_field_type_from_values(field_name, [field_value] if field_value is not None else [])
+
+                acquisition_fields.append({
+                    "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field_name}",
+                    "name": field_name,
+                    "keyword": tag_info.get("keyword", field_name),
+                    "value": field_value,
+                    "vr": _get_vr_for_field(field_name),
+                    "level": "acquisition",
+                    "dataType": data_type,
+                    "consistency": "constant"
                 })
+
+        # Process series-level fields from dicompare analysis
+        if dicompare_series:
+            # Collect all series field names and their values
+            series_field_values = {}
+            for series_data in dicompare_series:
+                for field_data in series_data.get('fields', []):
+                    field_name = field_data.get('field')
+                    field_value = field_data.get('value')
+                    field_tag = field_data.get('tag', '')
+
+                    if field_name not in series_field_values:
+                        series_field_values[field_name] = {
+                            'values': [],
+                            'tag': field_tag
+                        }
+                    series_field_values[field_name]['values'].append(field_value)
+
+            # Create series fields from collected data
+            for field_name, field_info in series_field_values.items():
+                tag_info = get_tag_info(field_name)
+                data_type = determine_field_type_from_values(field_name, field_info['values'])
+
+                series_fields.append({
+                    "tag": field_info['tag'] if field_info['tag'] else (tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field_name}"),
+                    "name": field_name,
+                    "keyword": tag_info.get("keyword", field_name),
+                    "values": field_info['values'],
+                    "vr": _get_vr_for_field(field_name),
+                    "level": "series",
+                    "dataType": data_type,
+                    "consistency": "varying"
+                })
+        
+        # Create series directly from dicompare analysis data
+        series = []
+        print(f"🔍 DICOMPARE SERIES DATA: {dicompare_series}")
+
+        for series_data in dicompare_series:
+            series_name = series_data.get('name', f'Series {len(series) + 1}')
+            series_fields_array = []
+
+            print(f"🔍 Processing series: {series_name}")
+            print(f"🔍 Series field data: {series_data.get('fields', [])}")
+
+            for field_data in series_data.get('fields', []):
+                field_tag = field_data.get('tag', '')
+                field_value = field_data.get('value')
+                field_name = field_data.get('field', 'unknown')
+
+                # Create SeriesField object according to TypeScript interface
+                series_field = {
+                    "name": field_name,
+                    "tag": field_tag if field_tag else f"unknown_{field_name}",
+                    "value": field_value
+                }
+                series_fields_array.append(series_field)
+                print(f"🔍 Added series field: {series_field}")
+
+            print(f"🔍 Final series_fields_array type: {type(series_fields_array)}")
+            print(f"🔍 Final series_fields_array: {series_fields_array}")
+
+            # Ensure fields is a proper JavaScript array
+            # Force explicit array conversion for JavaScript compatibility
+            js_compatible_fields = []
+            for field in series_fields_array:
+                js_compatible_fields.append(field)
+
+            series_obj = {
+                "name": series_name,
+                "fields": js_compatible_fields
+            }
+            print(f"🔍 Final series object: {series_obj}")
+            print(f"🔍 Series fields type after explicit conversion: {type(series_obj['fields'])}")
+            print(f"🔍 Series fields length: {len(series_obj['fields'])}")
+            series.append(series_obj)
         
         # Get series description
         if 'SeriesDescription' in acq_df.columns:
@@ -1865,7 +1874,7 @@ except Exception as e:
         total_files: acq.totalFiles,
         acquisition_fields: acq.acquisitionFields,
         series_fields: acq.seriesFields,
-        series: acq.series?.map((s: any) => ({ name: s.name, instance_count: 0, field_values: s.fields })) || [],
+        series: acq.series?.map((s: any) => ({ name: s.name, fields: s.fields })) || [],
         metadata: acq.metadata
       })),
       summary: {
@@ -1876,18 +1885,18 @@ except Exception as e:
       }
     };
     
-    // Cache DataFrame state for efficient reuse (real dicompare behavior)
-    this.cacheSession(analysisResult, { 
-      fileCount: files.length,
-      analysisTimestamp: new Date().toISOString(),
-      isUIFormat: true,
-      usingRealDicompare: true
-    });
+    // TEMPORARILY DISABLE CACHE to force fresh analysis
+    // this.cacheSession(analysisResult, {
+    //   fileCount: files.length,
+    //   analysisTimestamp: new Date().toISOString(),
+    //   isUIFormat: true,
+    //   usingRealDicompare: true
+    // });
     
     console.log('📊 Cached DataFrame state using real dicompare analysis');
-    
+
     // Convert to full UI format with default validation rules
-    return acquisitions.map((acq: any) => ({
+    const finalResult = acquisitions.map((acq: any) => ({
       ...acq,
       acquisitionFields: acq.acquisitionFields.map((field: any) => ({
         ...field,
@@ -1899,6 +1908,14 @@ except Exception as e:
         validationRule: { type: 'exact' as const }
       }))
     }));
+
+    console.log('🔍 FINAL RESULT BEFORE RETURN:', JSON.stringify(finalResult, null, 2));
+    console.log('🔍 First acquisition series:', finalResult[0]?.series);
+    console.log('🔍 First series fields:', finalResult[0]?.series?.[0]?.fields);
+    console.log('🔍 Fields type:', typeof finalResult[0]?.series?.[0]?.fields);
+    console.log('🔍 Fields isArray:', Array.isArray(finalResult[0]?.series?.[0]?.fields));
+
+    return finalResult;
   }
 
   /**
@@ -2085,6 +2102,16 @@ try:
             raise ValueError(f"Both hybrid and legacy validation failed. Hybrid error: {e}. Legacy error: {legacy_e}")
     
     print(f"Dicompare validation complete: {len(compliance_results)} results")
+
+    # Debug: Check PixelSpacing data format in DataFrame
+    if 'PixelSpacing' in session_df.columns:
+        pixel_spacing_sample = session_df['PixelSpacing'].iloc[0] if len(session_df) > 0 else None
+        print(f"🔍 DEBUG: PixelSpacing in DataFrame: {pixel_spacing_sample} (type: {type(pixel_spacing_sample)})")
+        if hasattr(pixel_spacing_sample, '__len__') and len(pixel_spacing_sample) > 0:
+            print(f"🔍 DEBUG: First element type: {type(pixel_spacing_sample[0]) if len(pixel_spacing_sample) > 0 else 'N/A'}")
+    else:
+        print("🔍 DEBUG: PixelSpacing not found in DataFrame columns")
+        print(f"🔍 DEBUG: Available columns: {list(session_df.columns)}")
     
     # Convert dicompare results to our UI format
     validation_results = []
@@ -2238,6 +2265,252 @@ json.dumps(result)
     } catch (error) {
       console.warn(`Failed to get DICOM tag for keyword: ${keyword}`, error);
       return null;
+    }
+  }
+
+  /**
+   * Generate test DICOM files from schema constraints
+   */
+  async generateTestDicomsFromSchema(
+    acquisition: UIAcquisition,
+    testData: Array<Record<string, any>>,
+    fields: Array<{name: string; tag: string; level: string; dataType?: string; vr?: string}>
+  ): Promise<Blob> {
+    await this.ensureInitialized();
+
+    console.log('🧪 Generating test DICOMs from schema...', {
+      acquisitionName: acquisition.protocolName,
+      testDataRows: testData.length,
+      fieldCount: fields.length
+    });
+
+    try {
+      // Convert test data to Python format and generate DICOMs
+      await pyodideManager.setPythonGlobal('test_data_rows', testData);
+      await pyodideManager.setPythonGlobal('schema_fields', fields);
+      await pyodideManager.setPythonGlobal('acquisition_info', {
+        protocolName: acquisition.protocolName,
+        seriesDescription: acquisition.seriesDescription || 'Generated Test Data'
+      });
+
+      await pyodideManager.runPythonAsync(`
+import pydicom
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import io
+import zipfile
+from pydicom.dataset import Dataset
+from pydicom.uid import generate_uid, ExplicitVRLittleEndian
+
+# Convert JS data to Python
+test_rows = test_data_rows.to_py() if hasattr(test_data_rows, 'to_py') else test_data_rows
+field_info = schema_fields.to_py() if hasattr(schema_fields, 'to_py') else schema_fields
+acq_info = acquisition_info.to_py() if hasattr(acquisition_info, 'to_py') else acquisition_info
+
+print(f"📊 Generating DICOMs from {len(test_rows)} test data rows")
+print(f"📊 Field info received: {len(field_info)} fields")
+for i, field in enumerate(field_info[:3]):  # Show first 3 fields
+    print(f"  Field {i}: {field}")
+
+# Create mappings of field names to DICOM tags and VRs
+field_tag_map = {}
+field_vr_map = {}
+for field in field_info:
+    # Handle both dict and object access patterns
+    if hasattr(field, 'get'):
+        field_name = field.get('name', '')
+        tag_str = field.get('tag', '').strip('()')
+        vr = field.get('vr', 'UN')
+    else:
+        field_name = field['name'] if 'name' in field else ''
+        tag_str = field['tag'].strip('()') if 'tag' in field else ''
+        vr = field['vr'] if 'vr' in field else 'UN'
+
+    if tag_str and ',' in tag_str:
+        try:
+            parts = tag_str.split(',')
+            group = int(parts[0].strip(), 16)
+            element = int(parts[1].strip(), 16)
+            field_tag_map[field_name] = (group, element)
+            field_vr_map[field_name] = vr
+            print(f"  Field: {field_name} -> {tag_str} (VR: {vr})")
+        except Exception as e:
+            print(f"  Skipping invalid tag: {field_name} -> {tag_str}, error: {e}")
+
+# Create ZIP file in memory
+zip_buffer = io.BytesIO()
+with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+
+    for idx, row_data in enumerate(test_rows):
+        print(f"🔧 Creating DICOM file {idx + 1}/{len(test_rows)}")
+
+        # Create a minimal DICOM dataset
+        ds = Dataset()
+
+        # Required DICOM header elements
+        ds.file_meta = Dataset()
+        ds.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+        ds.file_meta.MediaStorageSOPClassUID = '1.2.840.10008.5.1.4.1.1.4'  # MR Image Storage
+        ds.file_meta.MediaStorageSOPInstanceUID = generate_uid()
+        ds.file_meta.ImplementationClassUID = generate_uid()
+        ds.file_meta.ImplementationVersionName = 'DICOMPARE_TEST_GEN_1.0'
+
+        # Core DICOM elements
+        ds.SOPClassUID = '1.2.840.10008.5.1.4.1.1.4'
+        ds.SOPInstanceUID = generate_uid()
+        ds.StudyInstanceUID = generate_uid()
+        ds.SeriesInstanceUID = generate_uid()
+        ds.FrameOfReferenceUID = generate_uid()
+
+        # Basic patient/study info
+        ds.PatientName = 'TEST^PATIENT'
+        ds.PatientID = f'TEST_ID_{idx:03d}'
+        ds.StudyDate = datetime.now().strftime('%Y%m%d')
+        ds.StudyTime = datetime.now().strftime('%H%M%S')
+        ds.AccessionNumber = f'TEST_ACC_{idx:03d}'
+        ds.StudyDescription = 'Test Study from Schema'
+        ds.SeriesDate = ds.StudyDate
+        ds.SeriesTime = ds.StudyTime
+        ds.SeriesDescription = acq_info.get('seriesDescription', 'Test Series')
+        ds.SeriesNumber = str(idx + 1)
+        ds.InstanceNumber = str(idx + 1)
+
+        # Image-specific elements (minimal)
+        ds.ImageType = ['ORIGINAL', 'PRIMARY', 'OTHER']
+        ds.SamplesPerPixel = 1
+        ds.PhotometricInterpretation = 'MONOCHROME2'
+        ds.Rows = 64  # Small test image
+        ds.Columns = 64
+        ds.BitsAllocated = 16
+        ds.BitsStored = 16
+        ds.HighBit = 15
+        ds.PixelRepresentation = 0
+
+        # Create minimal pixel data (64x64 test pattern)
+        pixel_array = np.zeros((64, 64), dtype=np.uint16)
+        # Add a simple test pattern
+        pixel_array[20:44, 20:44] = 1000  # Square in center
+        ds.PixelData = pixel_array.tobytes()
+
+        # Add schema-defined fields
+        for field_name, value in row_data.items():
+            if field_name in field_tag_map:
+                tag = field_tag_map[field_name]
+                try:
+                    # Get VR from PyDicom's dictionary (more reliable than frontend VR)
+                    try:
+                        actual_vr = pydicom.datadict.dictionary_VR(tag)
+                    except KeyError:
+                        actual_vr = field_vr_map.get(field_name, 'UN')
+
+                    print(f"    Processing {field_name}: value={value}, Frontend_VR={field_vr_map.get(field_name, 'UN')}, PyDicom_VR={actual_vr}")
+
+                    if isinstance(value, list):
+                        # Handle multi-value fields based on actual VR
+                        if actual_vr in ['DS']:
+                            # Decimal String - convert to list of strings
+                            dicom_value = [str(float(v)) for v in value]
+                        elif actual_vr in ['IS']:
+                            # Integer String - convert to list of strings
+                            dicom_value = [str(int(v)) for v in value]
+                        elif actual_vr in ['FL', 'FD']:
+                            # Float types - keep as numeric list
+                            dicom_value = [float(v) for v in value]
+                        elif actual_vr in ['SL', 'SS', 'UL', 'US', 'SV', 'UV']:
+                            # Integer types - keep as numeric list
+                            dicom_value = [int(v) for v in value]
+                        else:
+                            # String types - convert to string list
+                            dicom_value = [str(v) for v in value]
+                    elif isinstance(value, (int, float)):
+                        # Single numeric values
+                        if actual_vr in ['DS']:
+                            dicom_value = str(float(value))
+                        elif actual_vr in ['IS']:
+                            dicom_value = str(int(value))
+                        elif actual_vr in ['FL', 'FD']:
+                            dicom_value = float(value)
+                        elif actual_vr in ['SL', 'SS', 'UL', 'US', 'SV', 'UV']:
+                            dicom_value = int(value)
+                        else:
+                            dicom_value = value
+                    else:
+                        # String values
+                        dicom_value = str(value) if value is not None else ""
+
+                    # Set the field in the dataset
+                    # keyword_for_tag is a function, not a dict
+                    try:
+                        keyword = pydicom.datadict.keyword_for_tag(tag)
+                    except KeyError:
+                        # If tag is not recognized, use a fallback name
+                        keyword = f"Tag{tag[0]:04X}{tag[1]:04X}"
+
+                    setattr(ds, keyword, dicom_value)
+                    print(f"    Set {field_name} ({keyword}): {dicom_value}")
+
+                except Exception as e:
+                    print(f"    Warning: Could not set {field_name}: {e}")
+
+        # Save DICOM to zip
+        dicom_buffer = io.BytesIO()
+        ds.save_as(dicom_buffer, write_like_original=False)
+        dicom_bytes = dicom_buffer.getvalue()
+
+        filename = f"test_dicom_{idx:03d}.dcm"
+        zip_file.writestr(filename, dicom_bytes)
+        print(f"    ✅ Saved {filename} ({len(dicom_bytes)} bytes)")
+
+zip_buffer.seek(0)
+zip_bytes = zip_buffer.getvalue()
+print(f"🎯 Generated ZIP file with {len(test_rows)} DICOM files ({len(zip_bytes)} bytes)")
+print(f"📋 ZIP bytes type: {type(zip_bytes)}")
+
+# Ensure we return bytes as a list of integers for JS consumption
+zip_bytes_list = list(zip_bytes)
+print(f"📋 Converted bytes to list of {len(zip_bytes_list)} integers")
+
+# Store in global variable for retrieval
+globals()['dicom_zip_bytes'] = zip_bytes_list
+      `);
+
+      // Get the result from the global variable
+      const zipBytesResult = await pyodideManager.runPython(`dicom_zip_bytes`);
+
+      // Convert Python bytes to JavaScript Blob
+      // Python should return a list of integers (bytes converted to list)
+      let zipBytes: Uint8Array;
+
+      console.log('🔍 ZIP bytes result type:', typeof zipBytesResult, 'Array?', Array.isArray(zipBytesResult));
+
+      if (Array.isArray(zipBytesResult)) {
+        // Expected case: list of integers from Python
+        zipBytes = new Uint8Array(zipBytesResult);
+        console.log('✅ Successfully converted array to Uint8Array, length:', zipBytes.length);
+      } else if (zipBytesResult instanceof Uint8Array) {
+        zipBytes = zipBytesResult;
+      } else if (zipBytesResult && zipBytesResult.toJs) {
+        // Handle PyProxy objects - convert to JavaScript
+        const jsArray = zipBytesResult.toJs();
+        console.log('🔧 Converted PyProxy to JS array, length:', jsArray.length);
+        zipBytes = new Uint8Array(jsArray);
+        console.log('✅ Successfully converted PyProxy array to Uint8Array, length:', zipBytes.length);
+      } else if (zipBytesResult && zipBytesResult.buffer) {
+        // Handle other PyProxy objects
+        zipBytes = new Uint8Array(zipBytesResult.buffer);
+      } else {
+        console.error('❌ Unexpected ZIP bytes format:', zipBytesResult);
+        throw new Error(`Unexpected format for ZIP bytes from Python: ${typeof zipBytesResult}`);
+      }
+      const zipBlob = new Blob([zipBytes], { type: 'application/zip' });
+
+      console.log('✅ Test DICOM generation completed successfully');
+      return zipBlob;
+
+    } catch (error) {
+      console.error('❌ Failed to generate test DICOMs:', error);
+      throw new Error(`Failed to generate test DICOMs: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

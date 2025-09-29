@@ -38,12 +38,24 @@ export const convertSchemaToAcquisition = async (
     // Convert schema fields to DicomField format using proper inference
     const convertFields = (fields: any[] = [], level: 'acquisition' | 'series'): DicomField[] => {
       return fields.map(field => {
+        console.log('🔄 Converting schema field:', field.tag, 'Original field:', field);
         const processedField = processSchemaFieldForUI(field);
-        return {
+        console.log('✨ Processed field result:', {
+          tag: processedField.tag,
+          dataType: processedField.dataType,
+          hasDataType: 'dataType' in processedField
+        });
+        const finalField = {
           ...processedField,
           level, // Override level from parameter
           value: processedField.value || field.defaultValue || ''
         };
+        console.log('🎯 Final converted field:', {
+          tag: finalField.tag,
+          dataType: finalField.dataType,
+          hasDataType: 'dataType' in finalField
+        });
+        return finalField;
       });
     };
 
@@ -75,19 +87,18 @@ export const convertSchemaToAcquisition = async (
       seriesDescription: acquisitionData.description || '',
       totalFiles: 0, // Schema templates don't have files
       acquisitionFields: convertFields(allFields.filter((f: any) => !f.level || f.level === 'acquisition'), 'acquisition'),
-      seriesFields: convertFields(Array.from(seriesFieldMap.values()), 'series'),
+      // seriesFields removed - now embedded in series[].fields[]
       series: acquisitionData.series?.map((series: any, index: number) => ({
         name: series.name || `Series ${index + 1}`,
-        fields: Object.fromEntries(
-          (series.fields || []).map((field: any) => [
-            field.tag,
-            {
-              value: field.value || field.defaultValue || '',
-              dataType: inferDataTypeFromValue(field.value || field.defaultValue || ''),
-              validationRule: field.validationRule || { type: 'exact' as const }
-            }
-          ])
-        )
+        fields: (series.fields || []).map((field: any) => {
+          const processedField = processSchemaFieldForUI(field);
+          return {
+            name: processedField.name,
+            tag: processedField.tag,
+            value: processedField.value || field.defaultValue || '',
+            validationRule: processedField.validationRule || { type: 'exact' as const }
+          };
+        })
       })) || [],
       validationFunctions: acquisitionData.rules || acquisitionData.validationFunctions || [],
       metadata: {

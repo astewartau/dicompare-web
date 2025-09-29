@@ -65,58 +65,76 @@ export const VR_MULTIPLICITY_CONSIDERATIONS: Record<string, {
  * Determine the most appropriate data type for a DICOM field based on its VR and value multiplicity
  */
 export function getDataTypeFromVR(
-  vr: string, 
-  valueMultiplicity?: string, 
+  vr: string,
+  valueMultiplicity?: string,
   actualValue?: any
 ): FieldDataType {
+  console.log('🧮 getDataTypeFromVR called with:', { vr, valueMultiplicity, actualValue });
+
   // If we have an actual value, prioritize that for type detection
   if (actualValue !== undefined && actualValue !== null) {
+    console.log('📄 Using actual value for type detection');
     if (Array.isArray(actualValue)) {
       // Determine array element type
       if (actualValue.length > 0) {
         const firstElement = actualValue[0];
         if (typeof firstElement === 'number' || !isNaN(Number(firstElement))) {
+          console.log('➡️ Returning list_number from actual array value');
           return 'list_number';
         }
+        console.log('➡️ Returning list_string from actual array value');
         return 'list_string';
       }
       // Empty array - fall back to VR-based decision
+      console.log('📭 Empty array, falling back to VR-based decision');
     } else if (typeof actualValue === 'object') {
+      console.log('➡️ Returning json from actual object value');
       return 'json';
     } else if (typeof actualValue === 'number' || !isNaN(Number(actualValue))) {
+      console.log('➡️ Returning number from actual numeric value');
       return 'number';
     } else if (typeof actualValue === 'string') {
+      console.log('➡️ Returning string from actual string value');
       return 'string';
     }
   }
-  
+
   // Check for multiplicity-based type variations
   if (valueMultiplicity && VR_MULTIPLICITY_CONSIDERATIONS[vr]) {
+    console.log('🔢 Checking multiplicity-based variations for VR:', vr);
     const consideration = VR_MULTIPLICITY_CONSIDERATIONS[vr];
-    
+    console.log('⚖️ Consideration found:', consideration);
+
     // Parse multiplicity (e.g., "1", "1-n", "2-n", "1-3")
     if (valueMultiplicity.includes('-n') || valueMultiplicity.includes('-')) {
       const parts = valueMultiplicity.split('-');
       const minValue = parseInt(parts[0]);
       const maxValue = parts[1] === 'n' ? Infinity : parseInt(parts[1]);
-      
+      console.log('📊 Parsed multiplicity:', { minValue, maxValue, from: valueMultiplicity });
+
       // If maximum is greater than 1, could be multiple values
       if (maxValue > 1) {
+        console.log('➡️ Returning multiple type:', consideration.multiple);
         return consideration.multiple;
       }
     } else {
       // Single value specified (e.g., "1")
       const count = parseInt(valueMultiplicity);
+      console.log('📊 Single value count:', count);
       if (count > 1) {
+        console.log('➡️ Returning multiple type:', consideration.multiple);
         return consideration.multiple;
       }
     }
-    
+
+    console.log('➡️ Returning single type:', consideration.single);
     return consideration.single;
   }
-  
+
   // Default VR-based mapping
-  return VR_TO_DATATYPE_MAP[vr] || 'string';
+  const defaultType = VR_TO_DATATYPE_MAP[vr] || 'string';
+  console.log('🎯 Using default VR mapping:', vr, '→', defaultType);
+  return defaultType;
 }
 
 /**

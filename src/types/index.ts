@@ -6,9 +6,9 @@ export interface DicomField {
   value: string | number | string[] | number[] | any;
   vr: string; // Value Representation
   level: 'acquisition' | 'series';
-  dataType?: FieldDataType;
   validationRule?: ValidationRule;
   seriesName?: string; // For series-level fields, which series they belong to
+  // dataType inferred from value type - no longer stored
 }
 
 // Enhanced field types for validation
@@ -17,15 +17,17 @@ export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' 
 export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 
 // Series Types
-export interface SeriesFieldValue {
+export interface SeriesField {
+  name: string;
+  tag: string;
   value: any;
-  dataType?: FieldDataType;
   validationRule?: ValidationRule;
+  // dataType inferred from value type - no longer stored
 }
 
 export interface Series {
   name: string;
-  fields: { [fieldTag: string]: any | SeriesFieldValue };
+  fields: SeriesField[];
 }
 
 // Validation Functions Types (imported from validation components)
@@ -58,7 +60,7 @@ export interface Acquisition {
   seriesDescription: string;
   totalFiles: number;
   acquisitionFields: DicomField[];
-  seriesFields: DicomField[];
+  // seriesFields removed - field definitions now embedded in series[].fields[]
   series?: Series[];
   validationFunctions?: SelectedValidationFunction[]; // Add validation functions to acquisitions
   metadata: {

@@ -147,9 +147,41 @@ const BuildSchema: React.FC = () => {
     return true;
   };
 
+  // Helper to get series field definitions from series data
+  const getSeriesFieldDefinitions = (acquisition: Acquisition) => {
+    const fieldMap = new Map<string, { tag: string; name: string }>();
+
+    // Extract field definitions from all series
+    acquisition.series?.forEach(series => {
+      // Handle both array format (from loaded schemas) and object format (from processed data)
+      if (Array.isArray(series.fields)) {
+        series.fields.forEach(field => {
+          if (!fieldMap.has(field.tag)) {
+            fieldMap.set(field.tag, {
+              tag: field.tag,
+              name: field.field || field.name || field.tag
+            });
+          }
+        });
+      } else if (series.fields && typeof series.fields === 'object') {
+        // Handle object format where fields is an object keyed by tag
+        Object.entries(series.fields).forEach(([tag, fieldData]: [string, any]) => {
+          if (!fieldMap.has(tag)) {
+            fieldMap.set(tag, {
+              tag: tag,
+              name: fieldData.name || fieldData.field || tag
+            });
+          }
+        });
+      }
+    });
+
+    return Array.from(fieldMap.values());
+  };
+
   const getIncompleteFields = () => {
     const incompleteFields = new Set<string>();
-    
+
     acquisitions.forEach(acquisition => {
       // Check acquisition-level fields
       acquisition.acquisitionFields.forEach(field => {
@@ -157,26 +189,37 @@ const BuildSchema: React.FC = () => {
           incompleteFields.add(`${acquisition.id}-${field.tag}`);
         }
       });
-      
+
+      // Get series field definitions from the series data
+      const seriesFieldDefs = getSeriesFieldDefinitions(acquisition);
+
       // Check series field values only if there are series-level fields
-      if (acquisition.seriesFields.length > 0) {
+      if (seriesFieldDefs.length > 0) {
         // Ensure we check at least 2 series (matching SeriesTable display logic)
         const minSeriesCount = Math.max(2, acquisition.series?.length || 0);
-        
+
         for (let seriesIndex = 0; seriesIndex < minSeriesCount; seriesIndex++) {
           const series = acquisition.series?.[seriesIndex];
-          
-          acquisition.seriesFields.forEach(field => {
-            const fieldValue = series?.fields?.[field.tag];
+
+          seriesFieldDefs.forEach(fieldDef => {
+            let fieldValue = null;
+
+            // Handle both array format (from loaded schemas) and object format (from processed data)
+            if (Array.isArray(series?.fields)) {
+              fieldValue = series.fields.find(f => f.tag === fieldDef.tag);
+            } else if (series?.fields && typeof series.fields === 'object') {
+              fieldValue = series.fields[fieldDef.tag];
+            }
+
             // If the field doesn't exist in this series, it's incomplete
-            if (fieldValue === undefined || !isFieldValueValid(fieldValue)) {
-              incompleteFields.add(`${acquisition.id}-series-${seriesIndex}-${field.tag}`);
+            if (!fieldValue || !isFieldValueValid(fieldValue)) {
+              incompleteFields.add(`${acquisition.id}-series-${seriesIndex}-${fieldDef.tag}`);
             }
           });
         }
       }
     });
-    
+
     return incompleteFields;
   };
 
@@ -197,17 +240,28 @@ const BuildSchema: React.FC = () => {
       }
     });
 
+    // Get series field definitions from the series data
+    const seriesFieldDefs = getSeriesFieldDefinitions(acquisition);
+
     // Check series field values only if there are series-level fields
-    if (acquisition.seriesFields.length > 0) {
+    if (seriesFieldDefs.length > 0) {
       const minSeriesCount = Math.max(2, acquisition.series?.length || 0);
 
       for (let seriesIndex = 0; seriesIndex < minSeriesCount; seriesIndex++) {
         const series = acquisition.series?.[seriesIndex];
 
-        acquisition.seriesFields.forEach(field => {
-          const fieldValue = series?.fields?.[field.tag];
-          if (fieldValue === undefined || !isFieldValueValid(fieldValue)) {
-            acquisitionIncomplete.add(`${acquisition.id}-series-${seriesIndex}-${field.tag}`);
+        seriesFieldDefs.forEach(fieldDef => {
+          let fieldValue = null;
+
+          // Handle both array format (from loaded schemas) and object format (from processed data)
+          if (Array.isArray(series?.fields)) {
+            fieldValue = series.fields.find(f => f.tag === fieldDef.tag);
+          } else if (series?.fields && typeof series.fields === 'object') {
+            fieldValue = series.fields[fieldDef.tag];
+          }
+
+          if (!fieldValue || !isFieldValueValid(fieldValue)) {
+            acquisitionIncomplete.add(`${acquisition.id}-series-${seriesIndex}-${fieldDef.tag}`);
           }
         });
       }
@@ -263,37 +317,28 @@ const BuildSchema: React.FC = () => {
       const contextAcquisitions = acquisitions.map(acq => ({
         ...acq,
         acquisitionFields: acq.acquisitionFields.map(field => processFieldForUI(field)),
-        seriesFields: acq.seriesFields.map(field => processFieldForUI({
-          ...field,
-          value: field.values?.[0] || field.value
-        })),
         series: acq.series.map(series => ({
           name: series.name,
-          fields: Object.fromEntries(
-            Object.entries(series.fields).map(([tag, value]) => {
-              // Find the matching seriesField to get the field name
-              const matchingField = acq.seriesFields.find(sf => sf.tag === tag);
-              const fieldName = matchingField?.name || tag;
-              
-              return [
-                tag,
-                // Process the series field value with rounding and appropriate validation rules
-                processSeriesFieldValue(
-                  (typeof value === 'object' && value !== null && 'value' in value) ? {
-                    ...value,
-                    field: fieldName  // Add field name
+          fields: Array.isArray(series.fields)
+            ? series.fields.map(field => ({
+                tag: field.tag,
+                name: field.name,
+                value: processSeriesFieldValue(
+                  (typeof field.value === 'object' && field.value !== null && 'value' in field.value) ? {
+                    ...field.value,
+                    field: field.name
                   } : {
-                    value,
-                    field: fieldName,  // Add field name
-                    dataType: typeof value === 'number' ? 'number' : 
-                             Array.isArray(value) ? 'list_string' : 'string'
+                    value: field.value,
+                    field: field.name,
+                    dataType: typeof field.value === 'number' ? 'number' :
+                             Array.isArray(field.value) ? 'list_string' : 'string'
                   },
-                  fieldName,
-                  tag
-                )
-              ];
-            })
-          )
+                  field.name,
+                  field.tag
+                ),
+                validationRule: field.validationRule
+              }))
+            : [] // Handle old object format by converting to empty array
         }))
       }));
       
@@ -579,7 +624,6 @@ const BuildSchema: React.FC = () => {
         seriesDescription: targetAcquisition.description || `Imported from ${schemaId}`,
         totalFiles: 0,
         acquisitionFields: [],
-        seriesFields: [],
         series: [],
         validationFunctions: []
       };
@@ -597,42 +641,29 @@ const BuildSchema: React.FC = () => {
 
       // Process series-level fields and instances
       if (targetAcquisition.series && Array.isArray(targetAcquisition.series)) {
-        const fieldMap = new Map();
         const seriesInstances = [];
 
         targetAcquisition.series.forEach(series => {
-          const seriesData = { name: series.name, fields: {} };
+          const seriesFields = [];
 
           if (series.fields && Array.isArray(series.fields)) {
             series.fields.forEach(f => {
-              // Add to unique field definitions
-              if (!fieldMap.has(f.tag)) {
-                fieldMap.set(f.tag, {
-                  tag: f.tag,
-                  name: f.field || f.name,
-                  value: '',
-                  vr: f.vr || 'UN',
-                  level: 'series',
-                  dataType: f.dataType || 'string',
-                  validationRule: f.validationRule || { type: 'exact' }
-                });
-              }
-
-              // Add value to this series instance
-              seriesData.fields[f.tag] = processSchemaSeriesFieldValue(f, f.field || f.name, f.tag);
+              // Create SeriesField objects for the fields array
+              seriesFields.push({
+                tag: f.tag,
+                name: f.field || f.name,
+                value: processSchemaSeriesFieldValue(f, f.field || f.name, f.tag),
+                validationRule: f.validationRule || { type: 'exact' }
+              });
             });
           }
 
-          seriesInstances.push(seriesData);
+          seriesInstances.push({
+            name: series.name,
+            fields: seriesFields
+          });
         });
 
-        newAcquisition.seriesFields = Array.from(fieldMap.values()).map(field => {
-          const processedField = processSchemaFieldForUI(field);
-          return {
-            ...processedField,
-            level: 'series'
-          };
-        });
         newAcquisition.series = seriesInstances;
       }
 
@@ -861,7 +892,6 @@ const BuildSchema: React.FC = () => {
                     seriesDescription: '',
                     totalFiles: 0,
                     acquisitionFields: [],
-                    seriesFields: [],
                     series: [],
                     metadata: {},
                     validationFunctions: []

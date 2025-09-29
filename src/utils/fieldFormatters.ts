@@ -1,4 +1,4 @@
-import { DicomField, SeriesFieldValue, ValidationRule } from '../types';
+import { DicomField, SeriesField, ValidationRule } from '../types';
 import { FieldValue, validateFieldValue, extractFieldValue } from '../types/fieldValues';
 
 export interface FormatOptions {

@@ -239,7 +239,7 @@ const DataLoadingAndMatching: React.FC = () => {
 
               targetAcquisition.series.forEach(series => {
                 console.log('Processing series:', series);
-                const seriesData = { name: series.name, fields: {} };
+                const seriesData = { name: series.name, fields: [] };
 
                 if (series.fields && Array.isArray(series.fields)) {
                   console.log('Found', series.fields.length, 'fields in series');
@@ -256,8 +256,13 @@ const DataLoadingAndMatching: React.FC = () => {
                       });
                     }
 
-                    // Add value to this series instance (use tag as key, matching SeriesTable expectation)
-                    seriesData.fields[f.tag] = f.value;
+                    // Add field to this series instance as an array element
+                    seriesData.fields.push({
+                      tag: f.tag,
+                      name: f.field || f.name,
+                      value: f.value,
+                      validationRule: f.validationRule || { type: 'exact' }
+                    });
                   });
                 }
 
