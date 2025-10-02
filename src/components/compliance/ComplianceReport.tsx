@@ -147,6 +147,8 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
 
           const errors = results.filter(r => r.status === 'fail');
           const warnings = results.filter(r => r.status === 'warning');
+          const naResults = results.filter(r => r.status === 'na');
+          const passedResults = results.filter(r => r.status === 'pass');
           const acquisitionTotal = Object.values(statusCounts).reduce((a, b) => a + b, 0);
           const acquisitionCompliance = acquisitionTotal > 0 ? Math.round((statusCounts.pass / acquisitionTotal) * 100) : 0;
 
@@ -202,72 +204,290 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
                 </div>
               </div>
 
-              {/* Issues Section */}
-              {(errors.length > 0 || warnings.length > 0) && (
-                <div className="space-y-4">
-                  {/* Errors */}
-                  {errors.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-semibold text-red-700 mb-2 flex items-center">
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Errors ({errors.length})
-                      </h3>
-                      <div className="space-y-2">
-                        {errors.map((error, idx) => (
-                          <div key={idx} className="bg-red-50 border border-red-200 rounded p-3">
-                            <div className="flex items-start">
-                              <XCircle className="h-4 w-4 text-red-600 mt-0.5 mr-2 flex-shrink-0" />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-red-900">
-                                  {error.rule_name || error.fieldName}
-                                  {error.seriesName && (
-                                    <span className="ml-2 text-red-700">({error.seriesName})</span>
-                                  )}
-                                </p>
-                                {error.rule_name && error.fieldName && (
-                                  <p className="text-xs text-red-600 mt-0.5">{error.fieldName}</p>
-                                )}
-                                <p className="text-sm text-red-700 mt-1">{error.message}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+              {/* Schema Requirements Section */}
+              {pairing.schemaAcquisition && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Schema Requirements</h3>
+
+                  {/* Validation Rules Table */}
+                  {pairing.schemaAcquisition.validationFunctions && pairing.schemaAcquisition.validationFunctions.length > 0 && (
+                    <div className="mb-4">
+                      <div className="border border-gray-200 rounded overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Validation Rule
+                              </th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Description
+                              </th>
+                              <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+                                Status
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {pairing.schemaAcquisition.validationFunctions.map((func, idx) => {
+                              const funcResult = results.find(r => r.rule_name === (func.customName || func.name));
+                              return (
+                                <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                  <td className="px-3 py-2">
+                                    <p className="text-xs font-medium text-gray-900">{func.customName || func.name}</p>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {(func.customFields || func.fields).map(field => (
+                                        <span key={field} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                          {field}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <p className="text-xs text-gray-900">{func.customDescription || func.description}</p>
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    {funcResult ? getStatusIcon(funcResult.status, 'h-4 w-4') : <HelpCircle className="h-4 w-4 text-gray-400 inline-block" />}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}
 
-                  {/* Warnings */}
-                  {warnings.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-semibold text-yellow-700 mb-2 flex items-center">
-                        <AlertTriangle className="h-4 w-4 mr-1" />
-                        Warnings ({warnings.length})
-                      </h3>
-                      <div className="space-y-2">
-                        {warnings.map((warning, idx) => (
-                          <div key={idx} className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                            <div className="flex items-start">
-                              <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-yellow-900">
-                                  {warning.rule_name || warning.fieldName}
-                                  {warning.seriesName && (
-                                    <span className="ml-2 text-yellow-700">({warning.seriesName})</span>
-                                  )}
-                                </p>
-                                {warning.rule_name && warning.fieldName && (
-                                  <p className="text-xs text-yellow-600 mt-0.5">{warning.fieldName}</p>
-                                )}
-                                <p className="text-sm text-yellow-700 mt-1">{warning.message}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                  {/* Acquisition-Level Fields Table */}
+                  {pairing.schemaAcquisition.acquisitionFields && pairing.schemaAcquisition.acquisitionFields.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Acquisition-Level Fields</h4>
+                      <div className="border border-gray-200 rounded overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Field
+                              </th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Tag
+                              </th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Expected Value
+                              </th>
+                              <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+                                Status
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {pairing.schemaAcquisition.acquisitionFields.map((field, idx) => {
+                              const fieldResult = results.find(r => r.fieldName === field.name && !r.seriesName);
+                              return (
+                                <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                  <td className="px-3 py-2">
+                                    <p className="text-xs font-medium text-gray-900">{field.name}</p>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <p className="text-xs text-gray-600">{field.tag || 'N/A'}</p>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <p className="text-xs text-gray-900">
+                                      {field.value !== undefined && field.value !== null && field.value !== ''
+                                        ? (typeof field.value === 'object' ? JSON.stringify(field.value) : String(field.value))
+                                        : 'Any'}
+                                    </p>
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    {fieldResult ? getStatusIcon(fieldResult.status, 'h-4 w-4') : <HelpCircle className="h-4 w-4 text-gray-400 inline-block" />}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Series-Level Fields Table */}
+                  {pairing.schemaAcquisition.series && pairing.schemaAcquisition.series.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Series-Level Fields</h4>
+                      {pairing.schemaAcquisition.series.map((series, seriesIdx) => (
+                        <div key={seriesIdx} className="mb-3">
+                          <p className="text-xs font-semibold text-gray-800 mb-1 px-2">{series.name || `Series ${seriesIdx + 1}`}</p>
+                          <div className="border border-gray-200 rounded overflow-hidden">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Field
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Tag
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Expected Value
+                                  </th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+                                    Status
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {series.fields && series.fields.map((field, fieldIdx) => {
+                                  const fieldResult = results.find(r => r.fieldName === field.name && r.seriesName === series.name);
+                                  return (
+                                    <tr key={fieldIdx} className={fieldIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                      <td className="px-3 py-2">
+                                        <p className="text-xs font-medium text-gray-900">{field.name}</p>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <p className="text-xs text-gray-600">{field.tag || 'N/A'}</p>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <p className="text-xs text-gray-900">
+                                          {field.value !== undefined && field.value !== null && field.value !== ''
+                                            ? (typeof field.value === 'object' ? JSON.stringify(field.value) : String(field.value))
+                                            : 'Any'}
+                                        </p>
+                                      </td>
+                                      <td className="px-3 py-2 text-center">
+                                        {fieldResult ? getStatusIcon(fieldResult.status, 'h-4 w-4') : <HelpCircle className="h-4 w-4 text-gray-400 inline-block" />}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
               )}
+
+              {/* Compliance Results Section */}
+              <div className="space-y-4">
+                {/* Errors */}
+                {errors.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-red-700 mb-2 flex items-center">
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Errors ({errors.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {errors.map((error, idx) => (
+                        <div key={idx} className="bg-red-50 border border-red-200 rounded p-3">
+                          <div className="flex items-start">
+                            <XCircle className="h-4 w-4 text-red-600 mt-0.5 mr-2 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-red-900">
+                                {error.rule_name || error.fieldName}
+                                {error.seriesName && (
+                                  <span className="ml-2 text-red-700">({error.seriesName})</span>
+                                )}
+                              </p>
+                              {error.rule_name && error.fieldName && (
+                                <p className="text-xs text-red-600 mt-0.5">{error.fieldName}</p>
+                              )}
+                              <p className="text-sm text-red-700 mt-1">{error.message}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Warnings */}
+                {warnings.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-yellow-700 mb-2 flex items-center">
+                      <AlertTriangle className="h-4 w-4 mr-1" />
+                      Warnings ({warnings.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {warnings.map((warning, idx) => (
+                        <div key={idx} className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                          <div className="flex items-start">
+                            <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-yellow-900">
+                                {warning.rule_name || warning.fieldName}
+                                {warning.seriesName && (
+                                  <span className="ml-2 text-yellow-700">({warning.seriesName})</span>
+                                )}
+                              </p>
+                              {warning.rule_name && warning.fieldName && (
+                                <p className="text-xs text-yellow-600 mt-0.5">{warning.fieldName}</p>
+                              )}
+                              <p className="text-sm text-yellow-700 mt-1">{warning.message}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* N/A Results */}
+                {naResults.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                      <HelpCircle className="h-4 w-4 mr-1" />
+                      N/A ({naResults.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {naResults.map((naResult, idx) => (
+                        <div key={idx} className="bg-gray-50 border border-gray-200 rounded p-3">
+                          <div className="flex items-start">
+                            <HelpCircle className="h-4 w-4 text-gray-500 mt-0.5 mr-2 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">
+                                {naResult.seriesName ? naResult.seriesName : (naResult.rule_name || naResult.fieldName)}
+                              </p>
+                              {!naResult.seriesName && naResult.rule_name && naResult.fieldName && (
+                                <p className="text-xs text-gray-600 mt-0.5">{naResult.fieldName}</p>
+                              )}
+                              <p className="text-sm text-gray-700 mt-1">{naResult.message}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Passed Results */}
+                {passedResults.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-green-700 mb-2 flex items-center">
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Passed ({passedResults.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {passedResults.map((passedResult, idx) => (
+                        <div key={idx} className="bg-green-50 border border-green-200 rounded p-3">
+                          <div className="flex items-start">
+                            <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 mr-2 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-green-900">
+                                {passedResult.seriesName ? passedResult.seriesName : (passedResult.rule_name || passedResult.fieldName)}
+                              </p>
+                              {!passedResult.seriesName && passedResult.rule_name && passedResult.fieldName && (
+                                <p className="text-xs text-green-600 mt-0.5">{passedResult.fieldName}</p>
+                              )}
+                              <p className="text-sm text-green-700 mt-1">{passedResult.message}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Success Message */}
               {errors.length === 0 && warnings.length === 0 && statusCounts.pass > 0 && (

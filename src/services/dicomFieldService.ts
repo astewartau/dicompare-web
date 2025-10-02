@@ -204,6 +204,12 @@ export const getFieldByName = async (name: string): Promise<DicomFieldDefinition
   return fieldList.find(field => field.name === name);
 };
 
+// Get field definition by keyword
+export const getFieldByKeyword = async (keyword: string): Promise<DicomFieldDefinition | undefined> => {
+  const fieldList = await fetchDicomFieldList();
+  return fieldList.find(field => field.keyword === keyword);
+};
+
 // Validate field tag format
 export const isValidDicomTag = (tag: string): boolean => {
   const tagPattern = /^[0-9A-Fa-f]{4},[0-9A-Fa-f]{4}$/;

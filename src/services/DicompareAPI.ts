@@ -1314,7 +1314,7 @@ try:
     
     # Now process these through the normal dicompare pipeline
     # This will create the proper DataFrame and cache it for validation
-    from dicompare.web_utils import analyze_dicom_files_for_web
+    from dicompare.interface import analyze_dicom_files_for_web
     result = await analyze_dicom_files_for_web(all_dicom_bytes, None)
     
     if result.get("status") == "error":
@@ -1340,7 +1340,7 @@ try:
     print(f"✅ Cached example session DataFrame with {len(session_df)} instances for validation")
     
     # Convert the web result to UI format (similar to analyzeFilesForUI)
-    from dicompare.tags import get_tag_info, determine_field_type_from_values
+    from dicompare.schema import get_tag_info, determine_field_type_from_values
     from dicompare import DEFAULT_DICOM_FIELDS
     from pydicom.datadict import dictionary_VR
     
@@ -1490,7 +1490,7 @@ try:
             }
         })
     
-    from dicompare.serialization import make_json_serializable
+    from dicompare.io import make_json_serializable
     serializable_acquisitions = make_json_serializable(acquisitions)
     return json.dumps(serializable_acquisitions)
     
@@ -1641,8 +1641,8 @@ try:
     print(f"Processing {len(valid_files)} valid DICOM files...")
     dicom_bytes = valid_files
     
-    # Use the new web_utils async API directly to avoid PyodideTask issues  
-    from dicompare.web_utils import analyze_dicom_files_for_web
+    # Use the new web_utils async API directly to avoid PyodideTask issues
+    from dicompare.interface import analyze_dicom_files_for_web
     result = await analyze_dicom_files_for_web(dicom_bytes, None, progress_callback)
     
     if result.get("status") == "error":
@@ -1662,7 +1662,7 @@ try:
     # Get session dataframe for field extraction with proper tags and types
     import pandas as pd
     from dicompare import async_load_dicom_session, assign_acquisition_and_run_numbers
-    from dicompare.tags import get_tag_info, determine_field_type_from_values
+    from dicompare.schema import get_tag_info, determine_field_type_from_values
     from dicompare import DEFAULT_DICOM_FIELDS
     
     # Helper function for VR lookup
@@ -1843,7 +1843,7 @@ try:
             }
         })
     
-    from dicompare.serialization import make_json_serializable
+    from dicompare.io import make_json_serializable
     serializable_acquisitions = make_json_serializable(acquisitions)
     return json.dumps(serializable_acquisitions)
     

@@ -817,7 +817,7 @@ const BuildSchema: React.FC = () => {
               {isAdditional ? 'Add More Content' : 'Create Acquisitions'}
             </h3>
             <p className="text-sm text-gray-600 mb-6 text-center">
-              {isAdditional ? 'Upload more files or add manual acquisitions' : 'Upload files, drag and drop, or create acquisitions manually'}
+              {isAdditional ? 'Upload more files, zip archives, or add manual acquisitions' : 'Upload files, zip archives, drag and drop, or create acquisitions manually'}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -826,11 +826,12 @@ const BuildSchema: React.FC = () => {
             <div className="text-center">
               <Upload className="h-6 w-6 text-blue-500 mx-auto mb-2" />
               <h4 className="text-sm font-medium text-gray-900 mb-1">DICOM Files</h4>
-              <p className="text-xs text-gray-600 mb-3">Upload DICOM files or folders</p>
+              <p className="text-xs text-gray-600 mb-3">Upload DICOM files, zip archives, or folders</p>
               <input
                 type="file"
                 multiple
                 webkitdirectory=""
+                accept=".dcm,.dicom,.zip"
                 className="hidden"
                 id={isAdditional ? "dicom-upload-extra" : "dicom-upload"}
                 onChange={(e) => handleFileUpload(e.target.files)}
@@ -838,8 +839,8 @@ const BuildSchema: React.FC = () => {
               <label
                 htmlFor={!isUploading ? (isAdditional ? "dicom-upload-extra" : "dicom-upload") : ""}
                 className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
-                  !isUploading 
-                    ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer' 
+                  !isUploading
+                    ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer'
                     : 'text-gray-400 bg-gray-300 cursor-not-allowed'
                 }`}
               >

@@ -97,16 +97,9 @@ export function processSchemaFieldForUI(schemaField: any): any {
   // Try to get proper data type from VR and VM if available, otherwise check for known field patterns
   let dataType;
   if (schemaField.vr && schemaField.valueMultiplicity) {
-    console.log('🏗️ Schema field processing with VR/VM:', {
-      tag: schemaField.tag,
-      vr: schemaField.vr,
-      vm: schemaField.valueMultiplicity
-    });
     dataType = getDataTypeFromVR(schemaField.vr, schemaField.valueMultiplicity, schemaField.value);
-    console.log('🎯 Schema field dataType determined:', dataType);
   } else if (schemaField.tag) {
     // Check for known multi-value fields by tag
-    console.log('🔍 Schema field missing VR/VM, checking known patterns for tag:', schemaField.tag);
 
     // Known multi-value numeric fields
     const knownListNumberFields = [
@@ -127,20 +120,16 @@ export function processSchemaFieldForUI(schemaField: any): any {
     const normalizedTag = schemaField.tag.replace(/[()]/g, '');
 
     if (knownListNumberFields.includes(normalizedTag)) {
-      console.log('📊 Recognized as known list_number field');
       dataType = 'list_number';
     } else if (knownListStringFields.includes(normalizedTag)) {
-      console.log('📝 Recognized as known list_string field');
       dataType = 'list_string';
     } else {
       // Fallback to value-based inference
       dataType = inferDataTypeFromValue(schemaField.value);
-      console.log('📋 Schema field fallback dataType:', dataType, 'from value:', schemaField.value);
     }
   } else {
     // Fallback to value-based inference
     dataType = inferDataTypeFromValue(schemaField.value);
-    console.log('📋 Schema field fallback dataType:', dataType, 'from value:', schemaField.value);
   }
 
   // Build validation rule from schema properties

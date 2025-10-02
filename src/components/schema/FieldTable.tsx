@@ -46,16 +46,12 @@ const FieldTable: React.FC<FieldTableProps> = ({
   onFieldDelete,
 }) => {
   const [editingField, setEditingField] = useState<DicomField | null>(null);
-  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const isComplianceMode = mode === 'compliance';
 
   // Use compliance results from props instead of computing them
   const complianceResults = complianceResultsProp || [];
   const isValidating = false; // Validation now happens at parent level
   const validationError = null;
-
-  // Debug logging for validation results
-  console.log(`FieldTable: received ${complianceResults.length} compliance results for ${fields.length} fields`);
 
   const getFieldComplianceResult = (field: DicomField): ComplianceFieldResult => {
     const result = complianceResults.find(r => {
@@ -152,16 +148,22 @@ const FieldTable: React.FC<FieldTableProps> = ({
             {fields.map((field, index) => {
               const fieldKey = `${acquisitionId}-${field.tag}`;
               const isIncomplete = incompleteFields.has(fieldKey);
+
+              // Pre-calculate data type display (will be used if needed in render)
+              const explicitDataType = field.dataType;
+              const inferredDataType = inferDataTypeFromValue(field.value);
+              const finalDataType = explicitDataType || inferredDataType;
+              const fieldTypeDisplay = formatFieldTypeInfo(finalDataType, field.validationRule);
+
+              // Pre-calculate compliance result (will be used if needed in render)
               const complianceResult = isComplianceMode ? getFieldComplianceResult(field) : null;
 
               return (
                 <tr
                   key={field.tag}
-                  className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
+                  className={`group ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
                     isEditMode ? 'hover:bg-blue-50 transition-colors' : ''
                   } ${isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''}`}
-                  onMouseEnter={() => setHoveredRow(field.tag)}
-                  onMouseLeave={() => setHoveredRow(null)}
                 >
                 <td className="px-2 py-1.5">
                   <div>
@@ -176,20 +178,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                   >
                     <p className="text-xs text-gray-900 break-words">{formatFieldValue(field)}</p>
                     {(isEditMode || isComplianceMode) && (
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {(() => {
-                          const explicitDataType = field.dataType;
-                          const inferredDataType = inferDataTypeFromValue(field.value);
-                          const finalDataType = explicitDataType || inferredDataType;
-                          console.log('🎨 Field type display for', field.tag, ':', {
-                            explicitDataType,
-                            inferredDataType,
-                            finalDataType,
-                            value: field.value
-                          });
-                          return formatFieldTypeInfo(finalDataType, field.validationRule);
-                        })()}
-                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">{fieldTypeDisplay}</p>
                     )}
                     {!isEditMode && !isComplianceMode && (
                       <p className="text-xs mt-0.5 invisible">&nbsp;</p>
@@ -211,9 +200,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 )}
                 {isEditMode && (
                   <td className="px-2 py-1.5 text-right">
-                    <div className={`flex items-center justify-end space-x-1 ${
-                      hoveredRow === field.tag ? 'opacity-100' : 'opacity-0'
-                    } transition-opacity`}>
+                    <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => onFieldConvert(field.tag)}
                         className="p-0.5 text-gray-600 hover:text-medical-600 transition-colors"

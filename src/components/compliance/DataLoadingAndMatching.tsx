@@ -25,33 +25,22 @@ const SchemaAcquisitionDisplay = React.memo<{
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    console.log('🔥 useEffect triggered:', {
-      isDataProcessing,
-      schemaId: binding.schemaId,
-      acquisitionId: binding.acquisitionId,
-      hasExistingSchema: !!schemaAcquisition
-    });
-
     // Skip loading during data processing to prevent interference
     if (isDataProcessing) {
-      console.log('🔥 Skipping useEffect - data processing');
       return;
     }
 
     // Don't reload if we already have the right schema
     if (schemaAcquisition) {
-      console.log('🔥 Already have schema, skipping reload');
       setIsLoading(false);
       return;
     }
 
-    console.log('🔥 Loading schema...');
     const loadSchema = async () => {
       setIsLoading(true);
       try {
         const acquisition = await getSchemaAcquisition(binding);
         setSchemaAcquisition(acquisition);
-        console.log('🔥 Schema loaded successfully');
       } catch (error) {
         console.error('Failed to load schema:', error);
         setSchemaAcquisition(null);
@@ -61,15 +50,6 @@ const SchemaAcquisitionDisplay = React.memo<{
 
     loadSchema();
   }, [binding.schemaId, binding.acquisitionId]);
-
-  // Debug what's happening
-  console.log('🔥 SCHEMA DEBUG:', {
-    hasSchema: !!schemaAcquisition,
-    isLoading,
-    isDataProcessing,
-    bindingId: binding.schemaId,
-    acquisitionId: binding.acquisitionId
-  });
 
   // If we have a schema, ALWAYS show it regardless of any other state
   if (schemaAcquisition) {
@@ -181,7 +161,6 @@ const DataLoadingAndMatching: React.FC = () => {
   // Helper function to convert schema to acquisition format for display
   const convertSchemaToAcquisition = async (binding: SchemaBinding): Promise<Acquisition> => {
     const { schema, acquisitionId } = binding;
-    console.log('🔄 Converting schema to acquisition:', schema.name, 'acquisitionId:', acquisitionId);
 
     try {
       // Get schema content to extract fields
@@ -210,7 +189,6 @@ const DataLoadingAndMatching: React.FC = () => {
 
           const acquisitionName = acquisitionKeys[index];
           targetAcquisition = parsedSchema.acquisitions[acquisitionName];
-          console.log('✅ Found acquisition by index:', index, '→', acquisitionName);
 
           if (targetAcquisition) {
             // Extract acquisition-level fields
@@ -232,17 +210,13 @@ const DataLoadingAndMatching: React.FC = () => {
 
             // Extract series-level fields and series instances separately
             if (targetAcquisition.series && Array.isArray(targetAcquisition.series)) {
-              console.log('Found series array with', targetAcquisition.series.length, 'series');
-
               // Collect unique field definitions for seriesFields
               const fieldMap = new Map();
 
               targetAcquisition.series.forEach(series => {
-                console.log('Processing series:', series);
                 const seriesData = { name: series.name, fields: [] };
 
                 if (series.fields && Array.isArray(series.fields)) {
-                  console.log('Found', series.fields.length, 'fields in series');
                   series.fields.forEach(f => {
                     // Add to unique field definitions
                     if (!fieldMap.has(f.tag)) {
@@ -270,12 +244,7 @@ const DataLoadingAndMatching: React.FC = () => {
               });
 
               const uniqueSeriesFields = Array.from(fieldMap.values());
-              console.log('Extracted', uniqueSeriesFields.length, 'unique series fields and', seriesInstances.length, 'series instances');
-              console.log('Series instances:', seriesInstances);
-              console.log('Unique series fields:', uniqueSeriesFields);
               schemaFields = [...schemaFields, ...uniqueSeriesFields];
-            } else {
-              console.log('No series array found in target acquisition');
             }
           }
         } else if (parsedSchema.fields) {
@@ -323,9 +292,6 @@ const DataLoadingAndMatching: React.FC = () => {
               category: 'Custom',
               testCases: rule.testCases || []
             }));
-            console.log('Extracted validation rules:', validationRules.length, 'rules from acquisition:', acquisitionId || acquisitionKeys[0]);
-          } else {
-            console.log('No validation rules found in target acquisition:', targetAcquisition);
           }
         }
       }
@@ -349,8 +315,6 @@ const DataLoadingAndMatching: React.FC = () => {
             customTestCases: [],
             enabledSystemFields: []
           }));
-          console.log('Converting validation rules to functions:', validationRules.length, '→', functions.length);
-          console.log('Sample function:', functions[0]);
           return functions;
         })()
       };
@@ -374,10 +338,8 @@ const DataLoadingAndMatching: React.FC = () => {
   // Helper to get or load schema acquisition
   const getSchemaAcquisition = async (binding: SchemaBinding): Promise<Acquisition | null> => {
     const key = `${binding.schemaId}-${binding.acquisitionId || 'default'}`;
-    console.log('🔍 Cache lookup for key:', key, 'exists:', schemaAcquisitions.has(key));
 
     if (schemaAcquisitions.has(key)) {
-      console.log('💾 Using cached acquisition');
       return schemaAcquisitions.get(key)!;
     }
 
@@ -487,15 +449,6 @@ const DataLoadingAndMatching: React.FC = () => {
 
       setLoadedData(prev => [...prev, ...resolvedAcquisitions]);
       setApiError(null);
-
-      // Auto-pair with preselected schema
-      if (preSelectedSchemaId && resolvedAcquisitions.length > 0) {
-        resolvedAcquisitions.forEach(acquisition => {
-          pairSchemaWithAcquisition(acquisition.id, preSelectedSchemaId, preSelectedAcquisitionId);
-        });
-        setPreSelectedSchemaId(null);
-        setPreSelectedAcquisitionId(null);
-      }
     } catch (error) {
       console.error('Failed to load DICOM data:', error);
       setApiError(`Failed to process DICOM data: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -602,14 +555,6 @@ const DataLoadingAndMatching: React.FC = () => {
       setApiError(null);
       const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
       setLoadedData(acquisitions);
-
-      if (preSelectedSchemaId && acquisitions?.length > 0) {
-        acquisitions.forEach(acquisition => {
-          pairSchemaWithAcquisition(acquisition.id, preSelectedSchemaId, preSelectedAcquisitionId);
-        });
-        setPreSelectedSchemaId(null);
-        setPreSelectedAcquisitionId(null);
-      }
 
       setShowExampleData(true);
     } catch (error) {
@@ -790,13 +735,14 @@ const DataLoadingAndMatching: React.FC = () => {
               {isExtra ? 'Upload More DICOM Files' : 'Upload DICOM Files'}
             </h3>
             <p className="text-gray-600 mb-4">
-              Drag and drop DICOM files or folders here, or click to browse
+              Drag and drop DICOM files, zip archives, or folders here, or click to browse
             </p>
 
             <input
               type="file"
               multiple
               webkitdirectory=""
+              accept=".dcm,.dicom,.zip"
               className="hidden"
               id={isExtra ? "file-upload-extra" : "file-upload"}
               onChange={(e) => handleFileUpload(e.target.files)}

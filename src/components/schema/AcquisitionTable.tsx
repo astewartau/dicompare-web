@@ -91,6 +91,10 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [validationRuleError, setValidationRuleError] = useState<string | null>(null);
   const [allComplianceResults, setAllComplianceResults] = useState<ComplianceFieldResult[]>([]);
   const [isComplianceSummaryExpanded, setIsComplianceSummaryExpanded] = useState(false);
+  const [isErrorsExpanded, setIsErrorsExpanded] = useState(true);
+  const [isWarningsExpanded, setIsWarningsExpanded] = useState(true);
+  const [isNaExpanded, setIsNaExpanded] = useState(true);
+  const [isPassedExpanded, setIsPassedExpanded] = useState(false);
   const [showTestDicomGenerator, setShowTestDicomGenerator] = useState(false);
 
   const isComplianceMode = mode === 'compliance';
@@ -98,16 +102,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const hasSeriesFields = acquisition.series && acquisition.series.length > 0 &&
     acquisition.series.some(s => s.fields && s.fields.length > 0);
 
-  // Debug logging for series detection
-  console.log('🔍 Series Debug for', acquisition.id, {
-    hasSeries: Boolean(acquisition.series),
-    seriesLength: acquisition.series?.length || 0,
-    seriesData: acquisition.series,
-    hasSeriesFields,
-    firstSeriesFields: acquisition.series?.[0]?.fields
-  });
   const validationFunctions = acquisition.validationFunctions || [];
-  console.log('AcquisitionTable validation functions:', validationFunctions.length, 'functions');
 
   // Update expanded state when isCollapsed prop changes
   useEffect(() => {
@@ -128,14 +123,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
     setValidationRuleError(null);
 
     try {
-      console.log('AcquisitionTable: Starting validation with:', {
-        realAcquisitionId: realAcquisition.id,
-        schemaId,
-        schemaAcquisitionId,
-        acquisitionFieldCount: acquisition.acquisitionFields?.length || 0,
-        seriesCount: acquisition.series?.length || 0
-      });
-
       // For validation rules, we need to validate the actual functions against the real data
       const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
         realAcquisition,
@@ -143,8 +130,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
         getSchemaContent,
         schemaAcquisitionId
       );
-
-      console.log(`AcquisitionTable: Validation completed with ${validationResults.length} results`);
 
       // Store ALL validation results
       setAllComplianceResults(validationResults);
@@ -596,10 +581,11 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   unknown: allResults.filter(r => r.status === 'unknown').length
                 };
 
-                // Get errors, warnings, and N/A for detailed list
+                // Get errors, warnings, N/A, and passed for detailed list
                 const errors = allResults.filter(r => r.status === 'fail');
                 const warnings = allResults.filter(r => r.status === 'warning');
                 const naResults = allResults.filter(r => r.status === 'na');
+                const passedResults = allResults.filter(r => r.status === 'pass');
 
                 return (
                   <>
@@ -677,87 +663,182 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                         {/* Errors List */}
                         {errors.length > 0 && (
                           <div className="mb-3">
-                            <h5 className="text-xs font-semibold text-red-700 mb-2 flex items-center">
-                              <XCircle className="h-3.5 w-3.5 mr-1" />
-                              Errors ({errors.length})
-                            </h5>
-                            <div className="space-y-1">
-                              {errors.map((error, idx) => (
-                                <div key={idx} className="bg-red-50 border border-red-200 rounded px-3 py-2">
-                                  <div className="flex items-start">
-                                    <div className="flex-1">
-                                      <p className="text-xs font-medium text-red-900">
-                                        {error.rule_name || error.fieldName}
-                                        {error.seriesName && (
-                                          <span className="ml-2 text-red-700">({error.seriesName})</span>
+                            <div
+                              className="flex items-center justify-between cursor-pointer hover:bg-red-50 -mx-2 px-2 py-1 rounded mb-2"
+                              onClick={() => setIsErrorsExpanded(!isErrorsExpanded)}
+                            >
+                              <h5 className="text-xs font-semibold text-red-700 flex items-center">
+                                <button
+                                  className="p-0.5 text-red-600 hover:text-red-800 mr-1"
+                                  aria-label={isErrorsExpanded ? "Collapse errors" : "Expand errors"}
+                                >
+                                  {isErrorsExpanded ? (
+                                    <ChevronUp className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                                <XCircle className="h-3.5 w-3.5 mr-1" />
+                                Errors ({errors.length})
+                              </h5>
+                            </div>
+                            {isErrorsExpanded && (
+                              <div className="space-y-1">
+                                {errors.map((error, idx) => (
+                                  <div key={idx} className="bg-red-50 border border-red-200 rounded px-3 py-2">
+                                    <div className="flex items-start">
+                                      <div className="flex-1">
+                                        <p className="text-xs font-medium text-red-900">
+                                          {error.rule_name || error.fieldName}
+                                          {error.seriesName && (
+                                            <span className="ml-2 text-red-700">({error.seriesName})</span>
+                                          )}
+                                        </p>
+                                        {error.rule_name && error.fieldName && (
+                                          <p className="text-xs text-red-600 mt-0.5">{error.fieldName}</p>
                                         )}
-                                      </p>
-                                      {error.rule_name && error.fieldName && (
-                                        <p className="text-xs text-red-600 mt-0.5">{error.fieldName}</p>
-                                      )}
-                                      <p className="text-xs text-red-700 mt-0.5">{error.message}</p>
+                                        <p className="text-xs text-red-700 mt-0.5">{error.message}</p>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
-                            </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
 
                         {/* Warnings List */}
                         {warnings.length > 0 && (
-                          <div>
-                            <h5 className="text-xs font-semibold text-yellow-700 mb-2 flex items-center">
-                              <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-                              Warnings ({warnings.length})
-                            </h5>
-                            <div className="space-y-1">
-                              {warnings.map((warning, idx) => (
-                                <div key={idx} className="bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
-                                  <div className="flex items-start">
-                                    <div className="flex-1">
-                                      <p className="text-xs font-medium text-yellow-900">
-                                        {warning.rule_name || warning.fieldName}
-                                        {warning.seriesName && (
-                                          <span className="ml-2 text-yellow-700">({warning.seriesName})</span>
+                          <div className="mb-3">
+                            <div
+                              className="flex items-center justify-between cursor-pointer hover:bg-yellow-50 -mx-2 px-2 py-1 rounded mb-2"
+                              onClick={() => setIsWarningsExpanded(!isWarningsExpanded)}
+                            >
+                              <h5 className="text-xs font-semibold text-yellow-700 flex items-center">
+                                <button
+                                  className="p-0.5 text-yellow-600 hover:text-yellow-800 mr-1"
+                                  aria-label={isWarningsExpanded ? "Collapse warnings" : "Expand warnings"}
+                                >
+                                  {isWarningsExpanded ? (
+                                    <ChevronUp className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                                <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                                Warnings ({warnings.length})
+                              </h5>
+                            </div>
+                            {isWarningsExpanded && (
+                              <div className="space-y-1">
+                                {warnings.map((warning, idx) => (
+                                  <div key={idx} className="bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
+                                    <div className="flex items-start">
+                                      <div className="flex-1">
+                                        <p className="text-xs font-medium text-yellow-900">
+                                          {warning.rule_name || warning.fieldName}
+                                          {warning.seriesName && (
+                                            <span className="ml-2 text-yellow-700">({warning.seriesName})</span>
+                                          )}
+                                        </p>
+                                        {warning.rule_name && warning.fieldName && (
+                                          <p className="text-xs text-yellow-600 mt-0.5">{warning.fieldName}</p>
                                         )}
-                                      </p>
-                                      {warning.rule_name && warning.fieldName && (
-                                        <p className="text-xs text-yellow-600 mt-0.5">{warning.fieldName}</p>
-                                      )}
-                                      <p className="text-xs text-yellow-700 mt-0.5">{warning.message}</p>
+                                        <p className="text-xs text-yellow-700 mt-0.5">{warning.message}</p>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
-                            </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
 
                         {/* N/A List */}
                         {naResults.length > 0 && (
-                          <div>
-                            <h5 className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
-                              <HelpCircle className="h-3.5 w-3.5 mr-1" />
-                              N/A ({naResults.length})
-                            </h5>
-                            <div className="space-y-1">
-                              {naResults.map((naResult, idx) => (
-                                <div key={idx} className="bg-gray-50 border border-gray-200 rounded px-3 py-2">
-                                  <div className="flex items-start">
-                                    <div className="flex-1">
-                                      <p className="text-xs font-medium text-gray-900">
-                                        {naResult.seriesName ? `Series ${naResult.seriesName}:` : (naResult.rule_name || naResult.fieldName)}
-                                      </p>
-                                      {naResult.rule_name && naResult.fieldName && (
-                                        <p className="text-xs text-gray-600 mt-0.5">{naResult.fieldName}</p>
-                                      )}
-                                      <p className="text-xs text-gray-700 mt-0.5">{naResult.message}</p>
+                          <div className="mb-3">
+                            <div
+                              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded mb-2"
+                              onClick={() => setIsNaExpanded(!isNaExpanded)}
+                            >
+                              <h5 className="text-xs font-semibold text-gray-700 flex items-center">
+                                <button
+                                  className="p-0.5 text-gray-600 hover:text-gray-800 mr-1"
+                                  aria-label={isNaExpanded ? "Collapse N/A" : "Expand N/A"}
+                                >
+                                  {isNaExpanded ? (
+                                    <ChevronUp className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                                <HelpCircle className="h-3.5 w-3.5 mr-1" />
+                                N/A ({naResults.length})
+                              </h5>
+                            </div>
+                            {isNaExpanded && (
+                              <div className="space-y-1">
+                                {naResults.map((naResult, idx) => (
+                                  <div key={idx} className="bg-gray-50 border border-gray-200 rounded px-3 py-2">
+                                    <div className="flex items-start">
+                                      <div className="flex-1">
+                                        <p className="text-xs font-medium text-gray-900">
+                                          {naResult.seriesName ? `Series ${naResult.seriesName}:` : (naResult.rule_name || naResult.fieldName)}
+                                        </p>
+                                        {naResult.rule_name && naResult.fieldName && (
+                                          <p className="text-xs text-gray-600 mt-0.5">{naResult.fieldName}</p>
+                                        )}
+                                        <p className="text-xs text-gray-700 mt-0.5">{naResult.message}</p>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Passed List */}
+                        {passedResults.length > 0 && (
+                          <div className="mb-3">
+                            <div
+                              className="flex items-center justify-between cursor-pointer hover:bg-green-50 -mx-2 px-2 py-1 rounded mb-2"
+                              onClick={() => setIsPassedExpanded(!isPassedExpanded)}
+                            >
+                              <h5 className="text-xs font-semibold text-green-700 flex items-center">
+                                <button
+                                  className="p-0.5 text-green-600 hover:text-green-800 mr-1"
+                                  aria-label={isPassedExpanded ? "Collapse passed" : "Expand passed"}
+                                >
+                                  {isPassedExpanded ? (
+                                    <ChevronUp className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                                Passed ({passedResults.length})
+                              </h5>
                             </div>
+                            {isPassedExpanded && (
+                              <div className="space-y-1">
+                                {passedResults.map((passedResult, idx) => (
+                                  <div key={idx} className="bg-green-50 border border-green-200 rounded px-3 py-2">
+                                    <div className="flex items-start">
+                                      <div className="flex-1">
+                                        <p className="text-xs font-medium text-green-900">
+                                          {passedResult.seriesName ? passedResult.seriesName : (passedResult.rule_name || passedResult.fieldName)}
+                                        </p>
+                                        {!passedResult.seriesName && passedResult.rule_name && passedResult.fieldName && (
+                                          <p className="text-xs text-green-600 mt-0.5">{passedResult.fieldName}</p>
+                                        )}
+                                        <p className="text-xs text-green-700 mt-0.5">{passedResult.message}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
 

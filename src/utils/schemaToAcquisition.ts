@@ -38,24 +38,12 @@ export const convertSchemaToAcquisition = async (
     // Convert schema fields to DicomField format using proper inference
     const convertFields = (fields: any[] = [], level: 'acquisition' | 'series'): DicomField[] => {
       return fields.map(field => {
-        console.log('🔄 Converting schema field:', field.tag, 'Original field:', field);
         const processedField = processSchemaFieldForUI(field);
-        console.log('✨ Processed field result:', {
-          tag: processedField.tag,
-          dataType: processedField.dataType,
-          hasDataType: 'dataType' in processedField
-        });
-        const finalField = {
+        return {
           ...processedField,
           level, // Override level from parameter
           value: processedField.value || field.defaultValue || ''
         };
-        console.log('🎯 Final converted field:', {
-          tag: finalField.tag,
-          dataType: finalField.dataType,
-          hasDataType: 'dataType' in finalField
-        });
-        return finalField;
       });
     };
 

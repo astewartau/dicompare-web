@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, Loader2, Play, FileDown, Table, Code, AlertTriangle } from 'lucide-react';
+import { X, Download, Loader2, Play, FileDown, Table, Code, AlertTriangle, CheckCircle } from 'lucide-react';
+import CodeMirror from '@uiw/react-codemirror';
+import { python } from '@codemirror/lang-python';
 import { Acquisition, DicomField } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { dicompareAPI } from '../../services/DicompareAPI';
+import { pyodideManager } from '../../services/PyodideManager';
+import { getFieldByKeyword } from '../../services/dicomFieldService';
 
 interface TestDicomGeneratorModalProps {
   isOpen: boolean;
@@ -28,13 +32,20 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
     fields: DicomField[];
     seriesCount: number;
     generatableFields: DicomField[];
-    skippedRules: number;
+    validationFunctionsWithTests: number;
+    validationFunctionsWithoutTests: number;
+    validationFunctionWarnings: string[];
+    validationFieldConflictWarnings: string[];
+    fieldConflicts: Array<{ fieldName: string; existingValue: any; testValue: any; validationName: string }>;
   } | null>(null);
   const [testData, setTestData] = useState<TestDataRow[]>([]);
   const [activeTab, setActiveTab] = useState<'table' | 'code'>('table');
   const [codeTemplate, setCodeTemplate] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [codeExecutionResult, setCodeExecutionResult] = useState<{ loading?: boolean; error?: string; success?: boolean } | null>(null);
+  const [pyodideReady, setPyodideReady] = useState(false);
+  const [dismissedWarnings, setDismissedWarnings] = useState<Set<string>>(new Set());
 
   // Update code template when test data changes
   useEffect(() => {
@@ -54,6 +65,7 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
   const analyzeSchemaForGeneration = async () => {
     setStep('analyzing');
     setError(null);
+    setDismissedWarnings(new Set()); // Reset dismissed warnings on new analysis
 
     try {
       // Analyze the acquisition fields and series to determine what we can generate
@@ -109,22 +121,166 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
         return false;
       });
 
-      const skippedRules = (acquisition.validationFunctions || []).length;
+      // Analyze validation functions for passing test cases
+      const validationFunctions = acquisition.validationFunctions || [];
+      const validationFieldValues: Record<string, any[]> = {}; // Now stores arrays
+      const fieldToValidationFuncs: Record<string, Array<{ name: string; values: any[] }>> = {}; // Track which validation functions set each field
+      const noPassingTestWarnings: string[] = [];
+      const fieldConflictWarnings: string[] = [];
+      const conflicts: Array<{ fieldName: string; existingValue: any; testValue: any; validationName: string }> = [];
+      let functionsWithTests = 0;
+      let functionsWithoutTests = 0;
+      let maxValidationRows = 0;
+
+      validationFunctions.forEach(validationFunc => {
+        const testCases = validationFunc.customTestCases || validationFunc.testCases || [];
+
+        // Find passing test cases
+        const passingTests = testCases.filter((testCase: any) => {
+          const expectedResult = testCase.expectedResult || (testCase.expectedToPass ? 'pass' : 'fail');
+          return expectedResult === 'pass';
+        });
+
+        if (passingTests.length > 0) {
+          functionsWithTests++;
+          // Use the first passing test case
+          const passingTest = passingTests[0];
+          const fields = validationFunc.customFields || validationFunc.fields || [];
+          const funcName = validationFunc.customName || validationFunc.name;
+
+          // Extract field values from the passing test
+          fields.forEach((fieldName: string) => {
+            if (passingTest.data && passingTest.data[fieldName]) {
+              const values = passingTest.data[fieldName];
+              // Store the full array of values
+              const testValues = Array.isArray(values) ? values : [values];
+
+              // Track the maximum number of rows we need
+              maxValidationRows = Math.max(maxValidationRows, testValues.length);
+
+              // Check if this field already exists in acquisition/series fields
+              const existingField = allFields.find(f => f.name === fieldName);
+              if (existingField) {
+                // Get the existing value(s)
+                let existingValues: any[] = [];
+
+                // If it's a series field, collect values from all series
+                if (existingField.level === 'series') {
+                  (acquisition.series || []).forEach(s => {
+                    let seriesField = null;
+                    if (Array.isArray(s.fields)) {
+                      seriesField = s.fields.find((f: any) => f.name === fieldName || f.tag === existingField.tag);
+                    } else if (s.fields && typeof s.fields === 'object') {
+                      seriesField = s.fields[existingField.tag];
+                    }
+
+                    if (seriesField && seriesField.value !== undefined) {
+                      let value = seriesField.value;
+                      // Handle nested value structures
+                      if (value && typeof value === 'object' && !Array.isArray(value)) {
+                        if (value.validationRule) {
+                          const rule = value.validationRule;
+                          if (rule.type === 'exact' && rule.value !== undefined) {
+                            value = rule.value;
+                          } else if (rule.type === 'tolerance' && rule.value !== undefined) {
+                            value = rule.value;
+                          }
+                        }
+                      }
+                      if (value !== undefined && value !== null && value !== '') {
+                        existingValues.push(value);
+                      }
+                    }
+                  });
+                } else {
+                  // Acquisition field - single value
+                  let existingValue = existingField.value;
+                  // Handle nested value structures
+                  if (existingValue && typeof existingValue === 'object' && !Array.isArray(existingValue)) {
+                    if (existingValue.validationRule) {
+                      const rule = existingValue.validationRule;
+                      if (rule.type === 'exact' && rule.value !== undefined) {
+                        existingValue = rule.value;
+                      } else if (rule.type === 'tolerance' && rule.value !== undefined) {
+                        existingValue = rule.value;
+                      }
+                    }
+                  }
+                  if (existingValue !== undefined && existingValue !== null && existingValue !== '') {
+                    existingValues.push(existingValue);
+                  }
+                }
+
+                // Compare values for conflict detection
+                if (existingValues.length > 0) {
+                  const firstTestValue = testValues[0];
+                  const firstExistingValue = existingValues[0];
+
+                  // Check if there's a conflict
+                  if (JSON.stringify(firstExistingValue) !== JSON.stringify(firstTestValue)) {
+                    conflicts.push({
+                      fieldName,
+                      existingValue: existingValues.length > 1 ? existingValues : firstExistingValue,
+                      testValue: testValues.length > 1 ? testValues : firstTestValue,
+                      validationName: funcName
+                    });
+                  }
+                }
+              }
+
+              validationFieldValues[fieldName] = testValues;
+
+              // Track which validation function is setting this field
+              if (!fieldToValidationFuncs[fieldName]) {
+                fieldToValidationFuncs[fieldName] = [];
+              }
+              fieldToValidationFuncs[fieldName].push({ name: funcName, values: testValues });
+            }
+          });
+        } else {
+          functionsWithoutTests++;
+          const funcName = validationFunc.customName || validationFunc.name;
+          noPassingTestWarnings.push(`"${funcName}" has no passing test cases`);
+        }
+      });
+
+      // Check for fields set by multiple validation functions with conflicting values
+      Object.entries(fieldToValidationFuncs).forEach(([fieldName, validationFuncs]) => {
+        if (validationFuncs.length > 1) {
+          // Multiple validation functions use this field - check if values differ
+          const firstValues = JSON.stringify(validationFuncs[0].values);
+          const hasConflict = validationFuncs.some(vf => JSON.stringify(vf.values) !== firstValues);
+
+          if (hasConflict) {
+            const funcNames = validationFuncs.map(vf => `"${vf.name}"`).join(', ');
+            fieldConflictWarnings.push(
+              `Multiple validation functions use field "${fieldName}" with different test values: ${funcNames}. ` +
+              `The generated test data uses values from the last function and may not pass all validations.`
+            );
+          }
+        }
+      });
 
       setAnalysisResult({
         fields: allFields,
         seriesCount: (acquisition.series || []).length,
         generatableFields,
-        skippedRules
+        validationFunctionsWithTests: functionsWithTests,
+        validationFunctionsWithoutTests: functionsWithoutTests,
+        validationFunctionWarnings: noPassingTestWarnings,
+        validationFieldConflictWarnings: fieldConflictWarnings,
+        fieldConflicts: conflicts
       });
 
-      // Generate initial test data based on schema constraints
-      const initialTestData = generateInitialTestData(generatableFields, acquisition.series || []);
+      // Generate initial test data based on schema constraints and validation test cases
+      const initialTestData = generateInitialTestData(generatableFields, acquisition.series || [], validationFieldValues, maxValidationRows);
       console.log('📊 Generated initial test data:', {
         seriesCount: acquisition.series?.length || 0,
         testDataRows: initialTestData.length,
         sampleRow: initialTestData[0],
-        allData: initialTestData
+        allData: initialTestData,
+        validationFieldValues,
+        maxValidationRows
       });
       setTestData(initialTestData);
 
@@ -139,14 +295,38 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
     }
   };
 
-  const generateInitialTestData = (fields: DicomField[], series: any[]): TestDataRow[] => {
-    // If we have series, generate one row per series
-    if (series.length > 0) {
-      return series.map((s, index) => {
-        const row: TestDataRow = {};
+  const generateInitialTestData = (
+    fields: DicomField[],
+    series: any[],
+    validationFieldValues: Record<string, any[]> = {},
+    maxValidationRows: number = 0
+  ): TestDataRow[] => {
+    // Determine how many rows we need to generate
+    const numRows = Math.max(series.length, maxValidationRows, 1);
 
-        // Add fields - both acquisition and series
-        fields.forEach(field => {
+    // Generate rows
+    const rows: TestDataRow[] = [];
+    for (let rowIndex = 0; rowIndex < numRows; rowIndex++) {
+      const row: TestDataRow = {};
+
+      // First, add all validation field values (these take priority)
+      Object.keys(validationFieldValues).forEach(fieldName => {
+        const valuesArray = validationFieldValues[fieldName];
+        // Cycle through validation values if we have more rows than values
+        row[fieldName] = valuesArray[rowIndex % valuesArray.length];
+      });
+
+      // Then add fields from acquisition/series (won't override validation values)
+      fields.forEach(field => {
+        // Skip if already set by validation values
+        if (row[field.name] !== undefined) {
+          return;
+        }
+
+        // For series-based schemas, try to get value from the series
+        if (series.length > 0 && rowIndex < series.length) {
+          const s = series[rowIndex];
+
           if (field.level === 'series') {
             // Find this field in the current series
             let seriesField = null;
@@ -184,28 +364,28 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
               row[field.name] = generateValueFromField(field);
             }
           } else if (field.level === 'acquisition') {
-            // Acquisition fields are the same for all series
+            // Acquisition fields are the same for all rows
             row[field.name] = generateValueFromField(field);
           } else if (!row[field.name]) {
             row[field.name] = generateValueFromField(field);
           }
-        });
 
-        // Add a series identifier only if SeriesDescription isn't already set
-        if (!row['SeriesDescription']) {
-          row['SeriesDescription'] = s.name || `Series_${index + 1}`;
+          // Add a series identifier only if SeriesDescription isn't already set
+          if (!row['SeriesDescription']) {
+            row['SeriesDescription'] = s.name || `Series_${rowIndex + 1}`;
+          }
+        } else {
+          // No series data for this row (extra rows from validation tests)
+          if (field.level === 'acquisition' || !row[field.name]) {
+            row[field.name] = generateValueFromField(field);
+          }
         }
+      });
 
-        return row;
-      });
-    } else {
-      // Generate single row for acquisition-only schema
-      const row: TestDataRow = {};
-      fields.forEach(field => {
-        row[field.name] = generateValueFromField(field);
-      });
-      return [row];
+      rows.push(row);
     }
+
+    return rows;
   };
 
   const generateValueFromField = (field: DicomField): any => {
@@ -291,31 +471,76 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
     // Get unique field names from test data
     const fieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
 
-    // For each field, collect values across all test data rows
-    const fieldEntries = fieldNames.map(fieldName => {
+    // Separate fields into constants (same across all DICOMs) and varying (different values)
+    const constants: Record<string, any> = {};
+    const varying: Record<string, any[]> = {};
+
+    fieldNames.forEach(fieldName => {
       const field = fields.find(f => f.name === fieldName);
       const values = testData.map(row => row[fieldName]).filter(v => v !== undefined);
 
-      const valueStr = `[${values.map(v =>
+      // Check if all values are the same
+      const allSame = values.every((v, i) =>
+        i === 0 || JSON.stringify(v) === JSON.stringify(values[0])
+      );
+
+      const tag = field?.tag || '';
+      const comment = tag ? `  # ${tag}` : '';
+
+      if (allSame && values.length > 0) {
+        // Constant field - just store single value
+        const value = values[0];
+        constants[fieldName] = { value, comment };
+      } else {
+        // Varying field - store all values
+        varying[fieldName] = { values, comment };
+      }
+    });
+
+    // Generate constants section
+    const constantEntries = Object.entries(constants).map(([fieldName, { value, comment }]) => {
+      const valueStr = Array.isArray(value)
+        ? `[${value.map(item => typeof item === 'string' ? `"${item}"` : item).join(', ')}]`
+        : typeof value === 'string' ? `"${value}"` : String(value);
+
+      return `    '${fieldName}': ${valueStr},${comment}`;
+    });
+
+    // Generate varying section
+    const varyingEntries = Object.entries(varying).map(([fieldName, { values, comment }]) => {
+      const valuesStr = `[${values.map(v =>
         Array.isArray(v)
           ? `[${v.map(item => typeof item === 'string' ? `"${item}"` : item).join(', ')}]`
           : typeof v === 'string' ? `"${v}"` : String(v)
       ).join(', ')}]`;
 
-      const tag = field?.tag || '';
-      const comment = tag ? `  # ${tag}` : '';
-      return `    '${fieldName}': ${valueStr},${comment}`;
+      return `    '${fieldName}': ${valuesStr},${comment}`;
     });
 
     return `import pandas as pd
 import numpy as np
 
-# Generate test data for schema fields
-# Modify the values below to create your test DICOMs
-
-test_data = {
-${fieldEntries.join('\n')}
+# Fields that are the same across all DICOMs
+constants = {
+${constantEntries.join('\n')}
 }
+
+# Fields that vary across DICOMs (number of DICOMs = length of lists)
+varying = {
+${varyingEntries.join('\n')}
+}
+
+# Generate test_data by merging constants and varying
+num_dicoms = max([len(v) for v in varying.values()]) if varying else 1
+test_data = {}
+
+# Add constant fields (replicate across all DICOMs)
+for field, value in constants.items():
+    test_data[field] = [value] * num_dicoms
+
+# Add varying fields
+for field, values in varying.items():
+    test_data[field] = values
 
 return test_data`;
   };
@@ -367,6 +592,102 @@ return test_data`;
     setTestData(newTestData);
   };
 
+  const executeCodeTemplate = async () => {
+    setCodeExecutionResult({ loading: true });
+
+    try {
+      // Initialize Pyodide if needed
+      if (!pyodideReady) {
+        await pyodideManager.initialize();
+        setPyodideReady(true);
+      }
+
+      const wrappedCode = `
+import pandas as pd
+import numpy as np
+import json
+
+def generate_test_data():
+${codeTemplate.split('\n').map(line => '    ' + line).join('\n')}
+
+output = None
+try:
+    result = generate_test_data()
+    if not isinstance(result, dict):
+        raise ValueError("Code must return a dictionary")
+
+    # Convert numpy arrays and other non-serializable types to lists
+    cleaned_result = {}
+    for key, value in result.items():
+        if hasattr(value, 'tolist'):  # numpy array
+            cleaned_result[key] = value.tolist()
+        elif isinstance(value, list):
+            # Handle lists that might contain numpy types
+            cleaned_list = []
+            for item in value:
+                if hasattr(item, 'tolist'):
+                    cleaned_list.append(item.tolist())
+                elif hasattr(item, 'item'):  # numpy scalar
+                    cleaned_list.append(item.item())
+                else:
+                    cleaned_list.append(item)
+            cleaned_result[key] = cleaned_list
+        elif hasattr(value, 'item'):  # numpy scalar
+            cleaned_result[key] = [value.item()]
+        else:
+            cleaned_result[key] = [value] if not isinstance(value, list) else value
+
+    # Validate all arrays have same length
+    if cleaned_result:
+        lengths = [len(v) for v in cleaned_result.values()]
+        if len(set(lengths)) > 1:
+            field_lengths = {k: len(v) for k, v in cleaned_result.items()}
+            raise ValueError(f"All fields must have the same number of values. Found: {field_lengths}")
+
+    output = json.dumps({"success": True, "data": cleaned_result})
+except Exception as e:
+    output = json.dumps({"success": False, "error": str(e)})
+
+# Return the JSON output
+output
+`;
+
+      const result = await pyodideManager.runPython(wrappedCode);
+
+      if (result === undefined || result === null) {
+        throw new Error('No output from Python code execution');
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(result as string);
+      } catch (parseErr) {
+        throw new Error(`Invalid JSON output from Python: ${result}`);
+      }
+
+      if (parsed.success) {
+        // Convert the data to the format expected by testData
+        const numRows = Object.values(parsed.data)[0]?.length || 0;
+        const newTestData: TestDataRow[] = [];
+
+        for (let i = 0; i < numRows; i++) {
+          const row: TestDataRow = {};
+          for (const [field, values] of Object.entries(parsed.data)) {
+            row[field] = (values as any[])[i];
+          }
+          newTestData.push(row);
+        }
+
+        setTestData(newTestData);
+        setCodeExecutionResult({ success: true });
+      } else {
+        setCodeExecutionResult({ error: parsed.error });
+      }
+    } catch (error: any) {
+      setCodeExecutionResult({ error: `Execution failed: ${error.message}` });
+    }
+  };
+
   const generateDicoms = async () => {
     if (!analysisResult || testData.length === 0) {
       setError('No test data to generate DICOMs from');
@@ -378,19 +699,56 @@ return test_data`;
     setError(null);
 
     try {
+      // Build field list from both generatableFields and testData
+      // For validation-only schemas, we need to infer field info from testData
+      const fieldsForGeneration = [...analysisResult.generatableFields];
+
+      // Add fields from testData that aren't in generatableFields
+      const existingFieldNames = new Set(fieldsForGeneration.map(f => f.name));
+      const testDataFieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
+
+      // Look up DICOM tags for fields from validation tests
+      console.log('🔍 Looking up DICOM tags for fields from validation tests:', testDataFieldNames);
+      for (const fieldName of testDataFieldNames) {
+        if (!existingFieldNames.has(fieldName)) {
+          // This field came from validation tests - look up its tag by keyword
+          console.log(`  Looking up field: ${fieldName}`);
+          const fieldDef = await getFieldByKeyword(fieldName);
+          console.log(`  Result:`, fieldDef);
+
+          if (fieldDef) {
+            // Remove parentheses from tag if present (e.g., "(0018,0081)" -> "0018,0081")
+            const tag = fieldDef.tag.replace(/[()]/g, '');
+
+            console.log(`  ✅ Added field: ${fieldName} -> ${tag} (VR: ${fieldDef.vr})`);
+            fieldsForGeneration.push({
+              name: fieldName,
+              tag,
+              vr: fieldDef.vr || '',
+              level: 'acquisition' as const,
+              dataType: inferDataTypeFromValue(testData[0][fieldName]),
+              value: testData[0][fieldName]
+            } as any);
+          } else {
+            console.warn(`⚠️ Unknown DICOM field: ${fieldName} - field will be skipped in DICOM generation`);
+          }
+        }
+      }
+
       // Debug logging
       console.log('📊 TestDicomGeneratorModal: Sending to API:', {
         testDataRows: testData.length,
         sampleRow: testData[0],
         allTestData: testData,
-        generatableFields: analysisResult.generatableFields.map(f => ({ name: f.name, tag: f.tag, level: f.level, vr: f.vr }))
+        generatableFields: analysisResult.generatableFields.map(f => ({ name: f.name, tag: f.tag, level: f.level, vr: f.vr })),
+        fieldsForGeneration: fieldsForGeneration.map(f => ({ name: f.name, tag: f.tag, level: f.level, vr: f.vr, dataType: f.dataType }))
       });
 
       // Call the DicompareAPI to generate DICOMs
       const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(
         acquisition,
         testData,
-        analysisResult.generatableFields
+        fieldsForGeneration
       );
 
       // Trigger download
@@ -416,7 +774,8 @@ return test_data`;
 
   if (!isOpen) return null;
 
-  const fieldNames = analysisResult?.generatableFields.map(f => f.name) || [];
+  // Get field names from actual test data (supports validation-only schemas)
+  const fieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
   const maxRows = Math.max(1, testData.length);
 
   return (
@@ -451,32 +810,121 @@ return test_data`;
 
           {step === 'editing' && analysisResult && (
             <div className="p-6 space-y-6 overflow-y-auto h-full">
-              {/* Analysis Summary */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-medium text-blue-900 mb-2">Schema Analysis</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-blue-700">Total fields:</span> {analysisResult.fields.length}
+              {/* Validation Function Success Message */}
+              {analysisResult.validationFunctionsWithTests > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center">
+                    <CheckCircle className="h-5 w-5 text-green-600 mr-2 flex-shrink-0" />
+                    <p className="text-sm text-green-800">
+                      <strong>{analysisResult.validationFunctionsWithTests}</strong> validation function{analysisResult.validationFunctionsWithTests !== 1 ? 's have' : ' has'} passing test cases. Field values extracted and applied.
+                    </p>
                   </div>
-                  <div>
-                    <span className="text-blue-700">Generatable fields:</span> {analysisResult.generatableFields.length}
-                  </div>
-                  <div>
-                    <span className="text-blue-700">Series count:</span> {analysisResult.seriesCount}
-                  </div>
-                  {analysisResult.skippedRules > 0 && (
-                    <div className="flex items-center">
-                      <AlertTriangle className="h-4 w-4 text-yellow-500 mr-1" />
-                      <span className="text-yellow-700">Validation rules skipped:</span> {analysisResult.skippedRules}
-                    </div>
-                  )}
                 </div>
-                {analysisResult.skippedRules > 0 && (
-                  <p className="text-xs text-yellow-600 mt-2">
-                    Note: Validation rules contain custom Python code and cannot be automatically converted to DICOM values.
-                  </p>
-                )}
-              </div>
+              )}
+
+              {/* Field Conflict Warnings */}
+              {analysisResult.fieldConflicts.length > 0 && !dismissedWarnings.has('schemaConflicts') && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="h-5 w-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-medium text-orange-900 mb-2">
+                        Field Value Conflicts Detected
+                      </h3>
+                      <p className="text-sm text-orange-800 mb-3">
+                        The following fields have different values in the schema vs. validation test cases. <strong>Using validation test values</strong> to ensure generated DICOMs pass validation:
+                      </p>
+                      <div className="space-y-2">
+                        {analysisResult.fieldConflicts.map((conflict, idx) => (
+                          <div key={idx} className="bg-white border border-orange-200 rounded p-3 text-sm">
+                            <div className="font-medium text-orange-900 mb-1">
+                              {conflict.fieldName} (from "{conflict.validationName}")
+                            </div>
+                            <div className="text-orange-800 space-y-1">
+                              <div>Schema value: <code className="bg-orange-100 px-1 rounded">{JSON.stringify(conflict.existingValue)}</code></div>
+                              <div>Test value: <code className="bg-green-100 px-1 rounded">{JSON.stringify(conflict.testValue)}</code> ✓</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-orange-700 mt-3">
+                        <strong>Recommendation:</strong> Consider removing these fields from the acquisition/series tables since they're controlled by validation functions.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('schemaConflicts'))}
+                      className="ml-2 text-orange-600 hover:text-orange-800"
+                      title="Dismiss warning"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Validation Field Conflict Warnings */}
+              {analysisResult.validationFieldConflictWarnings.length > 0 && !dismissedWarnings.has('fieldConflicts') && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-medium text-yellow-900 mb-2">
+                        Conflicting Validation Test Values
+                      </h3>
+                      <p className="text-sm text-yellow-800 mb-2">
+                        Multiple validation functions use the same fields with different test values. The generated test data may not pass all validations:
+                      </p>
+                      <ul className="text-sm text-yellow-800 list-disc list-inside space-y-1">
+                        {analysisResult.validationFieldConflictWarnings.map((warning, idx) => (
+                          <li key={idx}>{warning}</li>
+                        ))}
+                      </ul>
+                      <p className="text-xs text-yellow-700 mt-2">
+                        <strong>Note:</strong> Automatically combining conflicting validation constraints is non-trivial. You may need to manually adjust the test data to satisfy all validations.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('fieldConflicts'))}
+                      className="ml-2 text-yellow-600 hover:text-yellow-800"
+                      title="Dismiss warning"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Validation Function Warnings */}
+              {analysisResult.validationFunctionWarnings.length > 0 && !dismissedWarnings.has('noPassingTests') && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-medium text-yellow-900 mb-2">
+                        Validation Functions Without Passing Tests
+                      </h3>
+                      <p className="text-sm text-yellow-800 mb-2">
+                        The following validation functions don't have passing test cases, so their field requirements cannot be auto-generated:
+                      </p>
+                      <ul className="text-sm text-yellow-800 list-disc list-inside space-y-1">
+                        {analysisResult.validationFunctionWarnings.map((warning, idx) => (
+                          <li key={idx}>{warning}</li>
+                        ))}
+                      </ul>
+                      <p className="text-xs text-yellow-700 mt-2">
+                        Add passing test cases to these validation functions to automatically populate their field values.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('noPassingTests'))}
+                      className="ml-2 text-yellow-600 hover:text-yellow-800"
+                      title="Dismiss warning"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Tab Navigation */}
               <div className="flex items-center justify-between">
@@ -518,72 +966,124 @@ return test_data`;
               {/* Table Editor */}
               {activeTab === 'table' && (
                 <div className="border border-gray-300 rounded-lg overflow-hidden">
-                  {/* Header */}
-                  <div className="bg-gray-50 border-b border-gray-300 flex">
-                    <div className="w-12 px-2 py-2 text-sm font-medium text-gray-700 border-r border-gray-300">#</div>
-                    {fieldNames.map(fieldName => (
-                      <div key={fieldName} className="flex-1 px-2 py-2 text-sm font-medium text-gray-700 border-r border-gray-300 last:border-r-0">
-                        {fieldName}
-                      </div>
-                    ))}
-                    <div className="w-12"></div>
-                  </div>
-
-                  {/* Rows */}
-                  <div className="max-h-80 overflow-y-auto">
-                    {Array.from({ length: maxRows }, (_, rowIndex) => (
-                      <div key={rowIndex} className="flex border-b border-gray-200 last:border-b-0">
-                        <div className="w-12 px-2 py-2 text-sm text-gray-500 border-r border-gray-300 bg-gray-50 flex items-center">
-                          {rowIndex}
-                        </div>
-                        {fieldNames.map(fieldName => (
-                          <div key={fieldName} className="flex-1 border-r border-gray-300 last:border-r-0">
-                            <input
-                              type="text"
-                              value={(() => {
-                                const value = testData[rowIndex]?.[fieldName];
-                                if (value === undefined || value === null) return '';
-                                if (Array.isArray(value)) return value.join(', ');
-                                return String(value);
-                              })()}
-                              onChange={(e) => updateTestDataValue(rowIndex, fieldName, e.target.value)}
-                              className="w-full px-2 py-2 text-sm border-none focus:outline-none focus:bg-blue-50"
-                              placeholder={`${fieldName} value`}
-                            />
+                  <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                    <div className="min-w-max">
+                      {/* Header - Row numbers as columns */}
+                      <div className="bg-gray-50 border-b border-gray-300 flex sticky top-0 z-20">
+                        <div className="w-48 px-2 py-2 text-sm font-medium text-gray-700 border-r border-gray-300 sticky left-0 bg-gray-50 z-30">Field Name</div>
+                        {Array.from({ length: maxRows }, (_, rowIndex) => (
+                          <div key={rowIndex} className="w-40 flex-shrink-0 px-2 py-2 text-sm font-medium text-gray-700 border-r border-gray-300 last:border-r-0 flex items-center justify-between">
+                            <span>DICOM {rowIndex + 1}</span>
+                            {testData.length > 1 && (
+                              <button
+                                onClick={() => removeRow(rowIndex)}
+                                className="p-1 text-red-500 hover:text-red-700 text-xs"
+                                title="Delete row"
+                              >
+                                ×
+                              </button>
+                            )}
                           </div>
                         ))}
-                        <div className="w-12 flex items-center justify-center">
-                          {testData.length > 1 && (
-                            <button
-                              onClick={() => removeRow(rowIndex)}
-                              className="p-1 text-red-500 hover:text-red-700 text-sm"
-                              title="Delete row"
-                            >
-                              ×
-                            </button>
-                          )}
-                        </div>
                       </div>
-                    ))}
+
+                      {/* Rows - Each field becomes a row */}
+                      {fieldNames.map((fieldName) => (
+                        <div key={fieldName} className="flex border-b border-gray-200 last:border-b-0">
+                          <div className="w-48 px-2 py-2 text-sm font-medium text-gray-700 border-r border-gray-300 bg-gray-50 flex items-center sticky left-0 z-10">
+                            {fieldName}
+                          </div>
+                          {Array.from({ length: maxRows }, (_, rowIndex) => (
+                            <div key={rowIndex} className="w-40 flex-shrink-0 border-r border-gray-300 last:border-r-0 bg-white">
+                              <input
+                                type="text"
+                                value={(() => {
+                                  const value = testData[rowIndex]?.[fieldName];
+                                  if (value === undefined || value === null) return '';
+                                  if (Array.isArray(value)) return value.join(', ');
+                                  return String(value);
+                                })()}
+                                onChange={(e) => updateTestDataValue(rowIndex, fieldName, e.target.value)}
+                                className="w-full px-2 py-2 text-sm border-none focus:outline-none focus:bg-blue-50"
+                                placeholder={`${fieldName} value`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="px-2 py-1 text-xs text-gray-500 bg-gray-50 border-t">
-                    Rows: {maxRows} | Each row will generate one DICOM file
+                  <div className="px-2 py-1 text-xs text-gray-500 bg-gray-50 border-t flex items-center justify-between">
+                    <span>Rows: {maxRows} | Each row will generate one DICOM file</span>
+                    <span className="text-xs text-gray-400">(Table transposed: fields as rows, data as columns)</span>
                   </div>
                 </div>
               )}
 
               {/* Code View */}
               {activeTab === 'code' && (
-                <div className="space-y-2">
-                  <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
-                    <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono">
-                      {codeTemplate}
-                    </pre>
+                <div className="space-y-3">
+                  <div className="border border-gray-300 rounded-lg overflow-hidden">
+                    <CodeMirror
+                      value={codeTemplate}
+                      onChange={(value) => {
+                        setCodeTemplate(value);
+                        setCodeExecutionResult(null); // Clear results when code changes
+                      }}
+                      extensions={[python()]}
+                      theme="light"
+                      height="300px"
+                      basicSetup={{
+                        lineNumbers: true,
+                        foldGutter: true,
+                        dropCursor: false,
+                        allowMultipleSelections: false,
+                        indentOnInput: true,
+                        bracketMatching: true,
+                        closeBrackets: true,
+                        autocompletion: true,
+                        highlightSelectionMatches: false,
+                      }}
+                      className="text-sm"
+                    />
                   </div>
-                  <div className="text-xs text-gray-500">
-                    This shows how the test data would be structured as a pandas DataFrame
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={executeCodeTemplate}
+                      disabled={codeExecutionResult?.loading}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {codeExecutionResult?.loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Running...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4" />
+                          <span>Run Code</span>
+                        </>
+                      )}
+                    </button>
+                    <div className="text-xs text-gray-500">
+                      Returns a dictionary with test data. Click run to update the table.
+                    </div>
                   </div>
+
+                  {/* Code Execution Results */}
+                  {codeExecutionResult?.error && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                      <strong>Error:</strong> {codeExecutionResult.error}
+                    </div>
+                  )}
+
+                  {codeExecutionResult?.success && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                      <strong>Success!</strong> Generated {testData.length} DICOM{testData.length !== 1 ? 's' : ''} with {Object.keys(testData[0] || {}).length} fields. Switch to Table Editor to view.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
