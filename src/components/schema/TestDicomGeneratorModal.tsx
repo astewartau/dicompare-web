@@ -261,10 +261,34 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
         }
       });
 
+      // Ensure ProtocolName field exists if not in schema
+      // Use acquisition name (from UI) as fallback for ProtocolName DICOM field
+      const hasProtocolName = generatableFields.some(f => f.name === 'ProtocolName');
+      let fieldsForGeneration = generatableFields;
+      if (!hasProtocolName) {
+        const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
+        if (protocolNameFieldDef && acquisition.protocolName) {
+          // Clean acquisition name for use as ProtocolName (lowercase, underscores, no special chars)
+          const cleanedName = acquisition.protocolName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+
+          fieldsForGeneration = [...generatableFields, {
+            name: protocolNameFieldDef.keyword,
+            tag: protocolNameFieldDef.tag,
+            vr: protocolNameFieldDef.vr,
+            level: 'acquisition' as const,
+            value: cleanedName,
+            dataType: 'String' as const
+          }];
+        }
+      }
+
       setAnalysisResult({
         fields: allFields,
         seriesCount: (acquisition.series || []).length,
-        generatableFields,
+        generatableFields: fieldsForGeneration,
         validationFunctionsWithTests: functionsWithTests,
         validationFunctionsWithoutTests: functionsWithoutTests,
         validationFunctionWarnings: noPassingTestWarnings,
@@ -273,7 +297,13 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
       });
 
       // Generate initial test data based on schema constraints and validation test cases
-      const initialTestData = generateInitialTestData(generatableFields, acquisition.series || [], validationFieldValues, maxValidationRows);
+      const initialTestData = generateInitialTestData(
+        fieldsForGeneration,
+        acquisition.series || [],
+        validationFieldValues,
+        maxValidationRows,
+        acquisition.protocolName
+      );
       console.log('📊 Generated initial test data:', {
         seriesCount: acquisition.series?.length || 0,
         testDataRows: initialTestData.length,
@@ -295,11 +325,20 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
     }
   };
 
+  const cleanAcquisitionName = (name: string): string => {
+    // Convert to lowercase, replace spaces and special characters with underscores
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
+  };
+
   const generateInitialTestData = (
     fields: DicomField[],
     series: any[],
     validationFieldValues: Record<string, any[]> = {},
-    maxValidationRows: number = 0
+    maxValidationRows: number = 0,
+    acquisitionName?: string
   ): TestDataRow[] => {
     // Determine how many rows we need to generate
     const numRows = Math.max(series.length, maxValidationRows, 1);
@@ -365,22 +404,41 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
             }
           } else if (field.level === 'acquisition') {
             // Acquisition fields are the same for all rows
-            row[field.name] = generateValueFromField(field);
+            // Use the field value if it's explicitly set, otherwise generate
+            if (field.value !== undefined) {
+              row[field.name] = field.value;
+            } else {
+              row[field.name] = generateValueFromField(field);
+            }
           } else if (!row[field.name]) {
             row[field.name] = generateValueFromField(field);
-          }
-
-          // Add a series identifier only if SeriesDescription isn't already set
-          if (!row['SeriesDescription']) {
-            row['SeriesDescription'] = s.name || `Series_${rowIndex + 1}`;
           }
         } else {
           // No series data for this row (extra rows from validation tests)
           if (field.level === 'acquisition' || !row[field.name]) {
-            row[field.name] = generateValueFromField(field);
+            // Use the field value if it's explicitly set, otherwise generate
+            if (field.value !== undefined) {
+              row[field.name] = field.value;
+            } else {
+              row[field.name] = generateValueFromField(field);
+            }
           }
         }
       });
+
+      // Add fallback identifiers only if not already set by schema fields
+      // This runs AFTER all fields have been processed to avoid overriding schema-defined values
+      if (series.length > 0 && rowIndex < series.length) {
+        const s = series[rowIndex];
+        if (!row['SeriesDescription']) {
+          row['SeriesDescription'] = s.name || `Series_${rowIndex + 1}`;
+        }
+      }
+
+      // Add ProtocolName fallback using acquisition name if not set by schema
+      if (!row['ProtocolName'] && acquisitionName) {
+        row['ProtocolName'] = acquisitionName;
+      }
 
       rows.push(row);
     }

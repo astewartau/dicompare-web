@@ -128,7 +128,9 @@ export function formatValidationRule(rule?: ValidationRule): string {
 
 export function formatFieldTypeInfo(dataType: string, validationRule?: ValidationRule): string {
   const formattedType = formatDataType(dataType);
-  const formattedConstraint = validationRule ? formatValidationRule(validationRule) : 'exact';
+  // Use simple constraint type name instead of full constraint value
+  const constraintType = validationRule?.type || 'exact';
+  const formattedConstraint = constraintType.charAt(0).toUpperCase() + constraintType.slice(1).replace(/_/g, ' ');
   return `${formattedType} • ${formattedConstraint}`;
 }
 

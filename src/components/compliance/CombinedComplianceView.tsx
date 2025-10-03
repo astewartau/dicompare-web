@@ -90,6 +90,9 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
       setIsLoadingSchema(true);
       try {
         const schemaAcq = await getSchemaAcquisition(pairing);
+        console.log('🔍 Loaded schemaAcquisition:', schemaAcq);
+        console.log('🔍 schemaAcquisition.series:', schemaAcq?.series);
+        console.log('🔍 schemaAcquisition.acquisitionFields:', schemaAcq?.acquisitionFields);
         setSchemaAcquisition(schemaAcq);
       } catch (error) {
         console.error('Failed to load schema:', error);
@@ -176,13 +179,52 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
     );
   }
 
+  // Helper function to get status priority for sorting
+  const getStatusPriority = (status?: string): number => {
+    switch (status) {
+      case 'pass': return 0;
+      case 'fail': return 1;
+      case 'warning': return 2;
+      case 'na': return 3;
+      default: return 4;
+    }
+  };
+
   const validationRules = schemaAcquisition?.validationFunctions || [];
   const validationRuleResults = complianceResults.filter(r => r.validationType === 'rule');
+
+  // Sort validation rules by status
+  const sortedValidationRules = [...validationRules].sort((a, b) => {
+    const resultA = validationRuleResults.find(r => r.rule_name === (a.customName || a.name));
+    const resultB = validationRuleResults.find(r => r.rule_name === (b.customName || b.name));
+    return getStatusPriority(resultA?.status) - getStatusPriority(resultB?.status);
+  });
 
   // Get all unique acquisition field tags from both data and schema
   const allAcquisitionFieldTags = new Set<string>();
   acquisition.acquisitionFields.forEach(f => allAcquisitionFieldTags.add(f.tag));
   schemaAcquisition?.acquisitionFields.forEach(f => allAcquisitionFieldTags.add(f.tag));
+
+  // Sort acquisition field tags by status
+  const sortedAcquisitionFieldTags = Array.from(allAcquisitionFieldTags).sort((tagA, tagB) => {
+    const dataFieldA = acquisition.acquisitionFields.find(f => f.tag === tagA);
+    const schemaFieldA = schemaAcquisition?.acquisitionFields.find(f => f.tag === tagA);
+    const resultA = complianceResults.find(
+      r => r.fieldName === (dataFieldA?.name || schemaFieldA?.name) &&
+           r.validationType === 'field' &&
+           !r.seriesName
+    );
+
+    const dataFieldB = acquisition.acquisitionFields.find(f => f.tag === tagB);
+    const schemaFieldB = schemaAcquisition?.acquisitionFields.find(f => f.tag === tagB);
+    const resultB = complianceResults.find(
+      r => r.fieldName === (dataFieldB?.name || schemaFieldB?.name) &&
+           r.validationType === 'field' &&
+           !r.seriesName
+    );
+
+    return getStatusPriority(resultA?.status) - getStatusPriority(resultB?.status);
+  });
 
   return (
     <div className="space-y-6">
@@ -205,13 +247,14 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {validationRules.map((rule, idx) => {
+                {sortedValidationRules.map((rule, idx) => {
                   const result = validationRuleResults.find(r => r.rule_name === (rule.customName || rule.name));
 
                   // Determine row background color based on status
                   let rowBgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                   if (result) {
-                    if (result.status === 'fail') rowBgClass = 'bg-red-50';
+                    if (result.status === 'pass') rowBgClass = 'bg-green-50';
+                    else if (result.status === 'fail') rowBgClass = 'bg-red-50';
                     else if (result.status === 'warning') rowBgClass = 'bg-yellow-50';
                   }
 
@@ -271,7 +314,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {Array.from(allAcquisitionFieldTags).map((tag, idx) => {
+              {sortedAcquisitionFieldTags.map((tag, idx) => {
                 const dataField = acquisition.acquisitionFields.find(f => f.tag === tag);
                 const schemaField = schemaAcquisition?.acquisitionFields.find(f => f.tag === tag);
                 const result = complianceResults.find(
@@ -283,7 +326,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                 // Determine row background color based on status
                 let rowBgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                 if (schemaAcquisition && result) {
-                  if (result.status === 'fail') rowBgClass = 'bg-red-50';
+                  if (result.status === 'pass') rowBgClass = 'bg-green-50';
+                  else if (result.status === 'fail') rowBgClass = 'bg-red-50';
                   else if (result.status === 'warning') rowBgClass = 'bg-yellow-50';
                 }
 
@@ -298,6 +342,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                         {schemaField ? (
                           <div>
                             {/* Format value directly from schema field, like AcquisitionTable does */}
+                            {console.log('Schema field for', schemaField.name, ':', schemaField)}
                             <p className="text-sm text-gray-900">
                               {formatFieldValue(schemaField)}
                             </p>
@@ -341,40 +386,33 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
         </div>
       </div>
 
-      {/* Series Tables */}
-      {(acquisition.series?.length > 0 || schemaAcquisition?.series?.length > 0) && (
-        <>
-          {/* Identified Series Table */}
-          {acquisition.series && acquisition.series.length > 0 && (
-            <div>
-              {renderSeriesTable(acquisition.series, schemaAcquisition?.series || [], complianceResults, false)}
-            </div>
-          )}
-
-          {/* Missing Series Table */}
-          {schemaAcquisition && renderMissingSeriesTable(acquisition.series || [], schemaAcquisition.series || [], complianceResults)}
-        </>
+      {/* Expected Series Table */}
+      {schemaAcquisition?.series && schemaAcquisition.series.length > 0 && (
+        renderExpectedSeriesTable(complianceResults, schemaAcquisition.series)
       )}
     </div>
   );
 
-  // Helper function to render series table
-  function renderSeriesTable(
-    dataSeries: any[],
-    schemaSeries: any[],
+  // Helper function to render expected series table (shows all series from schema)
+  function renderExpectedSeriesTable(
     results: ComplianceFieldResult[],
-    isMissing: boolean
+    schemaSeries: any[]
   ) {
-    // Get all unique field tags from all series
-    const allFieldTags = new Set<string>();
-    [...dataSeries, ...schemaSeries].forEach(series => {
+    if (schemaSeries.length === 0) {
+      return null;
+    }
+
+    // Get all series validation results
+    const seriesValidationResults = results.filter(r => r.validationType === 'series');
+
+    // Get unique field names across all series
+    const allFieldNames = new Set<string>();
+    schemaSeries.forEach(series => {
       if (Array.isArray(series.fields)) {
-        series.fields.forEach((f: any) => allFieldTags.add(f.tag));
+        series.fields.forEach((f: any) => allFieldNames.add(f.name || f.field));
       }
     });
-
-    const fieldTagsArray = Array.from(allFieldTags);
-    const hasSchema = schemaSeries.length > 0;
+    const fieldNamesArray = Array.from(allFieldNames);
 
     return (
       <div className="border border-gray-200 rounded-lg overflow-x-auto">
@@ -382,33 +420,30 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Identified Series
+                Expected Series
               </th>
-              {fieldTagsArray.map(tag => {
-                const field = dataSeries.flatMap(s => s.fields || []).find((f: any) => f.tag === tag) ||
-                             schemaSeries.flatMap(s => s.fields || []).find((f: any) => f.tag === tag);
-                return (
-                  <th key={tag} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    {field?.name || tag}
-                  </th>
-                );
-              })}
+              {fieldNamesArray.map(fieldName => (
+                <th key={fieldName} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  {fieldName}
+                </th>
+              ))}
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">
                 Status
               </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {dataSeries.map((series, idx) => {
-              // Find validation results for this series from Python API
-              const seriesResults = results.filter(
-                r => r.seriesName === series.name && r.validationType === 'series'
-              );
+            {schemaSeries.map((series, idx) => {
+              // Find validation results for this series by matching against series names in results
+              const seriesResults = seriesValidationResults.filter(r => {
+                // Match by index since series names might differ (Series_001 vs Series 1)
+                const resultIndex = parseInt(r.seriesName?.match(/\d+$/)?.[0] || '0') - 1;
+                return resultIndex === idx;
+              });
 
-              // Overall series status: if any field fails/warns, show that; otherwise pass if matched, na if not
-              let overallStatus: ComplianceFieldResult['status'] = 'pass';
+              // Overall series status
+              let overallStatus: ComplianceFieldResult['status'] = 'unknown';
               if (seriesResults.length > 0) {
-                // Use the worst status from all series field validations
                 const hasFailure = seriesResults.some(r => r.status === 'fail');
                 const hasWarning = seriesResults.some(r => r.status === 'warning');
                 const hasNA = seriesResults.some(r => r.status === 'na');
@@ -417,49 +452,49 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                 else if (hasWarning) overallStatus = 'warning';
                 else if (hasNA) overallStatus = 'na';
                 else overallStatus = 'pass';
-              } else if (schemaSeries.length > 0) {
-                // Schema exists but no validation results for this series = not in schema
+              } else {
+                // No validation results means series is missing
                 overallStatus = 'na';
               }
 
-              // Determine row background color based on status
-              let rowBgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-              if (hasSchema) {
-                if (overallStatus === 'fail') rowBgClass = 'bg-red-50';
-                else if (overallStatus === 'warning') rowBgClass = 'bg-yellow-50';
-              }
+              // Determine row background color
+              let rowBgClass = 'bg-white';
+              if (overallStatus === 'pass') rowBgClass = 'bg-green-50';
+              else if (overallStatus === 'fail') rowBgClass = 'bg-red-50';
+              else if (overallStatus === 'warning') rowBgClass = 'bg-yellow-50';
+
+              const statusMessage = seriesResults.length > 0
+                ? seriesResults.map(r => r.message).join('; ')
+                : `Required series "${series.name}" not found in data`;
 
               return (
                 <tr key={idx} className={rowBgClass}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                    {series.name || `Series ${idx + 1}`}
+                    {series.name}
                   </td>
-                  {fieldTagsArray.map(tag => {
-                    const dataField = Array.isArray(series.fields)
-                      ? series.fields.find((f: any) => f.tag === tag)
-                      : null;
+                  {fieldNamesArray.map(fieldName => {
+                    // Get the expected value from schema series
+                    let fieldValue = '—';
+                    if (Array.isArray(series.fields)) {
+                      const field = series.fields.find((f: any) =>
+                        (f.name || f.field) === fieldName
+                      );
+                      if (field) {
+                        fieldValue = formatSeriesFieldValue(field.value);
+                      }
+                    }
 
                     return (
-                      <td key={tag} className="px-4 py-3">
-                        {dataField ? (
-                          <p className="text-sm text-gray-900">{formatSeriesFieldValue(dataField.value)}</p>
-                        ) : (
-                          <span className="text-gray-400 italic">—</span>
-                        )}
+                      <td key={fieldName} className="px-4 py-3">
+                        <p className="text-sm text-gray-900">{fieldValue}</p>
                       </td>
                     );
                   })}
                   <td className="px-4 py-3 text-center">
                     {isValidating ? (
                       <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
-                    ) : hasSchema ? (
-                      seriesResults.length > 0 ? (
-                        renderStatusWithMessage(overallStatus, seriesResults.map(r => r.message).join('; '))
-                      ) : (
-                        renderStatusWithMessage(overallStatus, "Series not described in schema")
-                      )
                     ) : (
-                      renderStatusWithMessage('unknown', "Series not checked by schema")
+                      renderStatusWithMessage(overallStatus, statusMessage)
                     )}
                   </td>
                 </tr>

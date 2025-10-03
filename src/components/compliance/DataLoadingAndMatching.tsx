@@ -10,6 +10,7 @@ import AcquisitionTable from '../schema/AcquisitionTable';
 import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import ComplianceReportModal from './ComplianceReportModal';
 import CombinedComplianceView from './CombinedComplianceView';
+import { processSchemaFieldForUI } from '../../utils/datatypeInference';
 
 // ✅ MOVE COMPONENT OUTSIDE TO PREVENT RECREATION!
 const SchemaAcquisitionDisplay = React.memo<{
@@ -176,10 +177,12 @@ const DataLoadingAndMatching: React.FC = () => {
   // Helper function to convert schema to acquisition format for display
   const convertSchemaToAcquisition = async (binding: SchemaBinding): Promise<Acquisition> => {
     const { schema, acquisitionId } = binding;
+    console.log('🔧 convertSchemaToAcquisition called with:', { schemaId: schema.id, acquisitionId });
 
     try {
       // Get schema content to extract fields
       const schemaContent = await getSchemaContent(schema.id);
+      console.log('🔧 Got schema content, length:', schemaContent?.length);
       let schemaFields: any[] = [];
       let seriesInstances: any[] = [];
 
@@ -208,15 +211,14 @@ const DataLoadingAndMatching: React.FC = () => {
           if (targetAcquisition) {
             // Extract acquisition-level fields
             if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
-              // Convert schema format fields to DicomField format
-              schemaFields = targetAcquisition.fields.map(f => ({
-                name: f.field || f.name,
-                tag: f.tag,
-                value: f.value,
-                level: 'acquisition',
-                dataType: f.dataType,
-                validationRule: f.validationRule
-              }));
+              // Convert schema format fields to DicomField format using processSchemaFieldForUI
+              schemaFields = targetAcquisition.fields.map(f => {
+                const processed = processSchemaFieldForUI(f);
+                return {
+                  ...processed,
+                  level: 'acquisition'
+                };
+              });
             } else {
               schemaFields = [
                 ...(targetAcquisition.acquisitionFields || targetAcquisition.acquisition_fields || [])
@@ -233,6 +235,9 @@ const DataLoadingAndMatching: React.FC = () => {
 
                 if (series.fields && Array.isArray(series.fields)) {
                   series.fields.forEach(f => {
+                    // Process the schema field to get proper validation rule
+                    const processed = processSchemaFieldForUI(f);
+
                     // Add to unique field definitions
                     if (!fieldMap.has(f.tag)) {
                       fieldMap.set(f.tag, {
@@ -240,8 +245,8 @@ const DataLoadingAndMatching: React.FC = () => {
                         tag: f.tag,
                         value: '', // No default value for series fields
                         level: 'series',
-                        dataType: f.dataType,
-                        validationRule: f.validationRule
+                        dataType: processed.dataType,
+                        validationRule: processed.validationRule
                       });
                     }
 
@@ -249,8 +254,9 @@ const DataLoadingAndMatching: React.FC = () => {
                     seriesData.fields.push({
                       tag: f.tag,
                       name: f.field || f.name,
-                      value: f.value,
-                      validationRule: f.validationRule || { type: 'exact' }
+                      value: processed.value,
+                      dataType: processed.dataType,
+                      validationRule: processed.validationRule
                     });
                   });
                 }
@@ -334,7 +340,10 @@ const DataLoadingAndMatching: React.FC = () => {
         })()
       };
     } catch (error) {
-      console.error('Failed to convert schema to acquisition:', error);
+      console.error('❌ Failed to convert schema to acquisition:', error);
+      console.error('❌ Error details:', error.message);
+      console.error('❌ Schema ID:', schema.id);
+      console.error('❌ Acquisition ID:', acquisitionId);
       // Return minimal acquisition if conversion fails
       return {
         id: `schema-${schema.id}-${acquisitionId || 'default'}`,

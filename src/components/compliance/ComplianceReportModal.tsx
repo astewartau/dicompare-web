@@ -50,20 +50,20 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
 
                 body {
                   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                  line-height: 1.6;
+                  line-height: 1.4;
                   color: #374151;
-                  max-width: 8.5in;
-                  margin: 0 auto;
+                  margin: 0;
                   padding: 0.5in;
                   background: white;
+                  font-size: 10px;
                 }
 
-                .text-3xl { font-size: 1.875rem; font-weight: bold; }
-                .text-2xl { font-size: 1.5rem; font-weight: bold; }
-                .text-xl { font-size: 1.25rem; font-weight: 600; }
-                .text-lg { font-size: 1.125rem; font-weight: 600; }
-                .text-sm { font-size: 0.875rem; }
-                .text-xs { font-size: 0.75rem; }
+                .text-3xl { font-size: 1.4rem; font-weight: bold; }
+                .text-2xl { font-size: 1.2rem; font-weight: bold; }
+                .text-xl { font-size: 1rem; font-weight: 600; }
+                .text-lg { font-size: 0.9rem; font-weight: 600; }
+                .text-sm { font-size: 0.6rem; }
+                .text-xs { font-size: 0.55rem; }
 
                 .font-bold { font-weight: bold; }
                 .font-semibold { font-weight: 600; }
@@ -97,38 +97,38 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 .rounded { border-radius: 0.25rem; }
                 .rounded-lg { border-radius: 0.5rem; }
 
-                .p-3 { padding: 0.75rem; }
-                .p-4 { padding: 1rem; }
-                .p-6 { padding: 1.5rem; }
-                .pb-6 { padding-bottom: 1.5rem; }
-                .pt-6 { padding-top: 1.5rem; }
-                .mb-1 { margin-bottom: 0.25rem; }
-                .mb-2 { margin-bottom: 0.5rem; }
-                .mb-4 { margin-bottom: 1rem; }
-                .mb-6 { margin-bottom: 1.5rem; }
-                .mb-8 { margin-bottom: 2rem; }
-                .mt-1 { margin-top: 0.25rem; }
-                .mt-8 { margin-top: 2rem; }
-                .mr-1 { margin-right: 0.25rem; }
-                .mr-2 { margin-right: 0.5rem; }
-                .ml-2 { margin-left: 0.5rem; }
+                .p-3 { padding: 0.4rem; }
+                .p-4 { padding: 0.5rem; }
+                .p-6 { padding: 0.75rem; }
+                .pb-6 { padding-bottom: 0.75rem; }
+                .pt-6 { padding-top: 0.75rem; }
+                .mb-1 { margin-bottom: 0.15rem; }
+                .mb-2 { margin-bottom: 0.3rem; }
+                .mb-4 { margin-bottom: 0.5rem; }
+                .mb-6 { margin-bottom: 0.75rem; }
+                .mb-8 { margin-bottom: 1rem; }
+                .mt-1 { margin-top: 0.15rem; }
+                .mt-8 { margin-top: 1rem; }
+                .mr-1 { margin-right: 0.15rem; }
+                .mr-2 { margin-right: 0.3rem; }
+                .ml-2 { margin-left: 0.3rem; }
 
                 .flex { display: flex; }
                 .items-center { align-items: center; }
                 .items-start { align-items: flex-start; }
                 .justify-between { justify-content: space-between; }
                 .justify-center { justify-content: center; }
-                .space-x-2 > * + * { margin-left: 0.5rem; }
-                .space-x-6 > * + * { margin-left: 1.5rem; }
-                .space-y-2 > * + * { margin-top: 0.5rem; }
-                .space-y-4 > * + * { margin-top: 1rem; }
-                .space-y-8 > * + * { margin-top: 2rem; }
+                .space-x-2 > * + * { margin-left: 0.3rem; }
+                .space-x-6 > * + * { margin-left: 0.75rem; }
+                .space-y-2 > * + * { margin-top: 0.3rem; }
+                .space-y-4 > * + * { margin-top: 0.5rem; }
+                .space-y-8 > * + * { margin-top: 1rem; }
 
                 .grid { display: grid; }
                 .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
                 .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-                .gap-3 { gap: 0.75rem; }
-                .gap-4 { gap: 1rem; }
+                .gap-3 { gap: 0.4rem; }
+                .gap-4 { gap: 0.5rem; }
 
                 .text-center { text-align: center; }
                 .text-right { text-align: right; }
@@ -234,7 +234,7 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
 
         {/* Modal Content */}
         <div className="flex-1 overflow-auto p-6 bg-gray-50">
-          <div ref={reportRef} className="max-w-4xl mx-auto">
+          <div ref={reportRef} className="max-w-4xl mx-auto print:max-w-none">
             <ComplianceReport
               acquisitions={acquisitions}
               schemaPairings={schemaPairings}

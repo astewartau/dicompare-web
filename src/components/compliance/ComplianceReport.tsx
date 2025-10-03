@@ -77,59 +77,15 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
     <div className={`bg-white ${className}`}>
       {/* Report Header */}
       <div className="border-b-2 border-gray-200 pb-6 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">DICOM Compliance Report</h1>
-            <div className="flex items-center space-x-6 text-sm text-gray-600">
-              <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4" />
-                <span>Generated: {currentDate}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <FileText className="h-4 w-4" />
-                <span>{acquisitions.length} acquisition{acquisitions.length !== 1 ? 's' : ''} analyzed</span>
-              </div>
-            </div>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">DICOM Compliance Report</h1>
+        <div className="flex items-center space-x-6 text-sm text-gray-600">
+          <div className="flex items-center space-x-2">
+            <Calendar className="h-4 w-4" />
+            <span>Generated: {currentDate}</span>
           </div>
-
-          <div className="text-right">
-            <div className="text-3xl font-bold text-gray-900 mb-1">{compliancePercentage}%</div>
-            <div className="text-sm text-gray-600">Overall Compliance</div>
-          </div>
-        </div>
-
-        {/* Overall Statistics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-            <div className="flex items-center justify-center mb-1">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-            </div>
-            <div className="text-lg font-semibold text-green-900">{overallStats.totalPass}</div>
-            <div className="text-xs text-green-700">Passed</div>
-          </div>
-
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-            <div className="flex items-center justify-center mb-1">
-              <XCircle className="h-5 w-5 text-red-600" />
-            </div>
-            <div className="text-lg font-semibold text-red-900">{overallStats.totalFail}</div>
-            <div className="text-xs text-red-700">Failed</div>
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-            <div className="flex items-center justify-center mb-1">
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
-            </div>
-            <div className="text-lg font-semibold text-yellow-900">{overallStats.totalWarning}</div>
-            <div className="text-xs text-yellow-700">Warnings</div>
-          </div>
-
-          <div className="bg-gray-100 border border-gray-200 rounded-lg p-3 text-center">
-            <div className="flex items-center justify-center mb-1">
-              <HelpCircle className="h-5 w-5 text-gray-500" />
-            </div>
-            <div className="text-lg font-semibold text-gray-700">{overallStats.totalNA}</div>
-            <div className="text-xs text-gray-600">N/A</div>
+          <div className="flex items-center space-x-2">
+            <FileText className="h-4 w-4" />
+            <span>{acquisitions.length} acquisition{acquisitions.length !== 1 ? 's' : ''} analyzed</span>
           </div>
         </div>
       </div>
@@ -158,11 +114,10 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
               {/* Acquisition Header */}
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-1">{acquisition.protocolName}</h2>
-                  <p className="text-sm text-gray-600">{acquisition.seriesDescription}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Schema: {pairing.schema.name} v{pairing.schema.version}
-                  </p>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-1">
+                    Schema: {pairing.schema.name} v{pairing.schema.version}: {acquisition.seriesDescription}
+                  </h2>
+                  <p className="text-sm text-gray-600">Protocol: {acquisition.protocolName}</p>
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-gray-900 mb-1">{acquisitionCompliance}%</div>
@@ -173,33 +128,21 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
               {/* Acquisition Statistics */}
               <div className="grid grid-cols-4 gap-3 mb-6">
                 <div className="text-center">
-                  <div className="flex items-center justify-center mb-1">
-                    {getStatusIcon('pass')}
-                  </div>
                   <div className="text-sm font-semibold text-green-900">{statusCounts.pass}</div>
                   <div className="text-xs text-green-700">Passed</div>
                 </div>
 
                 <div className="text-center">
-                  <div className="flex items-center justify-center mb-1">
-                    {getStatusIcon('fail')}
-                  </div>
                   <div className="text-sm font-semibold text-red-900">{statusCounts.fail}</div>
                   <div className="text-xs text-red-700">Failed</div>
                 </div>
 
                 <div className="text-center">
-                  <div className="flex items-center justify-center mb-1">
-                    {getStatusIcon('warning')}
-                  </div>
                   <div className="text-sm font-semibold text-yellow-900">{statusCounts.warning}</div>
                   <div className="text-xs text-yellow-700">Warnings</div>
                 </div>
 
                 <div className="text-center">
-                  <div className="flex items-center justify-center mb-1">
-                    {getStatusIcon('na')}
-                  </div>
                   <div className="text-sm font-semibold text-gray-700">{statusCounts.na}</div>
                   <div className="text-xs text-gray-600">N/A</div>
                 </div>
