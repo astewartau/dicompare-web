@@ -11,6 +11,8 @@ interface ComplianceReportModalProps {
   acquisitions: Acquisition[];
   schemaPairings: Map<string, SchemaBinding>;
   complianceResults: Map<string, ComplianceFieldResult[]>;
+  getSchemaContent: (id: string) => Promise<string | null>;
+  getSchemaAcquisition: (binding: SchemaBinding) => Promise<Acquisition | null>;
 }
 
 const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
@@ -18,7 +20,9 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
   onClose,
   acquisitions,
   schemaPairings,
-  complianceResults
+  complianceResults,
+  getSchemaContent,
+  getSchemaAcquisition
 }) => {
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -235,6 +239,8 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
               acquisitions={acquisitions}
               schemaPairings={schemaPairings}
               complianceResults={complianceResults}
+              getSchemaContent={getSchemaContent}
+              getSchemaAcquisition={getSchemaAcquisition}
               className="print:shadow-none"
             />
           </div>

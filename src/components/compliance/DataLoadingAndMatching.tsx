@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Database, Loader, CheckCircle, Plus, X, Trash2 } from 'lucide-react';
+import { Upload, Database, Loader, CheckCircle, Plus, X, Trash2, FileText, AlertTriangle } from 'lucide-react';
 import { Acquisition, ProcessingProgress } from '../../types';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import { processUploadedFiles } from '../../utils/fileUploadUtils';
@@ -9,6 +9,7 @@ import { SchemaUploadModal } from '../schema/SchemaUploadModal';
 import AcquisitionTable from '../schema/AcquisitionTable';
 import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import ComplianceReportModal from './ComplianceReportModal';
+import CombinedComplianceView from './CombinedComplianceView';
 
 // ✅ MOVE COMPONENT OUTSIDE TO PREVENT RECREATION!
 const SchemaAcquisitionDisplay = React.memo<{
@@ -142,8 +143,6 @@ const DataLoadingAndMatching: React.FC = () => {
   const [loadedData, setLoadedData] = useState<Acquisition[]>([]);
   const [showExampleData, setShowExampleData] = useState(false);
   const [schemaPairings, setSchemaPairings] = useState<Map<string, SchemaBinding>>(new Map());
-  const [preSelectedSchemaId, setPreSelectedSchemaId] = useState<string | null>(null);
-  const [preSelectedAcquisitionId, setPreSelectedAcquisitionId] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
@@ -152,6 +151,22 @@ const DataLoadingAndMatching: React.FC = () => {
   const [schemaAcquisitions, setSchemaAcquisitions] = useState<Map<string, Acquisition>>(new Map());
   const [showComplianceReport, setShowComplianceReport] = useState(false);
   const [allComplianceResults, setAllComplianceResults] = useState<Map<string, any[]>>(new Map());
+  const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
+  const [showSchemaSelectionModal, setShowSchemaSelectionModal] = useState(false);
+  const ADD_NEW_ID = '__add_new__';
+
+  // Auto-select logic
+  useEffect(() => {
+    if (loadedData.length === 0) {
+      // Start with "Add New" selected when no acquisitions
+      setSelectedAcquisitionId(ADD_NEW_ID);
+    } else if (selectedAcquisitionId === ADD_NEW_ID) {
+      // Keep "Add New" selected if it was previously selected
+    } else if (!selectedAcquisitionId || !loadedData.find(a => a.id === selectedAcquisitionId)) {
+      // Select first acquisition if none selected or selected one was deleted
+      setSelectedAcquisitionId(loadedData[0].id);
+    }
+  }, [loadedData, selectedAcquisitionId]);
 
   // Clear cache for debugging - remove this later
   useEffect(() => {
@@ -448,6 +463,12 @@ const DataLoadingAndMatching: React.FC = () => {
       });
 
       setLoadedData(prev => [...prev, ...resolvedAcquisitions]);
+
+      // Auto-select the first newly created acquisition
+      if (resolvedAcquisitions.length > 0) {
+        setSelectedAcquisitionId(resolvedAcquisitions[0].id);
+      }
+
       setApiError(null);
     } catch (error) {
       console.error('Failed to load DICOM data:', error);
@@ -456,7 +477,7 @@ const DataLoadingAndMatching: React.FC = () => {
 
     setIsProcessing(false);
     setProgress(null);
-  }, [preSelectedSchemaId, preSelectedAcquisitionId, loadedData]);
+  }, [loadedData]);
 
   // Drag and drop handlers (unchanged)
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -556,6 +577,11 @@ const DataLoadingAndMatching: React.FC = () => {
       const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
       setLoadedData(acquisitions);
 
+      // Auto-select the first acquisition
+      if (acquisitions.length > 0) {
+        setSelectedAcquisitionId(acquisitions[0].id);
+      }
+
       setShowExampleData(true);
     } catch (error) {
       console.error('Failed to load example data:', error);
@@ -567,8 +593,7 @@ const DataLoadingAndMatching: React.FC = () => {
     setLoadedData([]);
     setShowExampleData(false);
     setSchemaPairings(new Map());
-    setPreSelectedSchemaId(null);
-    setPreSelectedAcquisitionId(null);
+    setSelectedAcquisitionId(ADD_NEW_ID);
   };
 
   const handleDeleteAcquisition = (acquisitionId: string) => {
@@ -632,11 +657,6 @@ const DataLoadingAndMatching: React.FC = () => {
     // Library schemas can't be deleted
   };
 
-  const handleSchemaSelect = (schemaId: string, acquisitionId?: number) => {
-    setPreSelectedSchemaId(schemaId);
-    setPreSelectedAcquisitionId(acquisitionId?.toString() || null);
-  };
-
   const toggleSchemaCollapse = (key: string) => {
     setCollapsedSchemas(prev => {
       const newSet = new Set(prev);
@@ -676,24 +696,140 @@ const DataLoadingAndMatching: React.FC = () => {
     setShowComplianceReport(true);
   };
 
-  // Memoize the preselected schema binding to prevent unnecessary re-renders
-  const preSelectedBinding = useMemo(() => {
-    if (!preSelectedSchemaId) return null;
-    const schema = getUnifiedSchema(preSelectedSchemaId);
-    if (!schema) return null;
-    return {
-      schemaId: preSelectedSchemaId,
-      acquisitionId: preSelectedAcquisitionId,
-      schema: schema
-    };
-  }, [preSelectedSchemaId, preSelectedAcquisitionId]);
+  const selectedAcquisition = selectedAcquisitionId && selectedAcquisitionId !== ADD_NEW_ID
+    ? loadedData.find(a => a.id === selectedAcquisitionId)
+    : null;
 
-  // Memoize callback functions to prevent React.memo from failing
-  const handlePreselectedToggleCollapse = useCallback(() => toggleSchemaCollapse('preselected'), []);
-  const handlePreselectedDeselect = useCallback(() => {
-    setPreSelectedSchemaId(null);
-    setPreSelectedAcquisitionId(null);
-  }, []);
+  // Component to render compact acquisition preview card
+  const renderAcquisitionPreview = (acquisition: Acquisition) => {
+    const pairing = getAcquisitionPairing(acquisition.id);
+    const hasNoPairing = !pairing;
+    const isSelected = selectedAcquisitionId === acquisition.id;
+
+    return (
+      <div
+        key={acquisition.id}
+        onClick={() => setSelectedAcquisitionId(acquisition.id)}
+        className={`border rounded-lg p-4 cursor-pointer transition-all ${
+          isSelected
+            ? 'border-medical-500 bg-medical-50 shadow-md'
+            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+        }`}
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center space-x-2">
+              <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
+              <h3 className="text-sm font-medium text-gray-900 truncate">
+                {acquisition.protocolName || 'Untitled Acquisition'}
+              </h3>
+              {hasNoPairing && (
+                <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" title="No schema assigned" />
+              )}
+            </div>
+            <p className="text-xs text-gray-600 mt-1 truncate">
+              {acquisition.seriesDescription || 'No description'}
+            </p>
+            <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+              <span>{acquisition.totalFiles} files</span>
+              {pairing && (
+                <span className="text-green-600 flex items-center">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Paired
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Component to render "Add New Acquisition" selectable item
+  const renderAddNewItem = () => {
+    const isSelected = selectedAcquisitionId === ADD_NEW_ID;
+
+    return (
+      <div
+        onClick={() => setSelectedAcquisitionId(ADD_NEW_ID)}
+        className={`border rounded-lg p-4 cursor-pointer transition-all ${
+          isSelected
+            ? 'border-medical-500 bg-medical-50 shadow-md'
+            : 'border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+        }`}
+      >
+        <div className="flex items-center space-x-2">
+          <Plus className="h-4 w-4 text-medical-500 flex-shrink-0" />
+          <h3 className="text-sm font-medium text-gray-900">
+            Upload New DICOM
+          </h3>
+        </div>
+        <p className="text-xs text-gray-600 mt-1">
+          Upload files or load example data
+        </p>
+      </div>
+    );
+  };
+
+  // Combined view renderer
+  const renderCombinedView = (acquisition: Acquisition) => {
+    const pairing = getAcquisitionPairing(acquisition.id);
+
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+        {/* Header with Attach Schema button */}
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">{acquisition.protocolName}</h3>
+              <p className="text-sm text-gray-600 mt-1">{acquisition.seriesDescription || 'No description'}</p>
+              {pairing && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Schema: {pairing.schema.name} v{pairing.schema.version}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center space-x-3">
+              {pairing ? (
+                <button
+                  onClick={() => unpairAcquisition(acquisition.id)}
+                  className="inline-flex items-center px-3 py-2 border border-red-300 text-red-700 text-sm rounded-lg hover:bg-red-50"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Detach Schema
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowSchemaSelectionModal(true)}
+                  className="inline-flex items-center px-3 py-2 border border-medical-600 text-medical-600 text-sm rounded-lg hover:bg-medical-50"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Attach Schema
+                </button>
+              )}
+              <button
+                onClick={() => handleDeleteAcquisition(acquisition.id)}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 py-4">
+          <CombinedComplianceView
+            acquisition={acquisition}
+            pairing={pairing}
+            getSchemaContent={getSchemaContent}
+            getSchemaAcquisition={getSchemaAcquisition}
+          />
+        </div>
+      </div>
+    );
+  };
 
   // Upload area component
   const renderUploadArea = (isExtra: boolean = false) => (
@@ -807,131 +943,47 @@ const DataLoadingAndMatching: React.FC = () => {
         </div>
       </div>
 
-      {/* Headers */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">DICOM Acquisitions</h3>
-        <h3 className="text-lg font-semibold text-gray-900">Schema Selection</h3>
-      </div>
-
-      {/* Content */}
-      <div className="space-y-6">
-        {/* Initial upload area when no data */}
-        {loadedData.length === 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            {renderUploadArea()}
-            {preSelectedBinding ? (
-              <SchemaAcquisitionDisplay
-                key={`preselected-${preSelectedBinding.schemaId}-${preSelectedBinding.acquisitionId}`}
-                binding={preSelectedBinding}
-                isDataProcessing={isProcessing}
-                isCollapsed={collapsedSchemas.has('preselected')}
-                onToggleCollapse={handlePreselectedToggleCollapse}
-                onDeselect={handlePreselectedDeselect}
-                getSchemaContent={getSchemaContent}
-                getSchemaAcquisition={getSchemaAcquisition}
-              />
-            ) : (
-              <UnifiedSchemaSelector
-                librarySchemas={librarySchemas}
-                uploadedSchemas={uploadedSchemas}
-                selectionMode="acquisition"
-                selectedSchemaId={preSelectedSchemaId}
-                onAcquisitionSelect={handleSchemaSelect}
-                                onSchemaUpload={handleSchemaUpload}
-                expandable={true}
-                getSchemaContent={getSchemaContent}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Loaded acquisitions */}
-        {loadedData.map((acquisition) => {
-          const pairing = getAcquisitionPairing(acquisition.id);
-
-          return (
-            <div key={acquisition.id} className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              {/* Left - Acquisition */}
-              <div className="relative">
-                <AcquisitionTable
-                  acquisition={acquisition}
-                  isEditMode={true}
-                  onUpdate={() => {}}
-                  onDelete={() => handleDeleteAcquisition(acquisition.id)}
-                  onFieldUpdate={() => {}}
-                  onFieldConvert={() => {}}
-                  onFieldDelete={() => {}}
-                  onFieldAdd={() => {}}
-                  onSeriesUpdate={() => {}}
-                  onSeriesAdd={() => {}}
-                  onSeriesDelete={() => {}}
-                  onSeriesNameUpdate={() => {}}
-                />
-
-              </div>
-
-              {/* Right - Schema */}
-              {pairing ? (
-                <SchemaAcquisitionDisplay
-                  key={`${pairing.schemaId}-${pairing.acquisitionId}-${acquisition.id}`}
-                  binding={pairing}
-                  realAcquisition={acquisition}
-                  isCollapsed={collapsedSchemas.has(acquisition.id)}
-                  onToggleCollapse={() => toggleSchemaCollapse(acquisition.id)}
-                  onDeselect={() => unpairAcquisition(acquisition.id)}
-                  isDataProcessing={isProcessing}
-                  getSchemaContent={getSchemaContent}
-                  getSchemaAcquisition={getSchemaAcquisition}
-                />
-              ) : (
-                <UnifiedSchemaSelector
-                  librarySchemas={librarySchemas}
-                  uploadedSchemas={uploadedSchemas}
-                  selectionMode="acquisition"
-                  onAcquisitionSelect={(schemaId, acquisitionId) =>
-                    pairSchemaWithAcquisition(acquisition.id, schemaId, acquisitionId)
-                  }
-                                    onSchemaUpload={handleSchemaUpload}
-                  expandable={true}
-                  getSchemaContent={getSchemaContent}
-                />
-              )}
+      {/* Master-Detail Layout */}
+      <div className="grid grid-cols-12 gap-6 min-h-[600px]">
+        {/* Left Panel - Acquisition Selector */}
+        <div className="col-span-12 md:col-span-3">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Acquisitions</h3>
+              <p className="text-sm text-gray-600">Select to view or upload new</p>
             </div>
-          );
-        })}
 
-        {/* Extra upload area at bottom */}
-        {loadedData.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            {renderUploadArea(true)}
-            {preSelectedBinding ? (
-              <SchemaAcquisitionDisplay
-                key={`${preSelectedBinding.schemaId}-${preSelectedBinding.acquisitionId}`}
-                binding={preSelectedBinding}
-                isDataProcessing={isProcessing}
-                isCollapsed={collapsedSchemas.has('preselected_bottom')}
-                onToggleCollapse={() => toggleSchemaCollapse('preselected_bottom')}
-                onDeselect={() => {
-                  setPreSelectedSchemaId(null);
-                  setPreSelectedAcquisitionId(null);
-                }}
-                getSchemaContent={getSchemaContent}
-                getSchemaAcquisition={getSchemaAcquisition}
-              />
-            ) : (
-              <UnifiedSchemaSelector
-                librarySchemas={librarySchemas}
-                uploadedSchemas={uploadedSchemas}
-                selectionMode="acquisition"
-                selectedSchemaId={preSelectedSchemaId}
-                onAcquisitionSelect={handleSchemaSelect}
-                                onSchemaUpload={handleSchemaUpload}
-                expandable={true}
-                getSchemaContent={getSchemaContent}
-              />
-            )}
+            {/* Acquisition List */}
+            <div className="p-2 space-y-2 max-h-[600px] overflow-y-auto">
+              {/* Upload New - Always first */}
+              {renderAddNewItem()}
+
+              {/* Existing Acquisitions */}
+              {loadedData.map((acquisition) => renderAcquisitionPreview(acquisition))}
+            </div>
           </div>
-        )}
+        </div>
+
+        {/* Right Panel - Combined View */}
+        <div className="col-span-12 md:col-span-9">
+          {selectedAcquisitionId === ADD_NEW_ID ? (
+            /* Show upload options when "Upload New" is selected */
+            renderUploadArea(false)
+          ) : selectedAcquisition ? (
+            /* Show combined acquisition + schema view */
+            renderCombinedView(selectedAcquisition)
+          ) : (
+            /* Fallback */
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 h-full flex items-center justify-center">
+              <div className="text-center">
+                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Acquisition Selected</h3>
+                <p className="text-gray-600">Select an acquisition from the left panel</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Upload Modal */}
@@ -948,6 +1000,43 @@ const DataLoadingAndMatching: React.FC = () => {
         preloadedFile={uploadedFile}
       />
 
+      {/* Schema Selection Modal */}
+      {showSchemaSelectionModal && selectedAcquisition && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Select Schema</h3>
+                <button
+                  onClick={() => setShowSchemaSelectionModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <p className="text-gray-600 mt-2">
+                Select a schema and acquisition to validate against
+              </p>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <UnifiedSchemaSelector
+                librarySchemas={librarySchemas}
+                uploadedSchemas={uploadedSchemas}
+                selectionMode="acquisition"
+                onAcquisitionSelect={(schemaId, acquisitionId) => {
+                  pairSchemaWithAcquisition(selectedAcquisition.id, schemaId, acquisitionId);
+                  setShowSchemaSelectionModal(false);
+                }}
+                onSchemaUpload={handleSchemaUpload}
+                expandable={true}
+                getSchemaContent={getSchemaContent}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Compliance Report Modal */}
       <ComplianceReportModal
         isOpen={showComplianceReport}
@@ -955,6 +1044,8 @@ const DataLoadingAndMatching: React.FC = () => {
         acquisitions={loadedData.filter(acq => schemaPairings.has(acq.id))}
         schemaPairings={schemaPairings}
         complianceResults={allComplianceResults}
+        getSchemaContent={getSchemaContent}
+        getSchemaAcquisition={getSchemaAcquisition}
       />
 
       {/* Continue Button */}
