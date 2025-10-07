@@ -53,14 +53,31 @@ return test_data`;
   // Initialize edited function when modal opens or func changes
   useEffect(() => {
     if (func) {
+      // Auto-detect system fields that exist in test data
+      // If a test case has data for a system field (e.g., 'Count'), automatically enable it
+      const testCases = func.customTestCases || func.testCases || [];
+      const detectedSystemFields = new Set(func.enabledSystemFields || []);
+
+      // Check all test cases for system field data
+      testCases.forEach(testCase => {
+        if (testCase.data) {
+          Object.keys(SYSTEM_FIELDS).forEach(systemFieldName => {
+            if (testCase.data[systemFieldName]) {
+              // This test case has data for this system field - enable it
+              detectedSystemFields.add(systemFieldName);
+            }
+          });
+        }
+      });
+
       const editedFunction = {
         ...func,
         customName: func.customName || func.name,
         customDescription: func.customDescription || func.description,
         customFields: func.customFields || [...func.fields],
         customImplementation: func.customImplementation || func.implementation,
-        customTestCases: func.customTestCases || func.testCases || [],
-        enabledSystemFields: func.enabledSystemFields || []
+        customTestCases: testCases,
+        enabledSystemFields: Array.from(detectedSystemFields)
       };
 
       setEditedFunc(editedFunction);
@@ -155,7 +172,6 @@ return test_data`;
       name: 'New Test Case',
       data: Object.fromEntries(allFields.map(field => [field, ['']]) // Start with one empty row
       ),
-      expectedToPass: true, // Keep for backward compatibility
       expectedResult: 'pass', // Default to pass
       description: ''
     };
@@ -467,14 +483,16 @@ output
         };
       } else {
         // Add the system field and update test cases
+        // Preserve existing data if the field already exists in test data
         const updatedTestCases = (prev.customTestCases || []).map(testCase => ({
           ...testCase,
           data: {
             ...testCase.data,
-            [fieldName]: [''] // Initialize with empty value
+            // Only initialize with empty value if the field doesn't already exist
+            [fieldName]: testCase.data[fieldName] || ['']
           }
         }));
-        
+
         return {
           ...prev,
           enabledSystemFields: [...currentSystemFields, fieldName],
@@ -674,7 +692,7 @@ json.dumps({
     "passed": test_passed,
     "error": error_message,
     "warning": warning_message,
-    "expected_to_pass": ${testCase.expectedToPass ? 'True' : 'False'},
+    "expected_result": "${testCase.expectedResult}",
     "stdout": stdout_content
 })
 `;
@@ -715,9 +733,8 @@ json.dumps({
       const testResult = JSON.parse(result);
 
       // Check if test result matches expectation
-      // Use new expectedResult if available, otherwise fall back to expectedToPass
       let testSuccessful = false;
-      const expectedResult = testCase.expectedResult || (testCase.expectedToPass ? 'pass' : 'fail');
+      const expectedResult = testCase.expectedResult;
 
       if (expectedResult === 'pass') {
         testSuccessful = testResult.passed && !testResult.warning;
@@ -932,12 +949,11 @@ json.dumps({
                         <div className="flex items-center space-x-2">
                           <span className="text-sm text-gray-700 font-medium">Expected Result:</span>
                           <select
-                            value={testCase.expectedResult || (testCase.expectedToPass ? 'pass' : 'fail')}
+                            value={testCase.expectedResult}
                             onChange={(e) => {
                               const newExpectedResult = e.target.value as TestCaseExpectation;
                               updateTestCase(testIndex, {
-                                expectedResult: newExpectedResult,
-                                expectedToPass: newExpectedResult === 'pass' // Keep backward compatibility
+                                expectedResult: newExpectedResult
                               });
                             }}
                             className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-medical-500"
@@ -1012,6 +1028,20 @@ json.dumps({
                               {field}
                             </div>
                           ))}
+                          {/* Show extra fields from test data (e.g., Count) */}
+                          {(() => {
+                            const regularFields = editedFunc.customFields || editedFunc.fields;
+                            const systemFields = editedFunc.enabledSystemFields || [];
+                            const testDataFields = Object.keys(testCase.data || {});
+                            const extraFields = testDataFields.filter(f =>
+                              !regularFields.includes(f) && !systemFields.includes(f)
+                            );
+                            return extraFields.map(field => (
+                              <div key={field} className="flex-1 px-2 py-1 text-xs font-medium text-orange-700 border-r border-gray-300 last:border-r-0 bg-orange-50" title="Extra field from test data (not in validation function fields)">
+                                {field}
+                              </div>
+                            ));
+                          })()}
                           <div className="w-8"></div>
                         </div>
 
@@ -1020,7 +1050,15 @@ json.dumps({
                         {(() => {
                           const regularFields = editedFunc.customFields || editedFunc.fields;
                           const systemFields = editedFunc.enabledSystemFields || [];
-                          const allFields = [...regularFields, ...systemFields];
+
+                          // Include fields from test data that aren't in the function's field list
+                          // (e.g., "Count" field used for grouped validation data)
+                          const testDataFields = Object.keys(testCase.data || {});
+                          const extraFields = testDataFields.filter(f =>
+                            !regularFields.includes(f) && !systemFields.includes(f)
+                          );
+
+                          const allFields = [...regularFields, ...systemFields, ...extraFields];
                           const maxRows = Math.max(1, ...allFields.map(field => (testCase.data[field] || []).length));
 
                           return Array.from({ length: maxRows }, (_, rowIndex) => (
@@ -1030,8 +1068,9 @@ json.dumps({
                               </div>
                               {allFields.map(field => {
                                 const isSystemField = systemFields.includes(field);
+                                const isExtraField = extraFields.includes(field);
                                 return (
-                                <div key={field} className={`flex-1 border-r border-gray-300 last:border-r-0 ${isSystemField ? 'bg-purple-25' : ''}`}>
+                                <div key={field} className={`flex-1 border-r border-gray-300 last:border-r-0 ${isSystemField ? 'bg-purple-25' : ''} ${isExtraField ? 'bg-orange-25' : ''}`}>
                                   <input
                                     type="text"
                                     value={(() => {
@@ -1113,7 +1152,16 @@ json.dumps({
                       </div>
 
                       <div className="text-xs text-gray-500">
-                        Rows: {Math.max(1, ...[...(editedFunc.customFields || editedFunc.fields), ...(editedFunc.enabledSystemFields || [])].map(field => (testCase.data[field] || []).length))} |
+                        Rows: {(() => {
+                          const regularFields = editedFunc.customFields || editedFunc.fields;
+                          const systemFields = editedFunc.enabledSystemFields || [];
+                          const testDataFields = Object.keys(testCase.data || {});
+                          const extraFields = testDataFields.filter(f =>
+                            !regularFields.includes(f) && !systemFields.includes(f)
+                          );
+                          const allFields = [...regularFields, ...systemFields, ...extraFields];
+                          return Math.max(1, ...allFields.map(field => (testCase.data[field] || []).length));
+                        })()} |
                         Each row represents one record in the DataFrame
                       </div>
                       </>
@@ -1188,7 +1236,7 @@ json.dumps({
                     {/* Test Result */}
                     {testResults[testCase.id] && (() => {
                       const result = testResults[testCase.id];
-                      const expectedResult = testCase.expectedResult || (testCase.expectedToPass ? 'pass' : 'fail');
+                      const expectedResult = testCase.expectedResult;
 
                       // Determine the color based on whether test passed its expectation
                       let bgColor = 'bg-blue-50 text-blue-700'; // Loading

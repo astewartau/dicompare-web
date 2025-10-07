@@ -8,8 +8,7 @@ export interface TestCase {
   id: string;
   name: string;
   data: Record<string, any[]>; // field name -> array of values (each index is a row)
-  expectedToPass: boolean; // Kept for backward compatibility
-  expectedResult?: TestCaseExpectation; // New field for three-way expectation
+  expectedResult: TestCaseExpectation;
   description?: string;
 }
 
