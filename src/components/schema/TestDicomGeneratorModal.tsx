@@ -37,6 +37,12 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
     validationFunctionWarnings: string[];
     validationFieldConflictWarnings: string[];
     fieldConflicts: Array<{ fieldName: string; existingValue: any; testValue: any; validationName: string }>;
+    fieldCategorization?: {
+      standardFields: number;
+      handledFields: number;
+      unhandledFields: number;
+      unhandledFieldWarnings: string[];
+    };
   } | null>(null);
   const [testData, setTestData] = useState<TestDataRow[]>([]);
   const [activeTab, setActiveTab] = useState<'table' | 'code'>('table');
@@ -137,8 +143,7 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
 
         // Find passing test cases
         const passingTests = testCases.filter((testCase: any) => {
-          const expectedResult = testCase.expectedResult || (testCase.expectedToPass ? 'pass' : 'fail');
-          return expectedResult === 'pass';
+          return testCase.expectedResult === 'pass';
         });
 
         if (passingTests.length > 0) {
@@ -153,7 +158,23 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
             if (passingTest.data && passingTest.data[fieldName]) {
               const values = passingTest.data[fieldName];
               // Store the full array of values
-              const testValues = Array.isArray(values) ? values : [values];
+              let testValues = Array.isArray(values) ? values : [values];
+
+              // Check if this is grouped data with a Count column
+              // If Count exists, expand values by repeating each value according to its count
+              const countValues = passingTest.data['Count'];
+              if (countValues && Array.isArray(countValues) && countValues.length === testValues.length) {
+                // Expand values based on Count
+                const expandedValues: any[] = [];
+                for (let i = 0; i < testValues.length; i++) {
+                  const count = parseInt(countValues[i]) || 1;
+                  for (let j = 0; j < count; j++) {
+                    expandedValues.push(testValues[i]);
+                  }
+                }
+                testValues = expandedValues;
+                console.log(`📊 Expanded ${fieldName} from ${values.length} grouped values to ${testValues.length} total values using Count column`);
+              }
 
               // Track the maximum number of rows we need
               maxValidationRows = Math.max(maxValidationRows, testValues.length);
@@ -285,17 +306,6 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
         }
       }
 
-      setAnalysisResult({
-        fields: allFields,
-        seriesCount: (acquisition.series || []).length,
-        generatableFields: fieldsForGeneration,
-        validationFunctionsWithTests: functionsWithTests,
-        validationFunctionsWithoutTests: functionsWithoutTests,
-        validationFunctionWarnings: noPassingTestWarnings,
-        validationFieldConflictWarnings: fieldConflictWarnings,
-        fieldConflicts: conflicts
-      });
-
       // Generate initial test data based on schema constraints and validation test cases
       const initialTestData = generateInitialTestData(
         fieldsForGeneration,
@@ -304,6 +314,21 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
         maxValidationRows,
         acquisition.protocolName
       );
+
+      // Categorize fields to identify unhandled fields
+      const fieldCategorization = await dicompareAPI.categorizeFields(fieldsForGeneration, initialTestData);
+
+      setAnalysisResult({
+        fields: allFields,
+        seriesCount: (acquisition.series || []).length,
+        generatableFields: fieldsForGeneration,
+        validationFunctionsWithTests: functionsWithTests,
+        validationFunctionsWithoutTests: functionsWithoutTests,
+        validationFunctionWarnings: noPassingTestWarnings,
+        validationFieldConflictWarnings: fieldConflictWarnings,
+        fieldConflicts: conflicts,
+        fieldCategorization
+      });
       console.log('📊 Generated initial test data:', {
         seriesCount: acquisition.series?.length || 0,
         testDataRows: initialTestData.length,
@@ -977,6 +1002,37 @@ output
                       onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('noPassingTests'))}
                       className="ml-2 text-yellow-600 hover:text-yellow-800"
                       title="Dismiss warning"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Unhandled Fields Warning */}
+              {analysisResult.fieldCategorization && analysisResult.fieldCategorization.unhandledFieldWarnings.length > 0 && !dismissedWarnings.has('unhandledFields') && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="h-5 w-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-medium text-orange-900 mb-2">
+                        Fields Cannot Be Encoded in DICOMs
+                      </h3>
+                      <p className="text-sm text-orange-800 mb-2">
+                        The following fields have no standard DICOM tag or special encoding method. Generated DICOMs will NOT include these fields and may fail validation:
+                      </p>
+                      <ul className="list-disc list-inside text-sm text-orange-700 space-y-1">
+                        {analysisResult.fieldCategorization.unhandledFieldWarnings.map((warning, idx) => (
+                          <li key={idx}>{warning}</li>
+                        ))}
+                      </ul>
+                      <div className="mt-3 text-xs text-orange-700 bg-orange-100 p-2 rounded">
+                        <strong>Summary:</strong> {analysisResult.fieldCategorization.standardFields} standard DICOM fields, {analysisResult.fieldCategorization.handledFields} handled special fields (e.g., MultibandFactor), {analysisResult.fieldCategorization.unhandledFields} unhandled fields
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('unhandledFields'))}
+                      className="ml-2 text-orange-600 hover:text-orange-800"
                     >
                       <X className="h-4 w-4" />
                     </button>

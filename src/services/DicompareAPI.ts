@@ -2077,29 +2077,23 @@ try:
         print(f"    Series count: {len(acq_data.get('series', []))}")
         break  # Just show first acquisition for debugging
     
-    # Call dicompare validation using new hybrid compliance function - NO FALLBACKS!
-    print("Calling dicompare.check_session_compliance with hybrid support...")
-    try:
-        compliance_results = dicompare.check_session_compliance(
-            in_session=session_df,
-            schema_data=schema_data,
-            session_map=session_map,
-            validation_rules=validation_rules
-        )
-        print(f"Hybrid validation complete: {len(compliance_results)} results")
-    except Exception as e:
-        print(f"Hybrid validation failed: {e}")
-        # Try legacy validation as a last resort, but raise if that fails too
-        try:
-            print("Attempting legacy validation...")
-            compliance_results = dicompare.check_session_compliance_with_json_schema(
-                in_session=session_df,
-                schema_session=schema_data,
-                session_map=session_map
-            )
-            print(f"Legacy validation succeeded: {len(compliance_results)} results")
-        except Exception as legacy_e:
-            raise ValueError(f"Both hybrid and legacy validation failed. Hybrid error: {e}. Legacy error: {legacy_e}")
+    # Extract the single acquisition from schema for validation
+    schema_acquisition = schema_data["acquisitions"][schema_acquisition_name]
+
+    # Extract validation rules for this specific acquisition
+    # The rules are already embedded in schema_acquisition['rules']
+    acq_validation_rules = schema_acquisition.get('rules', [])
+    print(f"Extracted {len(acq_validation_rules)} validation rules from schema_acquisition")
+
+    # Call dicompare validation using check_acquisition_compliance
+    print("Calling dicompare.check_acquisition_compliance...")
+    compliance_results = dicompare.check_acquisition_compliance(
+        in_session=session_df,
+        schema_acquisition=schema_acquisition,
+        acquisition_name=target_acq_name,
+        validation_rules=acq_validation_rules
+    )
+    print(f"Validation complete: {len(compliance_results)} results")
     
     print(f"Dicompare validation complete: {len(compliance_results)} results")
 
@@ -2269,6 +2263,60 @@ json.dumps(result)
   }
 
   /**
+   * Categorize fields into standard DICOM, handled special fields, and unhandled fields
+   */
+  async categorizeFields(
+    fields: Array<{name: string; tag: string; level?: string; dataType?: string; vr?: string}>,
+    testData: Array<Record<string, any>>
+  ): Promise<{
+    standardFields: number;
+    handledFields: number;
+    unhandledFields: number;
+    unhandledFieldWarnings: string[];
+  }> {
+    await this.ensureInitialized();
+
+    try {
+      await pyodideManager.setPythonGlobal('field_definitions', fields);
+      await pyodideManager.setPythonGlobal('test_data_rows', testData);
+
+      const result = await pyodideManager.runPythonAsync(`
+from dicompare.io import categorize_fields, get_unhandled_field_warnings
+import json
+
+# Convert JS data to Python
+field_defs = field_definitions.to_py() if hasattr(field_definitions, 'to_py') else field_definitions
+test_rows = test_data_rows.to_py() if hasattr(test_data_rows, 'to_py') else test_data_rows
+
+# Categorize fields
+categorized = categorize_fields(field_defs)
+
+# Get warnings for unhandled fields
+warnings = get_unhandled_field_warnings(field_defs, test_rows)
+
+result = {
+    'standardFields': len(categorized['standard']),
+    'handledFields': len(categorized['handled']),
+    'unhandledFields': len(categorized['unhandled']),
+    'unhandledFieldWarnings': warnings
+}
+
+json.dumps(result)
+`);
+
+      return JSON.parse(result as string);
+    } catch (error) {
+      console.error('Failed to categorize fields:', error);
+      return {
+        standardFields: 0,
+        handledFields: 0,
+        unhandledFields: 0,
+        unhandledFieldWarnings: []
+      };
+    }
+  }
+
+  /**
    * Generate test DICOM files from schema constraints
    */
   async generateTestDicomsFromSchema(
@@ -2294,178 +2342,24 @@ json.dumps(result)
       });
 
       await pyodideManager.runPythonAsync(`
-import pydicom
-import pandas as pd
-import numpy as np
-from datetime import datetime
-import io
-import zipfile
-from pydicom.dataset import Dataset
-from pydicom.uid import generate_uid, ExplicitVRLittleEndian
+from dicompare.io import generate_test_dicoms_from_schema
 
 # Convert JS data to Python
 test_rows = test_data_rows.to_py() if hasattr(test_data_rows, 'to_py') else test_data_rows
 field_info = schema_fields.to_py() if hasattr(schema_fields, 'to_py') else schema_fields
 acq_info = acquisition_info.to_py() if hasattr(acquisition_info, 'to_py') else acquisition_info
 
-print(f"📊 Generating DICOMs from {len(test_rows)} test data rows")
+print(f"📊 Generating DICOMs from {len(test_rows)} test data rows using dicompare.io")
 print(f"📊 Field info received: {len(field_info)} fields")
-for i, field in enumerate(field_info[:3]):  # Show first 3 fields
-    print(f"  Field {i}: {field}")
 
-# Create mappings of field names to DICOM tags and VRs
-field_tag_map = {}
-field_vr_map = {}
-for field in field_info:
-    # Handle both dict and object access patterns
-    if hasattr(field, 'get'):
-        field_name = field.get('name', '')
-        tag_str = field.get('tag', '').strip('()')
-        vr = field.get('vr', 'UN')
-    else:
-        field_name = field['name'] if 'name' in field else ''
-        tag_str = field['tag'].strip('()') if 'tag' in field else ''
-        vr = field['vr'] if 'vr' in field else 'UN'
+# Call the dicompare package function
+zip_bytes = generate_test_dicoms_from_schema(
+    test_data=test_rows,
+    field_definitions=field_info,
+    acquisition_info=acq_info
+)
 
-    if tag_str and ',' in tag_str:
-        try:
-            parts = tag_str.split(',')
-            group = int(parts[0].strip(), 16)
-            element = int(parts[1].strip(), 16)
-            field_tag_map[field_name] = (group, element)
-            field_vr_map[field_name] = vr
-            print(f"  Field: {field_name} -> {tag_str} (VR: {vr})")
-        except Exception as e:
-            print(f"  Skipping invalid tag: {field_name} -> {tag_str}, error: {e}")
-
-# Create ZIP file in memory
-zip_buffer = io.BytesIO()
-with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-
-    for idx, row_data in enumerate(test_rows):
-        print(f"🔧 Creating DICOM file {idx + 1}/{len(test_rows)}")
-
-        # Create a minimal DICOM dataset
-        ds = Dataset()
-
-        # Required DICOM header elements
-        ds.file_meta = Dataset()
-        ds.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
-        ds.file_meta.MediaStorageSOPClassUID = '1.2.840.10008.5.1.4.1.1.4'  # MR Image Storage
-        ds.file_meta.MediaStorageSOPInstanceUID = generate_uid()
-        ds.file_meta.ImplementationClassUID = generate_uid()
-        ds.file_meta.ImplementationVersionName = 'DICOMPARE_TEST_GEN_1.0'
-
-        # Core DICOM elements
-        ds.SOPClassUID = '1.2.840.10008.5.1.4.1.1.4'
-        ds.SOPInstanceUID = generate_uid()
-        ds.StudyInstanceUID = generate_uid()
-        ds.SeriesInstanceUID = generate_uid()
-        ds.FrameOfReferenceUID = generate_uid()
-
-        # Basic patient/study info
-        ds.PatientName = 'TEST^PATIENT'
-        ds.PatientID = f'TEST_ID_{idx:03d}'
-        ds.StudyDate = datetime.now().strftime('%Y%m%d')
-        ds.StudyTime = datetime.now().strftime('%H%M%S')
-        ds.AccessionNumber = f'TEST_ACC_{idx:03d}'
-        ds.StudyDescription = 'Test Study from Schema'
-        ds.SeriesDate = ds.StudyDate
-        ds.SeriesTime = ds.StudyTime
-        ds.SeriesDescription = acq_info.get('seriesDescription', 'Test Series')
-        ds.SeriesNumber = str(idx + 1)
-        ds.InstanceNumber = str(idx + 1)
-
-        # Image-specific elements (minimal)
-        ds.ImageType = ['ORIGINAL', 'PRIMARY', 'OTHER']
-        ds.SamplesPerPixel = 1
-        ds.PhotometricInterpretation = 'MONOCHROME2'
-        ds.Rows = 64  # Small test image
-        ds.Columns = 64
-        ds.BitsAllocated = 16
-        ds.BitsStored = 16
-        ds.HighBit = 15
-        ds.PixelRepresentation = 0
-
-        # Create minimal pixel data (64x64 test pattern)
-        pixel_array = np.zeros((64, 64), dtype=np.uint16)
-        # Add a simple test pattern
-        pixel_array[20:44, 20:44] = 1000  # Square in center
-        ds.PixelData = pixel_array.tobytes()
-
-        # Add schema-defined fields
-        for field_name, value in row_data.items():
-            if field_name in field_tag_map:
-                tag = field_tag_map[field_name]
-                try:
-                    # Get VR from PyDicom's dictionary (more reliable than frontend VR)
-                    try:
-                        actual_vr = pydicom.datadict.dictionary_VR(tag)
-                    except KeyError:
-                        actual_vr = field_vr_map.get(field_name, 'UN')
-
-                    print(f"    Processing {field_name}: value={value}, Frontend_VR={field_vr_map.get(field_name, 'UN')}, PyDicom_VR={actual_vr}")
-
-                    if isinstance(value, list):
-                        # Handle multi-value fields based on actual VR
-                        if actual_vr in ['DS']:
-                            # Decimal String - convert to list of strings
-                            dicom_value = [str(float(v)) for v in value]
-                        elif actual_vr in ['IS']:
-                            # Integer String - convert to list of strings
-                            dicom_value = [str(int(v)) for v in value]
-                        elif actual_vr in ['FL', 'FD']:
-                            # Float types - keep as numeric list
-                            dicom_value = [float(v) for v in value]
-                        elif actual_vr in ['SL', 'SS', 'UL', 'US', 'SV', 'UV']:
-                            # Integer types - keep as numeric list
-                            dicom_value = [int(v) for v in value]
-                        else:
-                            # String types - convert to string list
-                            dicom_value = [str(v) for v in value]
-                    elif isinstance(value, (int, float)):
-                        # Single numeric values
-                        if actual_vr in ['DS']:
-                            dicom_value = str(float(value))
-                        elif actual_vr in ['IS']:
-                            dicom_value = str(int(value))
-                        elif actual_vr in ['FL', 'FD']:
-                            dicom_value = float(value)
-                        elif actual_vr in ['SL', 'SS', 'UL', 'US', 'SV', 'UV']:
-                            dicom_value = int(value)
-                        else:
-                            dicom_value = value
-                    else:
-                        # String values
-                        dicom_value = str(value) if value is not None else ""
-
-                    # Set the field in the dataset
-                    # keyword_for_tag is a function, not a dict
-                    try:
-                        keyword = pydicom.datadict.keyword_for_tag(tag)
-                    except KeyError:
-                        # If tag is not recognized, use a fallback name
-                        keyword = f"Tag{tag[0]:04X}{tag[1]:04X}"
-
-                    setattr(ds, keyword, dicom_value)
-                    print(f"    Set {field_name} ({keyword}): {dicom_value}")
-
-                except Exception as e:
-                    print(f"    Warning: Could not set {field_name}: {e}")
-
-        # Save DICOM to zip
-        dicom_buffer = io.BytesIO()
-        ds.save_as(dicom_buffer, write_like_original=False)
-        dicom_bytes = dicom_buffer.getvalue()
-
-        filename = f"test_dicom_{idx:03d}.dcm"
-        zip_file.writestr(filename, dicom_bytes)
-        print(f"    ✅ Saved {filename} ({len(dicom_bytes)} bytes)")
-
-zip_buffer.seek(0)
-zip_bytes = zip_buffer.getvalue()
-print(f"🎯 Generated ZIP file with {len(test_rows)} DICOM files ({len(zip_bytes)} bytes)")
-print(f"📋 ZIP bytes type: {type(zip_bytes)}")
+print(f"🎯 Generated ZIP file ({len(zip_bytes)} bytes)")
 
 # Ensure we return bytes as a list of integers for JS consumption
 zip_bytes_list = list(zip_bytes)

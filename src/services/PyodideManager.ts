@@ -62,9 +62,9 @@ class PyodideManager {
     await pyodide.runPythonAsync(`
 import micropip
 
-# Install dicompare from local wheel
-await micropip.install('http://localhost:8000/dist/dicompare-0.1.32-py3-none-any.whl')
-#await micropip.install('dicompare==0.1.32')
+# Install dicompare from PyPI
+await micropip.install('dicompare==0.1.33')
+#await micropip.install('http://localhost:8000/dist/dicompare-0.1.33-py3-none-any.whl')
 
 # Import the real dicompare modules
 import dicompare
