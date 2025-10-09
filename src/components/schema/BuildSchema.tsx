@@ -281,21 +281,22 @@ const BuildSchema: React.FC = () => {
     setUploadProgress(0);
     setUploadStatus('Preparing files...');
 
-    // Initialize Pyodide if needed
-    const initSuccess = await initializePyodideIfNeeded();
-    if (!initSuccess) {
-      setIsUploading(false);
-      return;
-    }
-
     try {
-      // Process uploaded files with proper filtering using shared utility
+      // IMPORTANT: Read files into memory FIRST before initializing Pyodide
+      // This prevents browser file access timeout issues on slower systems
       setUploadStatus('Reading file data...');
-      
+
       const fileObjects = await processUploadedFiles(files, (fileProgress) => {
         setUploadStatus(`Reading file ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.fileName}`);
         setUploadProgress((fileProgress.current / fileProgress.total) * 30); // 0-30% for file reading
       });
+
+      // Now initialize Pyodide if needed (after files are safely in memory)
+      const initSuccess = await initializePyodideIfNeeded();
+      if (!initSuccess) {
+        setIsUploading(false);
+        return;
+      }
       
       setUploadStatus('Processing DICOM files...');
       
@@ -378,7 +379,7 @@ const BuildSchema: React.FC = () => {
     if (!files || files.length === 0) return;
 
     const file = files[0];
-    
+
     // Validate file extension
     if (!file.name.toLowerCase().endsWith('.pro')) {
       setUploadStatus('Please select a Siemens protocol file (.pro)');
@@ -390,19 +391,20 @@ const BuildSchema: React.FC = () => {
     setUploadProgress(0);
     setUploadStatus('Processing Siemens protocol file...');
 
-    // Initialize Pyodide if needed
-    const initSuccess = await initializePyodideIfNeeded();
-    if (!initSuccess) {
-      setIsUploading(false);
-      return;
-    }
-
     try {
       setUploadProgress(30);
-      
-      // Read file content
+
+      // IMPORTANT: Read file content FIRST before initializing Pyodide
+      // This prevents browser file access timeout issues on slower systems
       const fileContent = await file.arrayBuffer();
       setUploadProgress(60);
+
+      // Now initialize Pyodide if needed (after file is safely in memory)
+      const initSuccess = await initializePyodideIfNeeded();
+      if (!initSuccess) {
+        setIsUploading(false);
+        return;
+      }
       
       // Process via API
       const acquisition = await dicompareAPI.loadProFile(new Uint8Array(fileContent), file.name);
