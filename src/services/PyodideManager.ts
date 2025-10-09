@@ -55,16 +55,26 @@ class PyodideManager {
 
   private async setupRealDicompare(pyodide: PyodideInstance): Promise<void> {
     console.log('📦 Installing real dicompare package...');
-    
+
     // Install the real dicompare wheel from local CORS server
     await pyodide.loadPackage(['micropip']);
-    
+
+    // Auto-detect environment: use local package in development, PyPI in production
+    const isDevelopment = window.location.hostname === 'localhost' ||
+                          window.location.hostname === '127.0.0.1' ||
+                          import.meta.env.DEV;
+
+    const packageSource = isDevelopment
+      ? 'http://localhost:8000/dist/dicompare-0.1.33-py3-none-any.whl'
+      : 'dicompare==0.1.33';
+
+    console.log(`📦 Installing dicompare from ${isDevelopment ? 'local development server' : 'PyPI'}...`);
+
     await pyodide.runPythonAsync(`
 import micropip
 
-# Install dicompare from PyPI
-await micropip.install('dicompare==0.1.33')
-#await micropip.install('http://localhost:8000/dist/dicompare-0.1.33-py3-none-any.whl')
+# Auto-detected package source based on environment
+await micropip.install('${packageSource}')
 
 # Import the real dicompare modules
 import dicompare
