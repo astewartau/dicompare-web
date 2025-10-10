@@ -8,6 +8,7 @@ export interface DicomField {
   level: 'acquisition' | 'series';
   validationRule?: ValidationRule;
   seriesName?: string; // For series-level fields, which series they belong to
+  fieldType?: 'standard' | 'derived'; // Whether field has a DICOM tag or is calculated/metadata
   // dataType inferred from value type - no longer stored
 }
 
@@ -20,6 +21,7 @@ export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 export interface SeriesField {
   name: string;
   tag: string;
+  keyword?: string;  // DICOM keyword (e.g. "EchoTime" vs full name "Echo Time")
   value: any;
   validationRule?: ValidationRule;
   // dataType inferred from value type - no longer stored

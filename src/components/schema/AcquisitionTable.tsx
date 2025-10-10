@@ -100,7 +100,15 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const isComplianceMode = mode === 'compliance';
   const isSchemaMode = isComplianceMode || Boolean(schemaId);
   const hasSeriesFields = acquisition.series && acquisition.series.length > 0 &&
-    acquisition.series.some(s => s.fields && s.fields.length > 0);
+    acquisition.series.some(s => {
+      if (!s.fields) return false;
+      // Handle both array format (from DICOM) and object format (from .pro files)
+      if (Array.isArray(s.fields)) {
+        return s.fields.length > 0;
+      } else {
+        return Object.keys(s.fields).length > 0;
+      }
+    });
 
   const validationFunctions = acquisition.validationFunctions || [];
 
@@ -371,12 +379,18 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           ) : acquisition.totalFiles > 0 ? (
             <>
               {acquisition.totalFiles} files • {acquisition.acquisitionFields.length} fields
-              {hasSeriesFields && ` • ${acquisition.series?.reduce((count, s) => count + (s.fields?.length || 0), 0) || 0} varying`}
+              {hasSeriesFields && ` • ${acquisition.series?.reduce((count, s) => {
+                if (Array.isArray(s.fields)) return count + s.fields.length;
+                return count + (s.fields ? Object.keys(s.fields).length : 0);
+              }, 0) || 0} varying`}
             </>
           ) : (
             <>
               {acquisition.acquisitionFields.length} fields
-              {hasSeriesFields && ` • ${acquisition.series?.reduce((count, s) => count + (s.fields?.length || 0), 0) || 0} varying`}
+              {hasSeriesFields && ` • ${acquisition.series?.reduce((count, s) => {
+                if (Array.isArray(s.fields)) return count + s.fields.length;
+                return count + (s.fields ? Object.keys(s.fields).length : 0);
+              }, 0) || 0} varying`}
             </>
           )}
         </div>
@@ -522,29 +536,31 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           )}
 
           {/* Acquisition-Level Fields */}
-          <div>
-            
-            <FieldTable
-              fields={acquisition.acquisitionFields}
-              isEditMode={isEditMode && !isComplianceMode}
-              incompleteFields={incompleteFields}
-              acquisitionId={acquisition.id}
-              mode={mode}
-              schemaId={schemaId}
-              schemaAcquisitionId={schemaAcquisitionId}
-              acquisition={acquisition}
-              realAcquisition={realAcquisition}
-              getSchemaContent={getSchemaContent}
-              isDataProcessing={isDataProcessing}
-              complianceResultsProp={allComplianceResults.filter(r =>
-                r.validationType !== 'validation_rule' &&
-                r.validationType !== 'series'
-              )}
-              onFieldUpdate={onFieldUpdate}
-              onFieldConvert={(fieldTag) => handleFieldConvert(fieldTag, 'series')}
-              onFieldDelete={onFieldDelete}
-            />
-          </div>
+          {acquisition.acquisitionFields.length > 0 && (
+            <div>
+              <FieldTable
+                fields={acquisition.acquisitionFields}
+                isEditMode={isEditMode && !isComplianceMode}
+                incompleteFields={incompleteFields}
+                acquisitionId={acquisition.id}
+                mode={mode}
+                schemaId={schemaId}
+                schemaAcquisitionId={schemaAcquisitionId}
+                acquisition={acquisition}
+                realAcquisition={realAcquisition}
+                getSchemaContent={getSchemaContent}
+                isDataProcessing={isDataProcessing}
+                complianceResultsProp={allComplianceResults.filter(r =>
+                  r.validationType !== 'validation_rule' &&
+                  r.validationType !== 'series' &&
+                  acquisition.acquisitionFields.some(f => r.fieldPath === f.tag || r.fieldName === (f.keyword || f.name))
+                )}
+                onFieldUpdate={onFieldUpdate}
+                onFieldConvert={(fieldTag) => handleFieldConvert(fieldTag, 'series')}
+                onFieldDelete={onFieldDelete}
+              />
+            </div>
+          )}
 
           {/* Series-Level Fields */}
           {hasSeriesFields && (

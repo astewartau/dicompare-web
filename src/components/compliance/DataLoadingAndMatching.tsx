@@ -10,7 +10,10 @@ import AcquisitionTable from '../schema/AcquisitionTable';
 import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import ComplianceReportModal from './ComplianceReportModal';
 import CombinedComplianceView from './CombinedComplianceView';
-import { processSchemaFieldForUI } from '../../utils/datatypeInference';
+import { processSchemaFieldForUI, inferDataTypeFromValue } from '../../utils/datatypeInference';
+import { getFieldByKeyword } from '../../services/dicomFieldService';
+import { extractValidationFieldValues, generateTestDataFromSchema } from '../../utils/testDataGeneration';
+import JSZip from 'jszip';
 
 // ✅ MOVE COMPONENT OUTSIDE TO PREVENT RECREATION!
 const SchemaAcquisitionDisplay = React.memo<{
@@ -154,6 +157,7 @@ const DataLoadingAndMatching: React.FC = () => {
   const [allComplianceResults, setAllComplianceResults] = useState<Map<string, any[]>>(new Map());
   const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
   const [showSchemaSelectionModal, setShowSchemaSelectionModal] = useState(false);
+  const [showSchemaAsDataModal, setShowSchemaAsDataModal] = useState(false);
   const ADD_NEW_ID = '__add_new__';
 
   // Auto-select logic
@@ -178,6 +182,8 @@ const DataLoadingAndMatching: React.FC = () => {
   const convertSchemaToAcquisition = async (binding: SchemaBinding): Promise<Acquisition> => {
     const { schema, acquisitionId } = binding;
     console.log('🔧 convertSchemaToAcquisition called with:', { schemaId: schema.id, acquisitionId });
+
+    let acquisitionDescription = schema.description || 'Schema requirements';
 
     try {
       // Get schema content to extract fields
@@ -209,6 +215,11 @@ const DataLoadingAndMatching: React.FC = () => {
           targetAcquisition = parsedSchema.acquisitions[acquisitionName];
 
           if (targetAcquisition) {
+            // Use acquisition-specific description if available
+            if (targetAcquisition.description) {
+              acquisitionDescription = targetAcquisition.description;
+            }
+
             // Extract acquisition-level fields
             if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
               // Convert schema format fields to DicomField format using processSchemaFieldForUI
@@ -321,7 +332,7 @@ const DataLoadingAndMatching: React.FC = () => {
       return {
         id: `schema-${schema.id}-${acquisitionId || 'default'}`,
         protocolName: schema.name,
-        seriesDescription: schema.description || 'Schema requirements',
+        seriesDescription: acquisitionDescription,
         acquisitionFields: schemaFields.filter(f => !f.level || f.level === 'acquisition') || [],
         seriesFields: schemaFields.filter(f => f.level === 'series') || [],
         series: seriesInstances,
@@ -333,7 +344,7 @@ const DataLoadingAndMatching: React.FC = () => {
             customDescription: rule.description,
             customFields: rule.fields || [],
             customImplementation: rule.implementation,
-            customTestCases: [],
+            customTestCases: rule.testCases || [],  // Preserve test cases from schema
             enabledSystemFields: []
           }));
           return functions;
@@ -348,7 +359,7 @@ const DataLoadingAndMatching: React.FC = () => {
       return {
         id: `schema-${schema.id}-${acquisitionId || 'default'}`,
         protocolName: schema.name,
-        seriesDescription: schema.description || 'Schema requirements',
+        seriesDescription: acquisitionDescription,
         acquisitionFields: [],
         seriesFields: [],
         series: [],
@@ -408,6 +419,12 @@ const DataLoadingAndMatching: React.FC = () => {
   // File upload logic (unchanged)
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files) return;
+
+    // Check if this is a .pro file - route to special handler
+    if (files.length === 1 && files[0].name.toLowerCase().endsWith('.pro')) {
+      await handleProFile(files[0]);
+      return;
+    }
 
     setIsProcessing(true);
     setProgress({
@@ -486,7 +503,289 @@ const DataLoadingAndMatching: React.FC = () => {
 
     setIsProcessing(false);
     setProgress(null);
-  }, [loadedData]);
+  }, [loadedData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle .pro file upload - generates DICOMs and then processes them
+  const handleProFile = useCallback(async (proFile: File) => {
+    setIsProcessing(true);
+    setProgress({
+      currentFile: 0,
+      totalFiles: 1,
+      currentOperation: 'Parsing Siemens protocol file...',
+      percentage: 0
+    });
+
+    try {
+      // Step 1: Read file content as Uint8Array
+      setProgress(prev => ({ ...prev!, currentOperation: 'Reading file...', percentage: 5 }));
+      const arrayBuffer = await proFile.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      // Step 2: Parse .pro file to acquisition/schema
+      setProgress(prev => ({ ...prev!, currentOperation: 'Reading protocol fields...', percentage: 10 }));
+      const acquisition = await dicompareAPI.loadProFile(uint8Array, proFile.name);
+
+      // Step 3: Generate test data from the acquisition using shared utility
+      setProgress(prev => ({ ...prev!, currentOperation: 'Generating test data...', percentage: 30 }));
+
+      // Build all fields list (acquisition + series)
+      const allFields = [...(acquisition.acquisitionFields || [])];
+
+      // Add series fields (handle object format from .pro files)
+      const seriesFieldMap = new Map<string, any>();
+      (acquisition.series || []).forEach(series => {
+        if (typeof series.fields === 'object' && !Array.isArray(series.fields)) {
+          Object.entries(series.fields).forEach(([tag, fieldData]: [string, any]) => {
+            if (!seriesFieldMap.has(tag)) {
+              seriesFieldMap.set(tag, {
+                tag: tag,
+                name: fieldData.name || fieldData.field || tag,
+                value: fieldData.value,
+                level: 'series',
+                ...fieldData
+              });
+            }
+          });
+        }
+      });
+      allFields.push(...Array.from(seriesFieldMap.values()));
+
+      // Extract validation field values from validation functions
+      const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
+        acquisition.validationFunctions || [],
+        allFields,
+        acquisition.series || []
+      );
+
+      // Ensure ProtocolName field exists if not in schema
+      // Use acquisition name as fallback for ProtocolName DICOM field
+      const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
+      if (!hasProtocolName && acquisition.protocolName) {
+        const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
+        if (protocolNameFieldDef) {
+          // Clean acquisition name for use as ProtocolName (lowercase, underscores, no special chars)
+          const cleanedName = acquisition.protocolName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+
+          allFields.push({
+            name: protocolNameFieldDef.keyword,
+            tag: protocolNameFieldDef.tag,
+            vr: protocolNameFieldDef.vr,
+            level: 'acquisition',
+            value: cleanedName,
+            dataType: 'String'
+          });
+        }
+      }
+
+      // Generate test data using shared utility
+      const testData = generateTestDataFromSchema(
+        allFields,
+        acquisition.series || [],
+        validationFieldValues,
+        maxValidationRows
+      );
+
+      // Add fields from testData that aren't in allFields (from validation tests)
+      const existingFieldNames = new Set(allFields.map(f => f.name));
+      const testDataFieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
+
+      for (const fieldName of testDataFieldNames) {
+        if (!existingFieldNames.has(fieldName)) {
+          // This field came from validation tests - look up its DICOM tag
+          const fieldDef = await getFieldByKeyword(fieldName);
+          if (fieldDef) {
+            allFields.push({
+              name: fieldName,
+              tag: fieldDef.tag.replace(/[()]/g, ''),
+              vr: fieldDef.vr || '',
+              level: 'acquisition',
+              dataType: inferDataTypeFromValue(testData[0][fieldName]),
+              value: testData[0][fieldName]
+            } as any);
+          }
+        }
+      }
+
+      // Step 4: Generate DICOMs from the test data
+      setProgress(prev => ({ ...prev!, currentOperation: 'Generating DICOM files...', percentage: 50 }));
+      const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(
+        acquisition,
+        testData,
+        allFields
+      );
+
+      // Step 5: Unzip in-memory
+      setProgress(prev => ({ ...prev!, currentOperation: 'Extracting DICOM files...', percentage: 70 }));
+      const zip = await JSZip.loadAsync(zipBlob);
+      const dicomFiles: File[] = [];
+
+      for (const [filename, zipEntry] of Object.entries(zip.files)) {
+        if (!zipEntry.dir && filename.endsWith('.dcm')) {
+          const blob = await zipEntry.async('blob');
+          dicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
+        }
+      }
+
+      console.log(`✅ Generated ${dicomFiles.length} DICOM files from .pro file`);
+
+      // Step 6: Convert to FileList and process through existing DICOM pipeline
+      setProgress(prev => ({ ...prev!, currentOperation: 'Processing generated DICOMs...', percentage: 80 }));
+
+      const fileList = new DataTransfer();
+      dicomFiles.forEach(file => fileList.items.add(file));
+
+      // Process the generated DICOMs using existing pipeline
+      await handleFileUpload(fileList.files);
+
+    } catch (error) {
+      console.error('Failed to process .pro file:', error);
+      setApiError(`Failed to process .pro file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsProcessing(false);
+      setProgress(null);
+    }
+  }, [handleFileUpload]);
+
+  // Handle schema as data source - generates DICOMs from schema and loads them
+  const handleSchemaAsData = useCallback(async (binding: SchemaBinding) => {
+    setIsProcessing(true);
+    setProgress({
+      currentFile: 0,
+      totalFiles: 1,
+      currentOperation: 'Loading schema...',
+      percentage: 0
+    });
+
+    try {
+      // Step 1: Load the schema acquisition
+      setProgress(prev => ({ ...prev!, currentOperation: 'Loading schema acquisition...', percentage: 10 }));
+      const acquisition = await convertSchemaToAcquisition(binding);
+
+      if (!acquisition) {
+        throw new Error('Failed to load schema acquisition');
+      }
+
+      // Step 2: Generate test data from the acquisition using shared utility
+      setProgress(prev => ({ ...prev!, currentOperation: 'Generating test data...', percentage: 30 }));
+
+      // Build all fields list (acquisition + series)
+      const allFields = [...(acquisition.acquisitionFields || [])];
+
+      // Add series fields
+      const seriesFieldMap = new Map<string, any>();
+      (acquisition.series || []).forEach(series => {
+        if (Array.isArray(series.fields)) {
+          series.fields.forEach(field => {
+            if (!seriesFieldMap.has(field.tag)) {
+              seriesFieldMap.set(field.tag, {
+                ...field,
+                level: 'series'
+              });
+            }
+          });
+        }
+      });
+      allFields.push(...Array.from(seriesFieldMap.values()));
+
+      // Extract validation field values from validation functions
+      const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
+        acquisition.validationFunctions || [],
+        allFields,
+        acquisition.series || []
+      );
+
+      // Ensure ProtocolName field exists if not in schema
+      // Use acquisition name as fallback for ProtocolName DICOM field
+      const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
+      if (!hasProtocolName && acquisition.protocolName) {
+        const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
+        if (protocolNameFieldDef) {
+          // Clean acquisition name for use as ProtocolName (lowercase, underscores, no special chars)
+          const cleanedName = acquisition.protocolName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+
+          allFields.push({
+            name: protocolNameFieldDef.keyword,
+            tag: protocolNameFieldDef.tag,
+            vr: protocolNameFieldDef.vr,
+            level: 'acquisition',
+            value: cleanedName,
+            dataType: 'String'
+          });
+        }
+      }
+
+      // Generate test data using shared utility
+      const testData = generateTestDataFromSchema(
+        allFields,
+        acquisition.series || [],
+        validationFieldValues,
+        maxValidationRows
+      );
+
+      // Add fields from testData that aren't in allFields (from validation tests)
+      const existingFieldNames = new Set(allFields.map(f => f.name));
+      const testDataFieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
+
+      for (const fieldName of testDataFieldNames) {
+        if (!existingFieldNames.has(fieldName)) {
+          // This field came from validation tests - look up its DICOM tag
+          const fieldDef = await getFieldByKeyword(fieldName);
+          if (fieldDef) {
+            allFields.push({
+              name: fieldName,
+              tag: fieldDef.tag.replace(/[()]/g, ''),
+              vr: fieldDef.vr || '',
+              level: 'acquisition',
+              dataType: inferDataTypeFromValue(testData[0][fieldName]),
+              value: testData[0][fieldName]
+            } as any);
+          }
+        }
+      }
+
+      // Step 3: Generate DICOMs from the test data
+      setProgress(prev => ({ ...prev!, currentOperation: 'Generating DICOM files...', percentage: 50 }));
+      const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(
+        acquisition,
+        testData,
+        allFields
+      );
+
+      // Step 4: Unzip in-memory
+      setProgress(prev => ({ ...prev!, currentOperation: 'Extracting DICOM files...', percentage: 70 }));
+      const zip = await JSZip.loadAsync(zipBlob);
+      const dicomFiles: File[] = [];
+
+      for (const [filename, zipEntry] of Object.entries(zip.files)) {
+        if (!zipEntry.dir && filename.endsWith('.dcm')) {
+          const blob = await zipEntry.async('blob');
+          dicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
+        }
+      }
+
+      console.log(`✅ Generated ${dicomFiles.length} DICOM files from schema`);
+
+      // Step 5: Convert to FileList and process through existing DICOM pipeline
+      setProgress(prev => ({ ...prev!, currentOperation: 'Processing generated DICOMs...', percentage: 80 }));
+
+      const fileList = new DataTransfer();
+      dicomFiles.forEach(file => fileList.items.add(file));
+
+      // Process the generated DICOMs using existing pipeline
+      await handleFileUpload(fileList.files);
+
+    } catch (error) {
+      console.error('Failed to process schema as data:', error);
+      setApiError(`Failed to generate DICOMs from schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsProcessing(false);
+      setProgress(null);
+    }
+  }, [handleFileUpload, convertSchemaToAcquisition]);
 
   // Drag and drop handlers (unchanged)
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -877,28 +1176,40 @@ const DataLoadingAndMatching: React.FC = () => {
           <>
             <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {isExtra ? 'Upload More DICOM Files' : 'Upload DICOM Files'}
+              {isExtra ? 'Upload More DICOM Files' : 'Load Data for Compliance Testing'}
             </h3>
             <p className="text-gray-600 mb-4">
-              Drag and drop DICOM files, zip archives, or folders here, or click to browse
+              Drag and drop DICOM files, Siemens .pro files, or zip archives, or select a schema to generate test data
             </p>
 
             <input
               type="file"
               multiple
               webkitdirectory=""
-              accept=".dcm,.dicom,.zip"
+              accept=".dcm,.dicom,.zip,.pro"
               className="hidden"
               id={isExtra ? "file-upload-extra" : "file-upload"}
               onChange={(e) => handleFileUpload(e.target.files)}
             />
-            <label
-              htmlFor={isExtra ? "file-upload-extra" : "file-upload"}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-medical-600 hover:bg-medical-700 cursor-pointer"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Browse Files
-            </label>
+            <div className="flex items-center justify-center gap-3">
+              <label
+                htmlFor={isExtra ? "file-upload-extra" : "file-upload"}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-medical-600 hover:bg-medical-700 cursor-pointer"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Browse Files
+              </label>
+
+              <span className="text-gray-500 text-sm">or</span>
+
+              <button
+                onClick={() => setShowSchemaAsDataModal(true)}
+                className="inline-flex items-center px-4 py-2 border border-medical-600 text-medical-600 text-sm font-medium rounded-md hover:bg-medical-50"
+              >
+                <Database className="h-4 w-4 mr-2" />
+                Select Schema
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -922,7 +1233,7 @@ const DataLoadingAndMatching: React.FC = () => {
                   )}
                 </>
               ) : (
-                'Upload DICOM files for compliance validation and match them with validation templates.'
+                'Upload DICOM files, Siemens .pro files, or select a schema to generate test data for compliance validation.'
               )}
             </p>
             {(apiError || schemaError) && (
@@ -1036,6 +1347,53 @@ const DataLoadingAndMatching: React.FC = () => {
                 onAcquisitionSelect={(schemaId, acquisitionId) => {
                   pairSchemaWithAcquisition(selectedAcquisition.id, schemaId, acquisitionId);
                   setShowSchemaSelectionModal(false);
+                }}
+                onSchemaUpload={handleSchemaUpload}
+                expandable={true}
+                getSchemaContent={getSchemaContent}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schema as Data Source Modal */}
+      {showSchemaAsDataModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Select Schema to Generate Test Data</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Choose a schema to generate compliant DICOM files for testing
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSchemaAsDataModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <UnifiedSchemaSelector
+                librarySchemas={librarySchemas}
+                uploadedSchemas={uploadedSchemas}
+                selectionMode="acquisition"
+                onAcquisitionSelect={async (schemaId, acquisitionId) => {
+                  setShowSchemaAsDataModal(false);
+
+                  // Get the schema
+                  const schema = await getUnifiedSchema(schemaId);
+                  if (schema) {
+                    const binding: SchemaBinding = {
+                      schemaId,
+                      acquisitionId,
+                      schema
+                    };
+                    await handleSchemaAsData(binding);
+                  }
                 }}
                 onSchemaUpload={handleSchemaUpload}
                 expandable={true}

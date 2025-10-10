@@ -55,9 +55,9 @@ function formatTypedValue(fieldValue: FieldValue): string {
     case 'number':
       return String(fieldValue.value);
     case 'list_string':
-      return fieldValue.value.length > 0 ? fieldValue.value.join(', ') : '-';
+      return fieldValue.value.length > 0 ? fieldValue.value.join('\\') : '-';
     case 'list_number':
-      return fieldValue.value.length > 0 ? fieldValue.value.join(', ') : '-';
+      return fieldValue.value.length > 0 ? fieldValue.value.join('\\') : '-';
     case 'json':
       return JSON.stringify(fieldValue.value, null, 2);
     default:
@@ -138,14 +138,15 @@ function formatRawValue(value: any): string {
   if (value === null || value === undefined) {
     return '-';
   }
-  
+
   if (Array.isArray(value)) {
-    return value.join(', ');
+    // Use backslash as separator (DICOM multi-value delimiter)
+    return value.join('\\');
   }
-  
+
   if (typeof value === 'object') {
     return JSON.stringify(value, null, 2);
   }
-  
+
   return String(value);
 }

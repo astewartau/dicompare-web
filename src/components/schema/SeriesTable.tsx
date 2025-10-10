@@ -88,9 +88,26 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
     }
   };
 
+  // Helper function to get fields as array (handles both array and object formats)
+  const getFieldsArray = (fields: any): SeriesField[] => {
+    if (!fields) return [];
+    if (Array.isArray(fields)) return fields;
+    // Object format from .pro files: { "tag": { value, field, name, keyword, ... } }
+    return Object.entries(fields).map(([tag, fieldData]: [string, any]) => ({
+      tag,
+      name: fieldData.name || fieldData.field || tag,
+      keyword: fieldData.keyword,
+      value: fieldData.value,
+      validationRule: fieldData.validationRule
+    }));
+  };
+
   // Get all unique field tags from all series
   const allFieldTags = new Set<string>();
-  series.forEach(s => s.fields.forEach(f => allFieldTags.add(f.tag)));
+  series.forEach(s => {
+    const fieldsArray = getFieldsArray(s.fields);
+    fieldsArray.forEach(f => allFieldTags.add(f.tag));
+  });
 
   if (allFieldTags.size === 0) {
     return (
@@ -118,7 +135,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   const fieldMap = new Map<string, SeriesField>();
 
   series.forEach(s => {
-    s.fields.forEach(f => {
+    const fieldsArray = getFieldsArray(s.fields);
+    fieldsArray.forEach(f => {
       if (!fieldMap.has(f.tag)) {
         fieldMap.set(f.tag, f);
         allFields.push(f);
@@ -144,7 +162,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{field.name}</p>
+                      <p className="font-medium truncate">{field.keyword || field.name}</p>
                       <p className="text-xs font-normal text-gray-400 font-mono">{field.tag}</p>
                     </div>
                     {isEditMode && (
@@ -204,8 +222,9 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 </td>
                 {allFields.map((headerField) => {
                   // Find the specific field in this series
-                  const seriesFieldIndex = ser.fields.findIndex(f => f.tag === headerField.tag);
-                  const seriesField = seriesFieldIndex >= 0 ? ser.fields[seriesFieldIndex] : null;
+                  const fieldsArray = getFieldsArray(ser.fields);
+                  const seriesFieldIndex = fieldsArray.findIndex(f => f.tag === headerField.tag);
+                  const seriesField = seriesFieldIndex >= 0 ? fieldsArray[seriesFieldIndex] : null;
 
                   const seriesFieldKey = `${acquisitionId}-series-${seriesIndex}-${headerField.tag}`;
                   const isIncomplete = incompleteFields.has(seriesFieldKey);
@@ -328,7 +347,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
           field={(() => {
             // If field exists in series, use it
             if (editingCell.fieldIndex >= 0) {
-              const existingField = displaySeries[editingCell.seriesIndex].fields[editingCell.fieldIndex];
+              const fieldsArray = getFieldsArray(displaySeries[editingCell.seriesIndex].fields);
+              const existingField = fieldsArray[editingCell.fieldIndex];
               return {
                 tag: existingField.tag,
                 name: existingField.name,
@@ -349,11 +369,11 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
             };
           })()}
           value={editingCell.fieldIndex >= 0
-            ? displaySeries[editingCell.seriesIndex].fields[editingCell.fieldIndex].value
+            ? getFieldsArray(displaySeries[editingCell.seriesIndex].fields)[editingCell.fieldIndex].value
             : ''}
           onSave={(updates) => {
             const fieldTag = editingCell.fieldIndex >= 0
-              ? displaySeries[editingCell.seriesIndex].fields[editingCell.fieldIndex].tag
+              ? getFieldsArray(displaySeries[editingCell.seriesIndex].fields)[editingCell.fieldIndex].tag
               : editingCell.fieldTag || '';
 
             const fieldUpdate: Partial<SeriesField> = {

@@ -386,12 +386,160 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
         </div>
       </div>
 
-      {/* Expected Series Table */}
+      {/* Actual Series Table - from uploaded DICOM data */}
+      {acquisition.series && acquisition.series.length > 0 && (
+        <div>
+          {renderActualSeriesTable(acquisition.series, complianceResults)}
+        </div>
+      )}
+
+      {/* Expected Series Table - from schema */}
       {schemaAcquisition?.series && schemaAcquisition.series.length > 0 && (
-        renderExpectedSeriesTable(complianceResults, schemaAcquisition.series)
+        <div>
+          {renderExpectedSeriesTable(complianceResults, schemaAcquisition.series)}
+        </div>
       )}
     </div>
   );
+
+  // Helper function to render actual series table (shows series from uploaded DICOM data)
+  function renderActualSeriesTable(
+    dataSeries: any[],
+    results: ComplianceFieldResult[]
+  ) {
+    if (dataSeries.length === 0) {
+      return null;
+    }
+
+    // Get all unique field names/tags across all data series
+    const allFieldTags = new Set<string>();
+    const fieldTagToName = new Map<string, string>();
+
+    dataSeries.forEach(series => {
+      if (typeof series.fields === 'object' && !Array.isArray(series.fields)) {
+        // Object format: { "0018,0081": { value: ..., field: ... } }
+        Object.entries(series.fields).forEach(([tag, fieldData]: [string, any]) => {
+          allFieldTags.add(tag);
+          if (!fieldTagToName.has(tag)) {
+            fieldTagToName.set(tag, fieldData.field || fieldData.name || tag);
+          }
+        });
+      } else if (Array.isArray(series.fields)) {
+        // Array format: [{ tag: ..., name: ..., value: ... }]
+        series.fields.forEach((f: any) => {
+          allFieldTags.add(f.tag);
+          if (!fieldTagToName.has(f.tag)) {
+            fieldTagToName.set(f.tag, f.name || f.tag);
+          }
+        });
+      }
+    });
+
+    const fieldTagsArray = Array.from(allFieldTags);
+
+    return (
+      <div className="border border-gray-200 rounded-lg overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Series
+              </th>
+              {fieldTagsArray.map(tag => (
+                <th key={tag} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  {fieldTagToName.get(tag)}
+                  <div className="text-xs text-gray-400 font-mono normal-case font-normal">{tag}</div>
+                </th>
+              ))}
+              {schemaAcquisition && (
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                  Status
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {dataSeries.map((series, idx) => {
+              // Find validation results for this series
+              const seriesResults = results.filter(r => {
+                if (r.validationType !== 'series') return false;
+                // Match by series name or index
+                const resultIndex = parseInt(r.seriesName?.match(/\d+$/)?.[0] || '0') - 1;
+                return resultIndex === idx || r.seriesName === series.name;
+              });
+
+              // Overall series status
+              let overallStatus: ComplianceFieldResult['status'] = 'unknown';
+              if (schemaAcquisition && seriesResults.length > 0) {
+                const hasFailure = seriesResults.some(r => r.status === 'fail');
+                const hasWarning = seriesResults.some(r => r.status === 'warning');
+                const hasNA = seriesResults.some(r => r.status === 'na');
+
+                if (hasFailure) overallStatus = 'fail';
+                else if (hasWarning) overallStatus = 'warning';
+                else if (hasNA) overallStatus = 'na';
+                else overallStatus = 'pass';
+              }
+
+              // Determine row background color
+              let rowBgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+              if (schemaAcquisition && overallStatus !== 'unknown') {
+                if (overallStatus === 'pass') rowBgClass = 'bg-green-50';
+                else if (overallStatus === 'fail') rowBgClass = 'bg-red-50';
+                else if (overallStatus === 'warning') rowBgClass = 'bg-yellow-50';
+              }
+
+              const statusMessage = seriesResults.length > 0
+                ? seriesResults.map(r => r.message).join('; ')
+                : 'No validation result';
+
+              return (
+                <tr key={idx} className={rowBgClass}>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                    {series.name || `Series ${idx + 1}`}
+                  </td>
+                  {fieldTagsArray.map(tag => {
+                    let fieldValue = '—';
+
+                    if (typeof series.fields === 'object' && !Array.isArray(series.fields)) {
+                      // Object format
+                      const fieldData = series.fields[tag];
+                      if (fieldData && fieldData.value !== undefined) {
+                        fieldValue = formatSeriesFieldValue(fieldData.value);
+                      }
+                    } else if (Array.isArray(series.fields)) {
+                      // Array format
+                      const field = series.fields.find((f: any) => f.tag === tag);
+                      if (field && field.value !== undefined) {
+                        fieldValue = formatSeriesFieldValue(field.value);
+                      }
+                    }
+
+                    return (
+                      <td key={tag} className="px-4 py-3">
+                        <p className="text-sm text-gray-900">{fieldValue}</p>
+                      </td>
+                    );
+                  })}
+                  {schemaAcquisition && (
+                    <td className="px-4 py-3 text-center">
+                      {isValidating ? (
+                        <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
+                      ) : seriesResults.length > 0 ? (
+                        renderStatusWithMessage(overallStatus, statusMessage)
+                      ) : (
+                        <HelpCircle className="h-4 w-4 text-gray-400 mx-auto" />
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   // Helper function to render expected series table (shows all series from schema)
   function renderExpectedSeriesTable(

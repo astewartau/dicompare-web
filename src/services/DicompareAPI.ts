@@ -1413,6 +1413,7 @@ try:
                         "vr": _get_vr_for_field(field),
                         "level": "acquisition",
                         "dataType": data_type,
+                        "fieldType": tag_info.get("fieldType", "standard"),
                         "consistency": "constant"
                     })
                 else:
@@ -1438,6 +1439,7 @@ try:
                         "vr": _get_vr_for_field(field),
                         "level": "series",
                         "dataType": data_type,
+                        "fieldType": tag_info.get("fieldType", "standard"),
                         "consistency": "varying"
                     })
         
@@ -1713,9 +1715,10 @@ try:
 
             if field_name:
                 tag_info = get_tag_info(field_name)
+                print(f"🔍 DEBUG tag_info for {field_name}: {tag_info}")
                 data_type = determine_field_type_from_values(field_name, [field_value] if field_value is not None else [])
 
-                acquisition_fields.append({
+                field_obj = {
                     "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field_name}",
                     "name": field_name,
                     "keyword": tag_info.get("keyword", field_name),
@@ -1723,8 +1726,11 @@ try:
                     "vr": _get_vr_for_field(field_name),
                     "level": "acquisition",
                     "dataType": data_type,
+                    "fieldType": tag_info.get("fieldType", "standard"),
                     "consistency": "constant"
-                })
+                }
+                print(f"🔍 DEBUG field object for {field_name}: {field_obj}")
+                acquisition_fields.append(field_obj)
 
         # Process series-level fields from dicompare analysis
         if dicompare_series:
@@ -1756,6 +1762,7 @@ try:
                     "vr": _get_vr_for_field(field_name),
                     "level": "series",
                     "dataType": data_type,
+                    "fieldType": tag_info.get("fieldType", "standard"),
                     "consistency": "varying"
                 })
         
@@ -2587,7 +2594,8 @@ json.dumps(pro_data)
           value: processedValue,
           vr,
           level: 'acquisition',
-          dataType
+          dataType,
+          fieldType: tag === fieldName ? 'derived' : 'standard'  // If tag wasn't found, it equals fieldName
         });
       }
     }
@@ -2631,8 +2639,9 @@ json.dumps(pro_data)
             value: fieldObj.value, // Use first series value as default
             vr,
             level: 'series',
-            dataType: typeof fieldObj.value === 'number' ? 'number' : 
-                     Array.isArray(fieldObj.value) ? 'list_string' : 'string'
+            dataType: typeof fieldObj.value === 'number' ? 'number' :
+                     Array.isArray(fieldObj.value) ? 'list_string' : 'string',
+            fieldType: tag === fieldName ? 'derived' : 'standard'  // If tag wasn't found, it equals fieldName
           });
         }
       }
@@ -2649,7 +2658,9 @@ json.dumps(pro_data)
             seriesFieldsObj[fieldTag] = {
               value: fieldObj.value,
               field: seriesField?.name || fieldObj.field,
-              dataType: typeof fieldObj.value === 'number' ? 'number' : 
+              name: seriesField?.name || fieldObj.field,
+              keyword: seriesField?.keyword,
+              dataType: typeof fieldObj.value === 'number' ? 'number' :
                        Array.isArray(fieldObj.value) ? 'list_string' : 'string',
               validationRule: { type: 'exact' }
             };
@@ -2820,7 +2831,8 @@ json.dumps(pro_data)
         value: processedValue,
         vr,
         level: 'acquisition',
-        dataType
+        dataType,
+        fieldType: tag === fieldName ? 'derived' : 'standard'  // If tag wasn't found, it equals fieldName
       });
     }
     

@@ -87,41 +87,82 @@ const DownloadSchema: React.FC = () => {
               fields: []
             };
 
-            // Convert series fields from the new array structure
-            (series.fields || []).forEach((seriesField: any) => {
-              const fieldEntry: any = {
-                field: seriesField.name || '',
-                tag: seriesField.tag,
-                value: seriesField.value
-              };
+            // Convert series fields - handle both array and object structures
+            const seriesFields = series.fields || [];
 
-              // Add validation rule properties to the series field entry
-              if (seriesField.validationRule) {
-                const rule = seriesField.validationRule;
-                switch (rule.type) {
-                  case 'tolerance':
-                    if (rule.tolerance !== undefined) {
-                      fieldEntry.tolerance = rule.tolerance;
-                    }
-                    break;
-                  case 'range':
-                    if (rule.min !== undefined) fieldEntry.min = rule.min;
-                    if (rule.max !== undefined) fieldEntry.max = rule.max;
-                    break;
-                  case 'contains':
-                    if (rule.contains !== undefined) fieldEntry.contains = rule.contains;
-                    break;
-                  case 'contains_any':
-                    if (rule.contains_any !== undefined) fieldEntry.contains_any = rule.contains_any;
-                    break;
-                  case 'contains_all':
-                    if (rule.contains_all !== undefined) fieldEntry.contains_all = rule.contains_all;
-                    break;
+            if (Array.isArray(seriesFields)) {
+              // Array structure (from DICOM uploads)
+              seriesFields.forEach((seriesField: any) => {
+                const fieldEntry: any = {
+                  field: seriesField.keyword || seriesField.name || '',
+                  tag: seriesField.tag,
+                  value: seriesField.value
+                };
+
+                // Add validation rule properties
+                if (seriesField.validationRule) {
+                  const rule = seriesField.validationRule;
+                  switch (rule.type) {
+                    case 'tolerance':
+                      if (rule.tolerance !== undefined) {
+                        fieldEntry.tolerance = rule.tolerance;
+                      }
+                      break;
+                    case 'range':
+                      if (rule.min !== undefined) fieldEntry.min = rule.min;
+                      if (rule.max !== undefined) fieldEntry.max = rule.max;
+                      break;
+                    case 'contains':
+                      if (rule.contains !== undefined) fieldEntry.contains = rule.contains;
+                      break;
+                    case 'contains_any':
+                      if (rule.contains_any !== undefined) fieldEntry.contains_any = rule.contains_any;
+                      break;
+                    case 'contains_all':
+                      if (rule.contains_all !== undefined) fieldEntry.contains_all = rule.contains_all;
+                      break;
+                  }
                 }
-              }
 
-              seriesEntry.fields.push(fieldEntry);
-            });
+                seriesEntry.fields.push(fieldEntry);
+              });
+            } else if (typeof seriesFields === 'object') {
+              // Object structure (from .pro files) - fields keyed by tag
+              Object.entries(seriesFields).forEach(([tag, fieldData]: [string, any]) => {
+                const fieldEntry: any = {
+                  field: fieldData.keyword || fieldData.field || '',
+                  tag: tag,
+                  value: fieldData.value
+                };
+
+                // Add validation rule properties
+                if (fieldData.validationRule) {
+                  const rule = fieldData.validationRule;
+                  switch (rule.type) {
+                    case 'tolerance':
+                      if (rule.tolerance !== undefined) {
+                        fieldEntry.tolerance = rule.tolerance;
+                      }
+                      break;
+                    case 'range':
+                      if (rule.min !== undefined) fieldEntry.min = rule.min;
+                      if (rule.max !== undefined) fieldEntry.max = rule.max;
+                      break;
+                    case 'contains':
+                      if (rule.contains !== undefined) fieldEntry.contains = rule.contains;
+                      break;
+                    case 'contains_any':
+                      if (rule.contains_any !== undefined) fieldEntry.contains_any = rule.contains_any;
+                      break;
+                    case 'contains_all':
+                      if (rule.contains_all !== undefined) fieldEntry.contains_all = rule.contains_all;
+                      break;
+                  }
+                }
+
+                seriesEntry.fields.push(fieldEntry);
+              });
+            }
 
             return seriesEntry;
           }) || [];

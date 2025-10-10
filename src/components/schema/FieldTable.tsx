@@ -167,8 +167,12 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 >
                 <td className="px-2 py-1.5">
                   <div>
-                    <p className="text-xs font-medium text-gray-900">{field.keyword || field.name}</p>
-                    <p className="text-xs text-gray-500 font-mono">{field.tag}</p>
+                    <p className="text-xs font-medium text-gray-900">
+                      {field.keyword || field.name}
+                    </p>
+                    <p className="text-xs text-gray-500 font-mono">
+                      {field.fieldType === 'derived' ? 'Private/derived field' : field.tag}
+                    </p>
                   </div>
                 </td>
                 <td className="px-2 py-1.5">

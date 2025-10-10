@@ -1,6 +1,6 @@
 {
   "name": "dicompare-app",
-  "version": "0.1.0",
+  "version": "0.1.35",
   "private": true,
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",
