@@ -44,7 +44,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const [schemaMetadata, setSchemaMetadata] = useState<SchemaMetadata | null>(null);
 
   const updateAcquisition = useCallback((id: string, updates: Partial<Acquisition>) => {
-    setAcquisitions(prev => prev.map(acq => 
+    setAcquisitions(prev => prev.map(acq =>
       acq.id === id ? { ...acq, ...updates } : acq
     ));
   }, []);
@@ -69,7 +69,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const updateField = useCallback((acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       return {
         ...acq,
         acquisitionFields: acq.acquisitionFields.map(f =>
@@ -133,6 +133,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
       const field = acquisitionField || (seriesField ? {
         tag: seriesField.tag,
         name: seriesField.name,
+        keyword: seriesField.keyword,
         value: seriesField.value,
         vr: 'UN',
         level: 'series' as const,
@@ -168,13 +169,14 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
             for (const existingSeries of currentSeries) {
               for (let i = 0; i < field.value.length; i++) {
                 updatedSeries.push({
-                  name: `Series ${seriesCounter}`,
+                  name: `Series ${String(seriesCounter).padStart(2, '0')}`,
                   fields: [
                     ...(Array.isArray(existingSeries.fields)
                         ? existingSeries.fields.filter(f => f.tag !== fieldTag)
                         : []), // Handle old object format
                     {
                       name: field.name,
+                      keyword: field.keyword,
                       tag: field.tag,
                       value: field.value[i],
                       validationRule: field.validationRule
@@ -188,9 +190,10 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
             // No existing series - create one per value
             for (let i = 0; i < field.value.length; i++) {
               updatedSeries.push({
-                name: `Series ${i + 1}`,
+                name: `Series ${String(i + 1).padStart(2, '0')}`,
                 fields: [{
                   name: field.name,
+                  keyword: field.keyword,
                   tag: field.tag,
                   value: field.value[i],
                   validationRule: field.validationRule
@@ -204,13 +207,14 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
           for (let i = 0; i < seriesCount; i++) {
             const existingSeries = currentSeries[i];
             updatedSeries.push({
-              name: existingSeries?.name || `Series ${i + 1}`,
+              name: existingSeries?.name || `Series ${String(i + 1).padStart(2, '0')}`,
               fields: [
                 ...(existingSeries && Array.isArray(existingSeries.fields)
                     ? existingSeries.fields.filter(f => f.tag !== fieldTag)
                     : []), // Handle old object format
                 {
                   name: field.name,
+                  keyword: field.keyword,
                   tag: field.tag,
                   value: field.value,
                   validationRule: field.validationRule
@@ -231,14 +235,14 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
 
   const addFields = useCallback(async (acquisitionId: string, fieldTags: string[]) => {
     if (fieldTags.length === 0) return;
-    
+
     // Process each field tag to get enhanced field data from local service
     const newFieldsPromises = fieldTags.map(async tag => {
       try {
         // Use local DICOM field service (no Pyodide needed!)
         const results = await searchDicomFields(tag, 1);
         const fieldDef = results.find(f => f.tag.replace(/[()]/g, '') === tag);
-        
+
         const vr = fieldDef?.vr || fieldDef?.valueRepresentation || 'UN';
         const name = fieldDef?.name || tag;
         const keyword = fieldDef?.keyword || name;
@@ -255,6 +259,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
           const toleranceValue = getSuggestedToleranceValue(name, tag);
           if (toleranceValue !== undefined) {
             validationRule.tolerance = toleranceValue;
+            validationRule.value = defaultValue; // Include value for tolerance validation check
           }
         }
 
@@ -282,12 +287,12 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
         };
       }
     });
-    
+
     const newFields = await Promise.all(newFieldsPromises);
-    
+
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       return {
         ...acq,
         acquisitionFields: [...acq.acquisitionFields, ...newFields]
@@ -301,7 +306,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
 
       const updatedSeries = [...(acq.series || [])];
       if (!updatedSeries[seriesIndex]) {
-        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: [] };
+        updatedSeries[seriesIndex] = { name: `Series ${String(seriesIndex + 1).padStart(2, '0')}`, fields: [] };
       }
 
       // Find the field in the series
@@ -380,7 +385,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
       }
 
       const newSeries: Series = {
-        name: `Series ${currentSeries.length + 1}`,
+        name: `Series ${String(currentSeries.length + 1).padStart(2, '0')}`,
         fields: newFields
       };
 
@@ -391,10 +396,10 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const deleteSeries = useCallback((acquisitionId: string, seriesIndex: number) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const updatedSeries = [...(acq.series || [])];
       updatedSeries.splice(seriesIndex, 1);
-      
+
       return { ...acq, series: updatedSeries };
     }));
   }, []);
@@ -402,7 +407,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const updateSeriesName = useCallback((acquisitionId: string, seriesIndex: number, name: string) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const updatedSeries = [...(acq.series || [])];
       if (updatedSeries[seriesIndex]) {
         updatedSeries[seriesIndex] = {
@@ -410,14 +415,14 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
           name
         };
       }
-      
+
       return { ...acq, series: updatedSeries };
     }));
   }, []);
 
   // Validation function handlers
   const addValidationFunction = useCallback((acquisitionId: string, func: SelectedValidationFunction) => {
-    setAcquisitions(prev => prev.map(acq => 
+    setAcquisitions(prev => prev.map(acq =>
       acq.id === acquisitionId ? {
         ...acq,
         validationFunctions: [...(acq.validationFunctions || []), func]
@@ -428,12 +433,12 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const updateValidationFunction = useCallback((acquisitionId: string, index: number, func: SelectedValidationFunction) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const updatedFunctions = [...(acq.validationFunctions || [])];
       if (updatedFunctions[index]) {
         updatedFunctions[index] = func;
       }
-      
+
       return { ...acq, validationFunctions: updatedFunctions };
     }));
   }, []);
@@ -441,10 +446,10 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const deleteValidationFunction = useCallback((acquisitionId: string, index: number) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const updatedFunctions = [...(acq.validationFunctions || [])];
       updatedFunctions.splice(index, 1);
-      
+
       return { ...acq, validationFunctions: updatedFunctions };
     }));
   }, []);

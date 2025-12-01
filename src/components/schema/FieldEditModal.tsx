@@ -22,17 +22,27 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   onClose,
   isSeriesValue = false,
 }) => {
-  const [formData, setFormData] = useState({
-    name: field.name,
-    dataType: isSeriesValue ?
-      inferDataTypeFromValue(typeof value === 'object' && value?.value !== undefined ? value.value : value) :
-      (field.dataType || inferDataTypeFromValue(field.value)) as FieldDataType,
-    value: isSeriesValue ?
-      (typeof value === 'object' && value?.value !== undefined ? value.value : (value || '')) :
-      field.value,
-    validationRule: isSeriesValue ?
-      (typeof value === 'object' && value?.validationRule ? value.validationRule : { type: 'exact' as ValidationConstraint }) :
-      (field.validationRule || { type: 'exact' as ValidationConstraint }),
+  const [formData, setFormData] = useState(() => {
+    // Determine the initial value - for contains_any/contains_all, use the constraint values
+    let initialValue: any;
+    if (field.validationRule.type === 'contains_any' && field.validationRule.contains_any) {
+      initialValue = field.validationRule.contains_any;
+    } else if (field.validationRule.type === 'contains_all' && field.validationRule.contains_all) {
+      initialValue = field.validationRule.contains_all;
+    } else if (isSeriesValue) {
+      initialValue = typeof value === 'object' && value?.value !== undefined ? value.value : (value ?? '');
+    } else {
+      initialValue = field.value;
+    }
+
+    return {
+      name: field.name,
+      dataType: isSeriesValue ?
+        inferDataTypeFromValue(typeof value === 'object' && value?.value !== undefined ? value.value : value) :
+        (field.dataType || inferDataTypeFromValue(field.value)) as FieldDataType,
+      value: initialValue,
+      validationRule: field.validationRule,
+    };
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -99,12 +109,14 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
           }
           break;
         case 'contains_any':
-          if (!formData.validationRule.contains_any || formData.validationRule.contains_any.length === 0) {
+          // Values are stored in formData.value (single source of truth)
+          if (!formData.value || (Array.isArray(formData.value) && formData.value.length === 0)) {
             newErrors.constraint = 'At least one value is required for contains any constraint';
           }
           break;
         case 'contains_all':
-          if (!formData.validationRule.contains_all || formData.validationRule.contains_all.length === 0) {
+          // Values are stored in formData.value (single source of truth)
+          if (!formData.value || (Array.isArray(formData.value) && formData.value.length === 0)) {
             newErrors.constraint = 'At least one value is required for contains all constraint';
           }
           break;
@@ -122,26 +134,36 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
     const updates: Partial<DicomField> & { value?: any } = {};
 
-    // Both series values and field editing should save the same way:
-    // - value contains the actual DICOM field value (dataType is inferred from this)
-    // - validationRule is metadata at field level
+    // formData.value is the single source of truth for list values
+    // We need to copy it to the appropriate validation rule property for the schema
 
-    // For exact match, use formData.value
-    // For tolerance, use the expected value from the validation rule
-    // For range, use the min value from the validation rule
-    // For other constraints, use formData.value as fallback
     let fieldValue = formData.value;
+    let validationRule = { ...formData.validationRule };
 
-    if (formData.validationRule.type === 'tolerance') {
-      fieldValue = formData.validationRule.value;
-    } else if (formData.validationRule.type === 'range') {
-      fieldValue = formData.validationRule.min;
+    switch (formData.validationRule.type) {
+      case 'tolerance':
+        fieldValue = formData.validationRule.value;
+        break;
+      case 'range':
+        fieldValue = formData.validationRule.min;
+        break;
+      case 'contains_any':
+        // Copy formData.value to validationRule.contains_any
+        validationRule.contains_any = Array.isArray(formData.value)
+          ? formData.value
+          : (formData.value ? [formData.value] : []);
+        break;
+      case 'contains_all':
+        // Copy formData.value to validationRule.contains_all
+        validationRule.contains_all = Array.isArray(formData.value)
+          ? formData.value
+          : (formData.value ? [formData.value] : []);
+        break;
+      // 'exact' and 'contains' use fieldValue directly
     }
 
     updates.value = fieldValue;
-
-    // Save the validation rule
-    updates.validationRule = formData.validationRule;
+    updates.validationRule = validationRule;
 
     onSave(updates);
   };
@@ -157,85 +179,46 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
   const handleConstraintChange = (newConstraint: ValidationConstraint) => {
     setFormData(prev => {
-      // Extract current value from different constraint types to reuse intelligently
-      let extractedValue: any = null;
-      
-      if (prev.validationRule.type === 'exact') {
-        extractedValue = prev.value;
-      } else if (prev.validationRule.type === 'tolerance') {
-        extractedValue = prev.validationRule.value;
-      } else if (prev.validationRule.type === 'range') {
-        // For range, use min as the extracted value if available
-        extractedValue = prev.validationRule.min;
-      }
-      
-      // Convert extracted value to number if needed for numeric constraints
-      const numericValue = extractedValue !== null && !isNaN(Number(extractedValue)) ? Number(extractedValue) : null;
-      
+      // SIMPLE APPROACH: formData.value is the single source of truth for list values
+      // Just change the constraint type - don't copy/move values around
+
       let newValidationRule: ValidationRule = { type: newConstraint };
-      
+
+      // For numeric constraints, initialize with current value if numeric
+      const numericValue = prev.value !== null && !isNaN(Number(prev.value)) ? Number(prev.value) : undefined;
+
       switch (newConstraint) {
         case 'tolerance':
           newValidationRule = {
             type: 'tolerance',
-            value: numericValue !== null ? numericValue : 0,
-            tolerance: 0
+            value: numericValue,
+            tolerance: prev.validationRule.tolerance // preserve if switching from tolerance
           };
           break;
         case 'range':
           newValidationRule = {
             type: 'range',
-            min: numericValue !== null ? numericValue : 0,
-            max: numericValue !== null ? numericValue + 100 : 100
+            min: prev.validationRule.min ?? numericValue,
+            max: prev.validationRule.max
           };
           break;
         case 'contains':
+          // For substring contains, use first element if array, or the string value
+          const containsValue = Array.isArray(prev.value) ? prev.value[0] : prev.value;
           newValidationRule = {
             type: 'contains',
-            contains: extractedValue && typeof extractedValue === 'string' ? extractedValue : ''
+            contains: typeof containsValue === 'string' ? containsValue : String(containsValue || '')
           };
           break;
         case 'contains_any':
-          // If extractedValue is already a comma-separated string, split it
-          let containsAnyValues: any[] = [];
-          if (extractedValue) {
-            if (typeof extractedValue === 'string' && extractedValue.includes(',')) {
-              // Split comma-separated string and trim each value
-              containsAnyValues = extractedValue.split(',').map(v => v.trim()).filter(v => v !== '');
-            } else if (Array.isArray(extractedValue)) {
-              containsAnyValues = extractedValue;
-            } else {
-              containsAnyValues = [extractedValue];
-            }
-          }
-          newValidationRule = {
-            type: 'contains_any',
-            contains_any: containsAnyValues
-          };
-          break;
         case 'contains_all':
-          // If extractedValue is already a comma-separated string, split it
-          let containsAllValues: any[] = [];
-          if (extractedValue) {
-            if (typeof extractedValue === 'string' && extractedValue.includes(',')) {
-              // Split comma-separated string and trim each value
-              containsAllValues = extractedValue.split(',').map(v => v.trim()).filter(v => v !== '');
-            } else if (Array.isArray(extractedValue)) {
-              containsAllValues = extractedValue;
-            } else {
-              containsAllValues = [extractedValue];
-            }
-          }
-          newValidationRule = {
-            type: 'contains_all',
-            contains_all: containsAllValues
-          };
-          break;
         case 'exact':
-          // For exact, no additional properties needed
+          // These all use formData.value as the source of truth
+          // Just set the type, value stays in formData.value
+          newValidationRule = { type: newConstraint };
           break;
       }
-      
+
       return {
         ...prev,
         validationRule: newValidationRule,
@@ -299,11 +282,13 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             </div>
           </div>
 
-          {/* Field Value - Only show when constraint is 'exact' */}
-          {formData.validationRule.type === 'exact' && (
+          {/* Field Value - Show for exact, contains_any, contains_all (they all use formData.value) */}
+          {['exact', 'contains_any', 'contains_all'].includes(formData.validationRule.type) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Value
+                {formData.validationRule.type === 'exact' ? 'Value' :
+                 formData.validationRule.type === 'contains_any' ? 'Values to Search For (must contain any)' :
+                 'Required Elements (must contain all)'}
               </label>
               <TypeSpecificInputs
                 dataType={formData.dataType}
@@ -312,11 +297,18 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                 error={errors.value}
               />
               {errors.value && <p className="text-red-500 text-xs mt-1">{errors.value}</p>}
+              {formData.validationRule.type !== 'exact' && (
+                <p className="mt-1 text-xs text-gray-500">
+                  {formData.validationRule.type === 'contains_any'
+                    ? 'Field must contain at least one of these values'
+                    : 'Field must contain all of these values'}
+                </p>
+              )}
             </div>
           )}
 
-          {/* Constraint-specific parameters (for non-exact constraints) */}
-          {formData.validationRule.type !== 'exact' && (
+          {/* Constraint-specific parameters (for tolerance, range, contains only) */}
+          {['tolerance', 'range', 'contains'].includes(formData.validationRule.type) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Parameters
@@ -340,18 +332,26 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
               <div className="flex justify-between">
                 <span className="font-medium">Value:</span>
                 <span className="text-right max-w-[200px] truncate">{
-                  formData.validationRule.type === 'exact' ? 
-                    (Array.isArray(formData.value) ? formData.value.join(', ') : String(formData.value || '')) :
-                  formData.validationRule.type === 'tolerance' ? 
-                    `${formData.validationRule.value || 0} ±${formData.validationRule.tolerance || 0}` :
-                  formData.validationRule.type === 'range' ? 
-                    `${formData.validationRule.min ?? '-∞'} to ${formData.validationRule.max ?? '∞'}` :
-                  formData.validationRule.type === 'contains' ? 
-                    `contains "${formData.validationRule.contains || ''}"` :
-                  formData.validationRule.type === 'contains_any' ? 
-                    `contains any [${(formData.validationRule.contains_any || []).slice(0, 3).join(', ')}${(formData.validationRule.contains_any || []).length > 3 ? '...' : ''}]` :
-                  formData.validationRule.type === 'contains_all' ? 
-                    `contains all [${(formData.validationRule.contains_all || []).slice(0, 3).join(', ')}${(formData.validationRule.contains_all || []).length > 3 ? '...' : ''}]` :
+                  formData.validationRule.type === 'exact' ?
+                    (Array.isArray(formData.value) ? `[${formData.value.join(', ')}]` : String(formData.value ?? '')) :
+                  formData.validationRule.type === 'tolerance' ?
+                    (formData.validationRule.value !== undefined && formData.validationRule.value !== null
+                      ? `${formData.validationRule.value} ±${formData.validationRule.tolerance ?? 0}`
+                      : 'Not set') :
+                  formData.validationRule.type === 'range' ?
+                    (formData.validationRule.min !== undefined || formData.validationRule.max !== undefined
+                      ? `${formData.validationRule.min ?? '-∞'} to ${formData.validationRule.max ?? '∞'}`
+                      : 'Not set') :
+                  formData.validationRule.type === 'contains' ?
+                    (formData.validationRule.contains ? `contains "${formData.validationRule.contains}"` : 'Not set') :
+                  formData.validationRule.type === 'contains_any' ?
+                    (Array.isArray(formData.value) && formData.value.length > 0
+                      ? `contains any [${formData.value.slice(0, 3).join(', ')}${formData.value.length > 3 ? '...' : ''}]`
+                      : 'Not set') :
+                  formData.validationRule.type === 'contains_all' ?
+                    (Array.isArray(formData.value) && formData.value.length > 0
+                      ? `contains all [${formData.value.slice(0, 3).join(', ')}${formData.value.length > 3 ? '...' : ''}]`
+                      : 'Not set') :
                     'Not specified'
                 }</span>
               </div>

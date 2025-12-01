@@ -144,7 +144,7 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
           </label>
           <input
             type="text"
-            value={value || ''}
+            value={value ?? ''}
             onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
             placeholder={placeholder || 'Enter string value'}
@@ -166,8 +166,8 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
           </label>
           <input
             type="number"
-            value={value || ''}
-            onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value === '' ? '' : parseFloat(e.target.value))}
             disabled={disabled}
             placeholder={placeholder || 'Enter number'}
             step="any"

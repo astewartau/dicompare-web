@@ -7,10 +7,12 @@ import { useSchemaService } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import AcquisitionTable from './AcquisitionTable';
 import UnifiedSchemaSelector from './UnifiedSchemaSelector';
-import { processFieldForUI, processSeriesFieldValue } from '../../utils/fieldProcessing';
+import { processFieldForUI } from '../../utils/fieldProcessing';
+import { roundDicomValue } from '../../utils/valueRounding';
 import { processUploadedFiles } from '../../utils/fileUploadUtils';
 import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
-import { processSchemaFieldForUI, processSchemaSeriesFieldValue } from '../../utils/datatypeInference';
+import { processSchemaFieldForUI } from '../../utils/datatypeInference';
+import { buildValidationRuleFromField } from '../../utils/fieldFormatters';
 
 
 const BuildSchema: React.FC = () => {
@@ -324,20 +326,8 @@ const BuildSchema: React.FC = () => {
             ? series.fields.map(field => ({
                 tag: field.tag,
                 name: field.name,
-                value: processSeriesFieldValue(
-                  (typeof field.value === 'object' && field.value !== null && 'value' in field.value) ? {
-                    ...field.value,
-                    field: field.name
-                  } : {
-                    value: field.value,
-                    field: field.name,
-                    dataType: typeof field.value === 'number' ? 'number' :
-                             Array.isArray(field.value) ? 'list_string' : 'string'
-                  },
-                  field.name,
-                  field.tag
-                ),
-                validationRule: field.validationRule
+                value: roundDicomValue(field.value),  // Direct value, same as acquisition fields
+                validationRule: field.validationRule || { type: 'exact' }
               }))
             : [] // Handle old object format by converting to empty array
         }))
@@ -650,12 +640,15 @@ const BuildSchema: React.FC = () => {
 
           if (series.fields && Array.isArray(series.fields)) {
             series.fields.forEach(f => {
-              // Create SeriesField objects for the fields array
+              // Create SeriesField objects for the fields array - use direct value format
+              // Build validation rule from schema properties using shared utility
+              const validationRule = buildValidationRuleFromField(f) || { type: 'exact' };
+
               seriesFields.push({
                 tag: f.tag,
                 name: f.field || f.name,
-                value: processSchemaSeriesFieldValue(f, f.field || f.name, f.tag),
-                validationRule: f.validationRule || { type: 'exact' }
+                value: f.value,  // Direct value, same as acquisition fields
+                validationRule
               });
             });
           }

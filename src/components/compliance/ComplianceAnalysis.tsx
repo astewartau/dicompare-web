@@ -1,25 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, XCircle, AlertTriangle, Download, ArrowLeft, BarChart3, FileText } from 'lucide-react';
-import { ComplianceReport, AcquisitionComplianceResult } from '../../types';
-import { mockComplianceReport } from '../../data/mockData';
+import { ComplianceReport } from '../../types';
 
 const ComplianceAnalysis: React.FC = () => {
   const navigate = useNavigate();
-  const [isAnalyzing, setIsAnalyzing] = useState(true);
-  const [report, setReport] = useState<ComplianceReport | null>(null);
+  const [isAnalyzing] = useState(false);
+  const [report] = useState<ComplianceReport | null>(null);
   const [selectedAcquisition, setSelectedAcquisition] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Simulate analysis process
-    const runAnalysis = async () => {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      setReport(mockComplianceReport);
-      setIsAnalyzing(false);
-    };
-
-    runAnalysis();
-  }, []);
 
   const handleBack = () => {
     navigate('/compliance-checker/load-and-match');

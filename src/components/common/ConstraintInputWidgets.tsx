@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ValidationConstraint, ValidationRule } from '../../types';
 
 interface ConstraintInputWidgetsProps {
@@ -16,8 +16,30 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
   className = '',
   disabled = false
 }) => {
+  // Local state for text inputs that need to preserve raw text (like comma-separated lists)
+  const [containsAnyText, setContainsAnyText] = useState('');
+  const [containsAllText, setContainsAllText] = useState('');
+
+  // Sync local state with prop value when it changes externally
+  useEffect(() => {
+    if (value.contains_any) {
+      setContainsAnyText(value.contains_any.join(', '));
+    }
+  }, [value.contains_any]);
+
+  useEffect(() => {
+    if (value.contains_all) {
+      setContainsAllText(value.contains_all.join(', '));
+    }
+  }, [value.contains_all]);
+
   const updateRule = (updates: Partial<ValidationRule>) => {
     onChange({ ...value, ...updates });
+  };
+
+  // Parse comma-separated text into array (used on blur)
+  const parseCommaSeparated = (text: string): string[] => {
+    return text.split(',').map(v => v.trim()).filter(v => v !== '');
   };
 
   switch (constraint) {
@@ -29,7 +51,7 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
           </label>
           <input
             type="text"
-            value={value.value || ''}
+            value={value.value ?? ''}
             onChange={(e) => updateRule({ value: e.target.value })}
             disabled={disabled}
             placeholder="Enter exact value to match"
@@ -50,8 +72,8 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
               </label>
               <input
                 type="number"
-                value={value.value || ''}
-                onChange={(e) => updateRule({ value: parseFloat(e.target.value) || 0 })}
+                value={value.value ?? ''}
+                onChange={(e) => updateRule({ value: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                 disabled={disabled}
                 placeholder="2000"
                 className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -65,8 +87,8 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
               </label>
               <input
                 type="number"
-                value={value.tolerance || ''}
-                onChange={(e) => updateRule({ tolerance: parseFloat(e.target.value) || 0 })}
+                value={value.tolerance ?? ''}
+                onChange={(e) => updateRule({ tolerance: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                 disabled={disabled}
                 placeholder="50"
                 min="0"
@@ -77,9 +99,9 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
               />
             </div>
           </div>
-          {value.value && value.tolerance && (
+          {value.value !== undefined && value.value !== null && (
             <p className="mt-2 text-sm text-gray-600">
-              Range: {(value.value as number) - (value.tolerance || 0)} to {(value.value as number) + (value.tolerance || 0)}
+              Range: {(value.value as number) - (value.tolerance ?? 0)} to {(value.value as number) + (value.tolerance ?? 0)}
             </p>
           )}
         </div>
@@ -117,8 +139,8 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
               </label>
               <input
                 type="number"
-                value={value.min || ''}
-                onChange={(e) => updateRule({ min: parseFloat(e.target.value) || undefined })}
+                value={value.min ?? ''}
+                onChange={(e) => updateRule({ min: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                 disabled={disabled}
                 placeholder="8"
                 className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -132,8 +154,8 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
               </label>
               <input
                 type="number"
-                value={value.max || ''}
-                onChange={(e) => updateRule({ max: parseFloat(e.target.value) || undefined })}
+                value={value.max ?? ''}
+                onChange={(e) => updateRule({ max: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                 disabled={disabled}
                 placeholder="12"
                 className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -142,11 +164,11 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
               />
             </div>
           </div>
-          {(value.min !== undefined || value.max !== undefined) && (
+          {(value.min !== undefined && value.min !== null) || (value.max !== undefined && value.max !== null) ? (
             <p className="mt-2 text-sm text-gray-600">
               Valid range: {value.min ?? '-∞'} to {value.max ?? '∞'}
             </p>
-          )}
+          ) : null}
         </div>
       );
 
@@ -158,9 +180,10 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
           </label>
           <input
             type="text"
-            value={value.contains_any ? value.contains_any.join(', ') : ''}
-            onChange={(e) => {
-              const values = e.target.value.split(',').map(v => v.trim()).filter(v => v !== '');
+            value={containsAnyText}
+            onChange={(e) => setContainsAnyText(e.target.value)}
+            onBlur={() => {
+              const values = parseCommaSeparated(containsAnyText);
               updateRule({ contains_any: values });
             }}
             disabled={disabled}
@@ -192,9 +215,10 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
           </label>
           <input
             type="text"
-            value={value.contains_all ? value.contains_all.join(', ') : ''}
-            onChange={(e) => {
-              const values = e.target.value.split(',').map(v => v.trim()).filter(v => v !== '');
+            value={containsAllText}
+            onChange={(e) => setContainsAllText(e.target.value)}
+            onBlur={() => {
+              const values = parseCommaSeparated(containsAllText);
               updateRule({ contains_all: values });
             }}
             disabled={disabled}

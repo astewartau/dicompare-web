@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, ArrowRightLeft, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader } from 'lucide-react';
+import { Trash2, ArrowRightLeft, Loader } from 'lucide-react';
 import { DicomField, Acquisition } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 import { ComplianceFieldResult } from '../../types/schema';
 import CustomTooltip from '../common/CustomTooltip';
+import StatusIcon from '../common/StatusIcon';
 import FieldEditModal from './FieldEditModal';
 
 interface FieldTableProps {
@@ -83,22 +84,6 @@ const FieldTable: React.FC<FieldTableProps> = ({
     };
   };
 
-  const getStatusIcon = (status: ComplianceFieldResult['status']) => {
-    const iconProps = { className: "h-4 w-4" };
-
-    switch (status) {
-      case 'pass':
-        return <CheckCircle {...iconProps} className="h-4 w-4 text-green-600" />;
-      case 'fail':
-        return <XCircle {...iconProps} className="h-4 w-4 text-red-600" />;
-      case 'warning':
-        return <AlertTriangle {...iconProps} className="h-4 w-4 text-yellow-600" />;
-      case 'na':
-        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-500" />;
-      case 'unknown':
-        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-400" />;
-    }
-  };
 
   if (fields.length === 0) {
     if (isComplianceMode && isValidating) {
@@ -197,7 +182,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                       delay={100}
                     >
                       <div className="inline-flex items-center justify-center cursor-help">
-                        {getStatusIcon(complianceResult.status)}
+                        <StatusIcon status={complianceResult.status} />
                       </div>
                     </CustomTooltip>
                   </td>

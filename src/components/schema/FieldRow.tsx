@@ -2,7 +2,7 @@ import React from 'react';
 import { Trash2, ArrowRightLeft } from 'lucide-react';
 import { DicomField } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
-import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
+import { formatConstraintValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 
 interface FieldRowProps {
   field: DicomField;
@@ -38,7 +38,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
     >
       <td className="px-3 py-2 whitespace-nowrap">
         <div>
-          <p className="text-sm font-medium text-gray-900">{field.name}</p>
+          <p className="text-sm font-medium text-gray-900">{field.keyword || field.name}</p>
           <p className="text-xs text-gray-500">{field.tag}</p>
         </div>
       </td>
@@ -47,7 +47,7 @@ const FieldRow: React.FC<FieldRowProps> = ({
           className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
           onClick={() => isEditMode && onEdit(field)}
         >
-          <p className="text-sm text-gray-900">{formatFieldValue(field)}</p>
+          <p className="text-sm text-gray-900">{formatConstraintValue(field.value, field.validationRule)}</p>
           {isEditMode && (
             <p className="text-xs text-gray-500 mt-0.5">
               {formatFieldTypeInfo(

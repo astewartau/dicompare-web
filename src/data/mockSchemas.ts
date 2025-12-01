@@ -128,7 +128,7 @@ export const mockTemplates: EnhancedTemplate[] = [
         series: [
           {
             id: 'series_1',
-            name: 'Series 1',
+            name: 'Series 01',
             fields: {
               'ImageType': ['ORIGINAL', 'PRIMARY', 'M', 'ND']
             }

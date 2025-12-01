@@ -6,7 +6,7 @@ export const useAcquisitions = () => {
   const [acquisitions, setAcquisitions] = useState<Acquisition[]>([]);
 
   const updateAcquisition = useCallback((id: string, updates: Partial<Acquisition>) => {
-    setAcquisitions(prev => prev.map(acq => 
+    setAcquisitions(prev => prev.map(acq =>
       acq.id === id ? { ...acq, ...updates } : acq
     ));
   }, []);
@@ -31,7 +31,7 @@ export const useAcquisitions = () => {
   const updateField = useCallback((acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       return {
         ...acq,
         acquisitionFields: acq.acquisitionFields.map(f =>
@@ -51,7 +51,7 @@ export const useAcquisitions = () => {
   const deleteField = useCallback((acquisitionId: string, fieldTag: string) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       return {
         ...acq,
         acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
@@ -68,7 +68,7 @@ export const useAcquisitions = () => {
   const convertFieldLevel = useCallback((acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series') => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTag);
       // Find series field by searching through all series
       let seriesField = null;
@@ -84,9 +84,9 @@ export const useAcquisitions = () => {
         }
       }
       const field = acquisitionField || seriesField;
-      
+
       if (!field) return acq;
-      
+
       if (toLevel === 'acquisition') {
         return {
           ...acq,
@@ -103,7 +103,7 @@ export const useAcquisitions = () => {
         // When converting to series level, ensure we have at least 2 series
         const currentSeries = acq.series || [];
         const seriesCount = Math.max(2, currentSeries.length);
-        
+
         const updatedSeries = [];
         for (let i = 0; i < seriesCount; i++) {
           const existingSeries = currentSeries[i];
@@ -121,7 +121,7 @@ export const useAcquisitions = () => {
           };
 
           updatedSeries.push({
-            name: existingSeries?.name || `Series ${i + 1}`,
+            name: existingSeries?.name || `Series ${String(i + 1).padStart(2, '0')}`,
             fields: [...fieldsWithoutTag, newField]
           });
         }
@@ -189,12 +189,12 @@ export const useAcquisitions = () => {
         };
       }
     });
-    
+
     const newFields = await Promise.all(newFieldsPromises);
-    
+
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       return {
         ...acq,
         acquisitionFields: [...acq.acquisitionFields, ...newFields]
@@ -205,10 +205,10 @@ export const useAcquisitions = () => {
   const updateSeries = useCallback((acquisitionId: string, seriesIndex: number, fieldTag: string, value: any) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const updatedSeries = [...(acq.series || [])];
       if (!updatedSeries[seriesIndex]) {
-        updatedSeries[seriesIndex] = { name: `Series ${seriesIndex + 1}`, fields: [] };
+        updatedSeries[seriesIndex] = { name: `Series ${String(seriesIndex + 1).padStart(2, '0')}`, fields: [] };
       }
 
       const existingFields = Array.isArray(updatedSeries[seriesIndex].fields)
@@ -232,7 +232,7 @@ export const useAcquisitions = () => {
           fields: [...existingFields, { name: fieldTag, tag: fieldTag, value }]
         };
       }
-      
+
       return { ...acq, series: updatedSeries };
     }));
   }, []);
@@ -240,13 +240,13 @@ export const useAcquisitions = () => {
   const addSeries = useCallback((acquisitionId: string) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const currentSeries = acq.series || [];
       const newSeries: Series = {
-        name: `Series ${currentSeries.length + 1}`,
+        name: `Series ${String(currentSeries.length + 1).padStart(2, '0')}`,
         fields: []
       };
-      
+
       return { ...acq, series: [...currentSeries, newSeries] };
     }));
   }, []);
@@ -254,10 +254,10 @@ export const useAcquisitions = () => {
   const deleteSeries = useCallback((acquisitionId: string, seriesIndex: number) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const updatedSeries = [...(acq.series || [])];
       updatedSeries.splice(seriesIndex, 1);
-      
+
       return { ...acq, series: updatedSeries };
     }));
   }, []);
@@ -265,7 +265,7 @@ export const useAcquisitions = () => {
   const updateSeriesName = useCallback((acquisitionId: string, seriesIndex: number, name: string) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
-      
+
       const updatedSeries = [...(acq.series || [])];
       if (updatedSeries[seriesIndex]) {
         updatedSeries[seriesIndex] = {
@@ -273,7 +273,7 @@ export const useAcquisitions = () => {
           name
         };
       }
-      
+
       return { ...acq, series: updatedSeries };
     }));
   }, []);

@@ -1,6 +1,33 @@
 import { DicomField, SeriesField, ValidationRule } from '../types';
 import { FieldValue, validateFieldValue, extractFieldValue } from '../types/fieldValues';
 
+/**
+ * Build a ValidationRule object from raw schema field properties.
+ * Schema fields may store constraints directly (e.g., tolerance, contains_all)
+ * rather than in a validationRule object.
+ */
+export function buildValidationRuleFromField(field: any): ValidationRule | undefined {
+  if (field.validationRule) {
+    return field.validationRule;
+  }
+
+  if (field.tolerance !== undefined) {
+    return { type: 'tolerance', value: field.value, tolerance: field.tolerance };
+  } else if (field.min !== undefined && field.max !== undefined) {
+    return { type: 'range', min: field.min, max: field.max };
+  } else if (field.contains !== undefined) {
+    return { type: 'contains', contains: field.contains };
+  } else if (field.contains_any !== undefined) {
+    return { type: 'contains_any', contains_any: field.contains_any };
+  } else if (field.contains_all !== undefined) {
+    return { type: 'contains_all', contains_all: field.contains_all };
+  } else if (field.value !== undefined) {
+    return { type: 'exact', value: field.value };
+  }
+
+  return undefined;
+}
+
 export interface FormatOptions {
   showConstraint?: boolean;
   showValue?: boolean;
@@ -55,9 +82,9 @@ function formatTypedValue(fieldValue: FieldValue): string {
     case 'number':
       return String(fieldValue.value);
     case 'list_string':
-      return fieldValue.value.length > 0 ? fieldValue.value.join('\\') : '-';
+      return fieldValue.value.length > 0 ? `[${fieldValue.value.join(', ')}]` : '-';
     case 'list_number':
-      return fieldValue.value.length > 0 ? fieldValue.value.join('\\') : '-';
+      return fieldValue.value.length > 0 ? `[${fieldValue.value.join(', ')}]` : '-';
     case 'json':
       return JSON.stringify(fieldValue.value, null, 2);
     default:
@@ -70,15 +97,42 @@ export function formatFieldValue(field: DicomField): string {
   return formatFieldDisplay(field.value, field.validationRule, { showValue: true, showConstraint: true });
 }
 
-// Backward compatibility - formatSeriesFieldValue
-export function formatSeriesFieldValue(fieldValue: any): string {
-  // Handle new SeriesFieldValue format
-  if (typeof fieldValue === 'object' && fieldValue !== null && 'validationRule' in fieldValue) {
-    const seriesValue = fieldValue as SeriesFieldValue;
-    return formatFieldDisplay(seriesValue.value, seriesValue.validationRule, { showValue: true, showConstraint: true });
+// Format series field value - handles validation rules like formatFieldValue does for acquisition fields
+export function formatSeriesFieldValue(fieldValue: any, validationRule?: ValidationRule): string {
+  // Handle legacy wrapped format for backward compatibility
+  // (old format had value wrapped in object with validationRule)
+  if (typeof fieldValue === 'object' && fieldValue !== null && 'validationRule' in fieldValue && 'value' in fieldValue) {
+    return formatRawValue(fieldValue.value);
   }
-  
-  // Handle legacy simple values
+
+  // For non-exact constraints, show the constraint-specific format
+  if (validationRule) {
+    switch (validationRule.type) {
+      case 'tolerance':
+        // Show "value ±tolerance" format (same as acquisition fields)
+        return `${validationRule.value ?? 0} ±${validationRule.tolerance ?? 0}`;
+      case 'range':
+        // Show "min to max" format (same as acquisition fields)
+        return `${validationRule.min ?? '-∞'} to ${validationRule.max ?? '∞'}`;
+      case 'contains':
+        // Show "contains substring" format
+        return `contains "${validationRule.contains || ''}"`;
+      case 'contains_any':
+        // Show the array of values to search for
+        if (validationRule.contains_any) {
+          return formatRawValue(validationRule.contains_any);
+        }
+        break;
+      case 'contains_all':
+        // Show the array of required values
+        if (validationRule.contains_all) {
+          return formatRawValue(validationRule.contains_all);
+        }
+        break;
+    }
+  }
+
+  // Standard format: direct value (string, array, number, etc.)
   return formatRawValue(fieldValue);
 }
 
@@ -128,10 +182,20 @@ export function formatValidationRule(rule?: ValidationRule): string {
 
 export function formatFieldTypeInfo(dataType: string, validationRule?: ValidationRule): string {
   const formattedType = formatDataType(dataType);
-  // Use simple constraint type name instead of full constraint value
+  // Show only constraint type name (values shown in the value display)
   const constraintType = validationRule?.type || 'exact';
-  const formattedConstraint = constraintType.charAt(0).toUpperCase() + constraintType.slice(1).replace(/_/g, ' ');
+  const formattedConstraint = constraintType.replace(/_/g, ' ');
   return `${formattedType} • ${formattedConstraint}`;
+}
+
+// Format the display value based on the validation rule
+export function formatConstraintValue(value: any, validationRule?: ValidationRule): string {
+  if (!validationRule || validationRule.type === 'exact') {
+    return formatRawValue(value);
+  }
+
+  // For non-exact constraints, show the constraint format
+  return formatValidationRule(validationRule);
 }
 
 function formatRawValue(value: any): string {
@@ -140,8 +204,8 @@ function formatRawValue(value: any): string {
   }
 
   if (Array.isArray(value)) {
-    // Use backslash as separator (DICOM multi-value delimiter)
-    return value.join('\\');
+    // Display as array-like format for better readability
+    return `[${value.join(', ')}]`;
   }
 
   if (typeof value === 'object') {

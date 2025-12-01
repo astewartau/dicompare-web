@@ -42,7 +42,7 @@ export const convertSchemaToAcquisition = async (
         return {
           ...processedField,
           level, // Override level from parameter
-          value: processedField.value || field.defaultValue || ''
+          value: processedField.value ?? field.defaultValue ?? ''
         };
       });
     };
@@ -83,7 +83,7 @@ export const convertSchemaToAcquisition = async (
           return {
             name: processedField.name,
             tag: processedField.tag,
-            value: processedField.value || field.defaultValue || '',
+            value: processedField.value ?? field.defaultValue ?? '',
             validationRule: processedField.validationRule || { type: 'exact' as const }
           };
         })

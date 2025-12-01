@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader } from 'lucide-react';
+import { HelpCircle, Loader } from 'lucide-react';
 import { Acquisition } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { SchemaBinding } from '../../hooks/useSchemaService';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import CustomTooltip from '../common/CustomTooltip';
-import { formatFieldValue, formatFieldTypeInfo, formatSeriesFieldValue } from '../../utils/fieldFormatters';
+import StatusIcon from '../common/StatusIcon';
+import { formatFieldValue, formatFieldTypeInfo, formatSeriesFieldValue, buildValidationRuleFromField } from '../../utils/fieldFormatters';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 
 interface CombinedComplianceViewProps {
@@ -126,29 +127,12 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
     runValidation();
   }, [acquisition, schemaAcquisition, pairing?.schemaId, pairing?.acquisitionId]);
 
-  const getStatusIcon = (status: ComplianceFieldResult['status']) => {
-    const iconProps = { className: "h-4 w-4" };
-
-    switch (status) {
-      case 'pass':
-        return <CheckCircle {...iconProps} className="h-4 w-4 text-green-600" />;
-      case 'fail':
-        return <XCircle {...iconProps} className="h-4 w-4 text-red-600" />;
-      case 'warning':
-        return <AlertTriangle {...iconProps} className="h-4 w-4 text-yellow-600" />;
-      case 'na':
-        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-500" />;
-      case 'unknown':
-        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-400" />;
-    }
-  };
-
   // Helper to render status with optional inline message for print mode
   const renderStatusWithMessage = (status: ComplianceFieldResult['status'], message: string) => {
     if (printMode) {
       return (
         <div className="flex items-start space-x-2">
-          <div className="flex-shrink-0 mt-0.5">{getStatusIcon(status)}</div>
+          <div className="flex-shrink-0 mt-0.5"><StatusIcon status={status} /></div>
           <p className="text-xs text-gray-700">{message}</p>
         </div>
       );
@@ -156,7 +140,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
     return (
       <CustomTooltip content={message}>
         <div className="inline-flex items-center justify-center cursor-help">
-          {getStatusIcon(status)}
+          <StatusIcon status={status} />
         </div>
       </CustomTooltip>
     );
@@ -235,13 +219,13 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Rule
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
                     Description
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                  <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
                     Status
                   </th>
                 </tr>
@@ -260,7 +244,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
                   return (
                     <tr key={idx} className={rowBgClass}>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-1.5">
                         <p className="text-sm font-medium text-gray-900">{rule.customName || rule.name}</p>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {(rule.customFields || rule.fields).map(field => (
@@ -270,8 +254,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{rule.customDescription || rule.description}</td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-2 py-1.5 text-sm text-gray-900">{rule.customDescription || rule.description}</td>
+                      <td className="px-2 py-1.5 text-center">
                         {isValidating ? (
                           <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
                         ) : result ? (
@@ -295,19 +279,19 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
+                <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
                   Acquisition Field
                 </th>
                 {schemaAcquisition && (
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
+                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
                     Expected Value
                   </th>
                 )}
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
+                <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
                   Actual Value
                 </th>
                 {schemaAcquisition && (
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                  <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
                     Status
                   </th>
                 )}
@@ -333,12 +317,12 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
                 return (
                   <tr key={tag} className={rowBgClass}>
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-1.5">
                       <p className="text-sm font-medium text-gray-900">{dataField?.name || schemaField?.name}</p>
                       <p className="text-xs text-gray-500">{tag}</p>
                     </td>
                     {schemaAcquisition && (
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-1.5">
                         {schemaField ? (
                           <div>
                             {/* Format value directly from schema field, like AcquisitionTable does */}
@@ -358,7 +342,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                         )}
                       </td>
                     )}
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-1.5">
                       {dataField ? (
                         <p className="text-sm text-gray-900">{formatFieldValue(dataField)}</p>
                       ) : (
@@ -366,7 +350,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                       )}
                     </td>
                     {schemaAcquisition && (
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-2 py-1.5 text-center">
                         {isValidating ? (
                           <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
                         ) : result ? (
@@ -442,17 +426,17 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
                 Series
               </th>
               {fieldTagsArray.map(tag => (
-                <th key={tag} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th key={tag} className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
                   {fieldTagToName.get(tag)}
                   <div className="text-xs text-gray-400 font-mono normal-case font-normal">{tag}</div>
                 </th>
               ))}
               {schemaAcquisition && (
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
                   Status
                 </th>
               )}
@@ -495,7 +479,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
               return (
                 <tr key={idx} className={rowBgClass}>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                  <td className="px-2 py-1.5 text-sm font-medium text-gray-900">
                     {series.name || `Series ${idx + 1}`}
                   </td>
                   {fieldTagsArray.map(tag => {
@@ -505,24 +489,24 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                       // Object format
                       const fieldData = series.fields[tag];
                       if (fieldData && fieldData.value !== undefined) {
-                        fieldValue = formatSeriesFieldValue(fieldData.value);
+                        fieldValue = formatSeriesFieldValue(fieldData.value, fieldData.validationRule);
                       }
                     } else if (Array.isArray(series.fields)) {
                       // Array format
                       const field = series.fields.find((f: any) => f.tag === tag);
                       if (field && field.value !== undefined) {
-                        fieldValue = formatSeriesFieldValue(field.value);
+                        fieldValue = formatSeriesFieldValue(field.value, field.validationRule);
                       }
                     }
 
                     return (
-                      <td key={tag} className="px-4 py-3">
+                      <td key={tag} className="px-2 py-1.5">
                         <p className="text-sm text-gray-900">{fieldValue}</p>
                       </td>
                     );
                   })}
                   {schemaAcquisition && (
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-2 py-1.5 text-center">
                       {isValidating ? (
                         <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
                       ) : seriesResults.length > 0 ? (
@@ -553,29 +537,37 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
     // Get all series validation results
     const seriesValidationResults = results.filter(r => r.validationType === 'series');
 
-    // Get unique field names across all series
-    const allFieldNames = new Set<string>();
+    // Get unique fields (name + tag) across all series
+    const allFields = new Map<string, { name: string; tag: string }>();
     schemaSeries.forEach(series => {
       if (Array.isArray(series.fields)) {
-        series.fields.forEach((f: any) => allFieldNames.add(f.name || f.field));
+        series.fields.forEach((f: any) => {
+          const name = f.name || f.field;
+          if (!allFields.has(name)) {
+            allFields.set(name, { name, tag: f.tag || '' });
+          }
+        });
       }
     });
-    const fieldNamesArray = Array.from(allFieldNames);
+    const fieldsArray = Array.from(allFields.values());
 
     return (
       <div className="border border-gray-200 rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
                 Expected Series
               </th>
-              {fieldNamesArray.map(fieldName => (
-                <th key={fieldName} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  {fieldName}
+              {fieldsArray.map(field => (
+                <th key={field.name} className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+                  <div>
+                    <p className="font-medium">{field.name}</p>
+                    {field.tag && <p className="text-xs font-normal text-gray-400 font-mono">{field.tag}</p>}
+                  </div>
                 </th>
               ))}
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">
+              <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
                 Status
               </th>
             </tr>
@@ -617,28 +609,37 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
               return (
                 <tr key={idx} className={rowBgClass}>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                  <td className="px-2 py-1.5 text-sm font-medium text-gray-900">
                     {series.name}
                   </td>
-                  {fieldNamesArray.map(fieldName => {
+                  {fieldsArray.map(headerField => {
                     // Get the expected value from schema series
                     let fieldValue = '—';
+                    let fieldTypeInfo = '';
                     if (Array.isArray(series.fields)) {
                       const field = series.fields.find((f: any) =>
-                        (f.name || f.field) === fieldName
+                        (f.name || f.field) === headerField.name
                       );
                       if (field) {
-                        fieldValue = formatSeriesFieldValue(field.value);
+                        // Build validationRule from raw schema properties if not present
+                        const validationRule = buildValidationRuleFromField(field);
+                        fieldValue = formatSeriesFieldValue(field.value, validationRule);
+                        // Show data type and constraint info (same as Schema Builder)
+                        const dataType = inferDataTypeFromValue(field.value);
+                        fieldTypeInfo = formatFieldTypeInfo(dataType, validationRule);
                       }
                     }
 
                     return (
-                      <td key={fieldName} className="px-4 py-3">
+                      <td key={headerField.name} className="px-2 py-1.5">
                         <p className="text-sm text-gray-900">{fieldValue}</p>
+                        {fieldTypeInfo && (
+                          <p className="text-xs text-gray-500">{fieldTypeInfo}</p>
+                        )}
                       </td>
                     );
                   })}
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-2 py-1.5 text-center">
                     {isValidating ? (
                       <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
                     ) : (
@@ -690,18 +691,18 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-red-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
                   Missing Series
                 </th>
                 {fieldTagsArray.map(tag => {
                   const field = missingSeries.flatMap(s => s.fields || []).find((f: any) => f.tag === tag);
                   return (
-                    <th key={tag} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th key={tag} className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
                       {field?.name || tag}
                     </th>
                   );
                 })}
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
                   Status
                 </th>
               </tr>
@@ -720,7 +721,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
                 return (
                   <tr key={idx} className="bg-red-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                    <td className="px-2 py-1.5 text-sm font-medium text-gray-900">
                       {series.name || `Series ${idx + 1}`}
                     </td>
                     {fieldTagsArray.map(tag => {
@@ -729,16 +730,14 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                         : null;
 
                       return (
-                        <td key={tag} className="px-4 py-3">
+                        <td key={tag} className="px-2 py-1.5">
                           {schemaField ? (
                             <div>
-                              <p className="text-sm text-gray-900">{formatSeriesFieldValue(schemaField.value)}</p>
+                              <p className="text-sm text-gray-900">{formatSeriesFieldValue(schemaField.value, schemaField.validationRule)}</p>
                               <p className="text-xs text-gray-500 mt-0.5">
                                 {formatFieldTypeInfo(
                                   inferDataTypeFromValue(schemaField.value),
-                                  typeof schemaField.value === 'object' && 'validationRule' in schemaField.value
-                                    ? schemaField.value.validationRule
-                                    : undefined
+                                  schemaField.validationRule
                                 )}
                               </p>
                             </div>
@@ -748,7 +747,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                         </td>
                       );
                     })}
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-2 py-1.5 text-center">
                       {renderStatusWithMessage('fail', tooltipMessage)}
                     </td>
                   </tr>

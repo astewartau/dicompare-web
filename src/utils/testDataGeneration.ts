@@ -224,15 +224,20 @@ export function generateValueFromField(field: DicomField): any {
       } else if (rule.type === 'contains') {
         return rule.contains || 'test_value';
       } else if (rule.type === 'contains_any' && rule.contains_any) {
-        // For ImageType with contains_any: ["M"] or ["P"], generate appropriate list
-        if (dataType === 'list_string') {
-          return ['ORIGINAL', 'PRIMARY', ...rule.contains_any];
+        // For contains_any: include at least one element from the list
+        if (dataType === 'list_string' || dataType === 'list_number') {
+          // Return the first element as a single-item list (satisfies "contains any")
+          return [rule.contains_any[0]];
         }
+        // For strings: use the first value as the string content
         return rule.contains_any[0] || 'test_value';
       } else if (rule.type === 'contains_all' && rule.contains_all) {
-        if (dataType === 'list_string') {
-          return ['ORIGINAL', 'PRIMARY', ...rule.contains_all];
+        // For contains_all: include all required elements
+        if (dataType === 'list_string' || dataType === 'list_number') {
+          // Return all required elements (satisfies "contains all")
+          return [...rule.contains_all];
         }
+        // For strings: join all values (less common use case)
         return rule.contains_all.join('_');
       }
     }
@@ -251,8 +256,18 @@ export function generateValueFromField(field: DicomField): any {
     } else if (rule.type === 'contains') {
       return rule.contains || 'test_value';
     } else if (rule.type === 'contains_any' && rule.contains_any) {
+      // For contains_any: include at least one element from the list
+      const dataType = inferDataTypeFromValue(field.value);
+      if (dataType === 'list_string' || dataType === 'list_number') {
+        return [rule.contains_any[0]];
+      }
       return rule.contains_any[0] || 'test_value';
     } else if (rule.type === 'contains_all' && rule.contains_all) {
+      // For contains_all: include all required elements
+      const dataType = inferDataTypeFromValue(field.value);
+      if (dataType === 'list_string' || dataType === 'list_number') {
+        return [...rule.contains_all];
+      }
       return rule.contains_all.join('_');
     }
   }
@@ -332,8 +347,27 @@ export function generateTestDataFromSchema(
           }
 
           if (seriesField) {
+            // Debug: log what we found
+            console.log('🔍 Series field found:', {
+              fieldName: field.name,
+              fieldTag: field.tag,
+              seriesField: seriesField,
+              value: seriesField.value,
+              validationRule: seriesField.validationRule,
+              hasContainsAny: !!seriesField.contains_any,
+              hasContainsAll: !!seriesField.contains_all,
+              ruleContainsAny: seriesField.validationRule?.contains_any,
+              ruleContainsAll: seriesField.validationRule?.contains_all
+            });
+
             // Extract the actual value from the series field
-            if (seriesField.value !== undefined) {
+            // Check if value is meaningful (not undefined, null, or empty string)
+            const hasValue = seriesField.value !== undefined &&
+                            seriesField.value !== null &&
+                            seriesField.value !== '' &&
+                            !(Array.isArray(seriesField.value) && seriesField.value.length === 0);
+
+            if (hasValue) {
               // Check if value has nested validation rule structure
               if (typeof seriesField.value === 'object' && !Array.isArray(seriesField.value) &&
                   (seriesField.value as any).validationRule) {
@@ -350,6 +384,31 @@ export function generateTestDataFromSchema(
                 ...field,
                 validationRule: seriesField.validationRule
               });
+            } else if (seriesField.contains_any) {
+              // Handle top-level contains_any constraint (from JSON schema format)
+              const dataType = field.dataType || inferDataTypeFromValue(field.value);
+              if (dataType === 'list_string' || dataType === 'list_number') {
+                row[field.name] = [seriesField.contains_any[0]];
+              } else {
+                row[field.name] = seriesField.contains_any[0] || 'test_value';
+              }
+            } else if (seriesField.contains_all) {
+              // Handle top-level contains_all constraint (from JSON schema format)
+              const dataType = field.dataType || inferDataTypeFromValue(field.value);
+              if (dataType === 'list_string' || dataType === 'list_number') {
+                row[field.name] = [...seriesField.contains_all];
+              } else {
+                row[field.name] = seriesField.contains_all.join('_');
+              }
+            } else if (seriesField.contains) {
+              // Handle top-level contains constraint
+              row[field.name] = seriesField.contains;
+            } else if (seriesField.tolerance !== undefined) {
+              // Handle top-level tolerance constraint (value with tolerance)
+              row[field.name] = seriesField.value ?? 0;
+            } else if (seriesField.min !== undefined || seriesField.max !== undefined) {
+              // Handle top-level range constraint
+              row[field.name] = seriesField.min ?? seriesField.max ?? 0;
             } else {
               row[field.name] = generateValueFromField(field);
             }

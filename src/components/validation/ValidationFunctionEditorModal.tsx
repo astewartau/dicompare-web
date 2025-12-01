@@ -55,7 +55,13 @@ return test_data`;
     if (func) {
       // Auto-detect system fields that exist in test data
       // If a test case has data for a system field (e.g., 'Count'), automatically enable it
-      const testCases = func.customTestCases || func.testCases || [];
+      // Convert test cases, handling legacy expectedToPass -> expectedResult conversion
+      const rawTestCases = func.customTestCases || func.testCases || [];
+      const testCases = rawTestCases.map(tc => ({
+        ...tc,
+        // Convert legacy expectedToPass (boolean) to expectedResult (string) if needed
+        expectedResult: tc.expectedResult || (tc.expectedToPass === false ? 'fail' : 'pass')
+      }));
       const detectedSystemFields = new Set(func.enabledSystemFields || []);
 
       // Check all test cases for system field data

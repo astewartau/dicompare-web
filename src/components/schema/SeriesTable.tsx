@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit2, ArrowLeftRight, CheckCircle, XCircle, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, ArrowLeftRight } from 'lucide-react';
 import { Series, SeriesField } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { formatSeriesFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
 import CustomTooltip from '../common/CustomTooltip';
+import StatusIcon from '../common/StatusIcon';
 import FieldEditModal from './FieldEditModal';
 
 interface SeriesTableProps {
@@ -71,22 +72,6 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
     };
   };
 
-  const getStatusIcon = (status: ComplianceFieldResult['status']) => {
-    const iconProps = { className: "h-4 w-4" };
-
-    switch (status) {
-      case 'pass':
-        return <CheckCircle {...iconProps} className="h-4 w-4 text-green-600" />;
-      case 'fail':
-        return <XCircle {...iconProps} className="h-4 w-4 text-red-600" />;
-      case 'warning':
-        return <AlertTriangle {...iconProps} className="h-4 w-4 text-yellow-600" />;
-      case 'na':
-        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-500" />;
-      case 'unknown':
-        return <HelpCircle {...iconProps} className="h-4 w-4 text-gray-400" />;
-    }
-  };
 
   // Helper function to get fields as array (handles both array and object formats)
   const getFieldsArray = (fields: any): SeriesField[] => {
@@ -126,7 +111,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
     if (series[i]) {
       displaySeries.push(series[i]);
     } else {
-      displaySeries.push({ name: `Series ${i + 1}`, fields: [] });
+      displaySeries.push({ name: `Series ${String(i + 1).padStart(2, '0')}`, fields: [] });
     }
   }
 
@@ -212,7 +197,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-medical-500 rounded px-1 py-0.5 -mx-1 -my-0.5 text-xs w-full"
                       onBlur={(e) => {
                         if (!e.target.value.trim()) {
-                          onSeriesNameUpdate(seriesIndex, `Series ${seriesIndex + 1}`);
+                          onSeriesNameUpdate(seriesIndex, `Series ${String(seriesIndex + 1).padStart(2, '0')}`);
                         }
                       }}
                     />
@@ -251,7 +236,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <p className="text-xs text-gray-900 break-words">
-                              {seriesField ? formatSeriesFieldValue(seriesField.value) : '-'}
+                              {seriesField ? formatSeriesFieldValue(seriesField.value, seriesField.validationRule) : '-'}
                             </p>
                             {isEditMode && seriesField && (
                               <p className="text-xs text-gray-500 mt-0.5">
@@ -286,7 +271,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                             delay={100}
                           >
                             <div className="inline-flex items-center justify-center cursor-help">
-                              {getStatusIcon('unknown')}
+                              <StatusIcon status="unknown" />
                             </div>
                           </CustomTooltip>
                         );
@@ -299,7 +284,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                           delay={100}
                         >
                           <div className="inline-flex items-center justify-center cursor-help">
-                            {getStatusIcon(seriesResult.status)}
+                            <StatusIcon status={seriesResult.status} />
                           </div>
                         </CustomTooltip>
                       );
@@ -327,7 +312,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
           </tbody>
         </table>
       </div>
-      
+
       {/* Add Series Button */}
       {isEditMode && (
         <div className="bg-gray-50 px-2 py-1.5 border-t border-gray-200">

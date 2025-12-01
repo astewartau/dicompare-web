@@ -1179,7 +1179,7 @@ const DataLoadingAndMatching: React.FC = () => {
               {isExtra ? 'Upload More DICOM Files' : 'Load Data for Compliance Testing'}
             </h3>
             <p className="text-gray-600 mb-4">
-              Drag and drop DICOM files, Siemens .pro files, or zip archives, or select a schema to generate test data
+              Drag and drop DICOM files (or .zip), Siemens .pro files, or select a schema to generate test data
             </p>
 
             <input

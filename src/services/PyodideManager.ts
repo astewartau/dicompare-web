@@ -65,8 +65,8 @@ class PyodideManager {
                           import.meta.env.DEV;
 
     const packageSource = isDevelopment
-      ? 'http://localhost:8000/dist/dicompare-0.1.36-py3-none-any.whl'
-      : 'dicompare==0.1.37';
+      ? 'http://localhost:8000/dist/dicompare-0.1.38-py3-none-any.whl'
+      : 'dicompare==0.1.38';
 
     console.log(`📦 Installing dicompare from ${isDevelopment ? 'local development server' : 'PyPI'}...`);
 

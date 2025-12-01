@@ -85,7 +85,6 @@ export interface ValidationTemplate {
     description: string;
     created: string;
     acquisitions: any[];
-    global_constraints: Record<string, any>;
   };
   statistics: {
     total_acquisitions: number;
@@ -393,138 +392,72 @@ json.dumps(results)
         return fieldEntry;
       }) || [];
       
-      // Transform series data
+      // Transform series data - handles array format where series.fields is an array of field objects
       const seriesData = acquisition.series?.map((series: any) => {
-        const seriesFields = acquisition.seriesFields?.map((seriesField: any) => {
-          const fieldValue = series.fields?.[seriesField.tag];
+        // Get fields from series.fields array (new format)
+        const fieldsArray = Array.isArray(series.fields) ? series.fields : [];
+
+        const seriesFields = fieldsArray.map((field: any) => {
           const fieldEntry: any = {
-            field: seriesField.keyword || seriesField.name || '',
-            tag: seriesField.tag
+            field: field.keyword || field.name || '',
+            tag: field.tag
           };
-          
-          // FIXED: Handle series field values with flat structure
-          // Check both fieldValue from series.fields and seriesField.value as fallback
-          const valueToProcess = fieldValue !== undefined ? fieldValue : seriesField.value;
-          
-          if (valueToProcess && typeof valueToProcess === 'object' && ('value' in valueToProcess || 'validationRule' in valueToProcess || 'dataType' in valueToProcess)) {
-            // Extract the actual value and validation rule from the value object
-            // Handle case where there's no 'value' field but there is validationRule/dataType
-            const actualValue = 'value' in valueToProcess ? valueToProcess.value : undefined;
-            const validationRule = valueToProcess.validationRule;
-            
-            if (validationRule) {
-              switch (validationRule.type) {
-                case 'tolerance':
-                  if (validationRule.value !== undefined && validationRule.tolerance !== undefined) {
-                    fieldEntry.value = validationRule.value;
-                    fieldEntry.tolerance = validationRule.tolerance;
-                  } else {
-                    fieldEntry.value = actualValue;
-                  }
-                  break;
-                case 'range':
-                  if (validationRule.min !== undefined && validationRule.max !== undefined) {
-                    fieldEntry.value = (validationRule.min + validationRule.max) / 2;
-                    fieldEntry.tolerance = (validationRule.max - validationRule.min) / 2;
-                  } else {
-                    fieldEntry.value = actualValue;
-                  }
-                  break;
-                case 'contains':
-                  if (validationRule.contains !== undefined) {
-                    fieldEntry.contains = validationRule.contains;
-                    // Don't include value for contains validation - remove any existing value
-                    delete fieldEntry.value;
-                  } else {
-                    fieldEntry.value = actualValue;
-                  }
-                  break;
-                case 'contains_any':
-                  if (validationRule.contains_any !== undefined && Array.isArray(validationRule.contains_any)) {
-                    fieldEntry.contains_any = validationRule.contains_any;
-                    // Don't include value for contains_any validation - remove any existing value
-                    delete fieldEntry.value;
-                  } else {
-                    fieldEntry.value = actualValue;
-                  }
-                  break;
-                case 'contains_all':
-                  if (validationRule.contains_all !== undefined && Array.isArray(validationRule.contains_all)) {
-                    fieldEntry.contains_all = validationRule.contains_all;
-                    // Don't include value for contains_all validation - remove any existing value
-                    delete fieldEntry.value;
-                  } else {
-                    fieldEntry.value = actualValue;
-                  }
-                  break;
-                case 'exact':
-                default:
+
+          // Get the value and validation rule directly from the field object
+          const actualValue = field.value;
+          const validationRule = field.validationRule;
+
+          if (validationRule) {
+            switch (validationRule.type) {
+              case 'tolerance':
+                if (validationRule.value !== undefined && validationRule.tolerance !== undefined) {
+                  fieldEntry.value = validationRule.value;
+                  fieldEntry.tolerance = validationRule.tolerance;
+                } else {
                   fieldEntry.value = actualValue;
-                  break;
-              }
-            } else {
-              fieldEntry.value = actualValue;
+                }
+                break;
+              case 'range':
+                if (validationRule.min !== undefined && validationRule.max !== undefined) {
+                  fieldEntry.value = (validationRule.min + validationRule.max) / 2;
+                  fieldEntry.tolerance = (validationRule.max - validationRule.min) / 2;
+                } else {
+                  fieldEntry.value = actualValue;
+                }
+                break;
+              case 'contains':
+                if (validationRule.contains !== undefined) {
+                  fieldEntry.contains = validationRule.contains;
+                } else {
+                  fieldEntry.value = actualValue;
+                }
+                break;
+              case 'contains_any':
+                if (validationRule.contains_any !== undefined && Array.isArray(validationRule.contains_any)) {
+                  fieldEntry.contains_any = validationRule.contains_any;
+                } else {
+                  fieldEntry.value = actualValue;
+                }
+                break;
+              case 'contains_all':
+                if (validationRule.contains_all !== undefined && Array.isArray(validationRule.contains_all)) {
+                  fieldEntry.contains_all = validationRule.contains_all;
+                } else {
+                  fieldEntry.value = actualValue;
+                }
+                break;
+              case 'exact':
+              default:
+                fieldEntry.value = actualValue;
+                break;
             }
           } else {
-            // Direct primitive value - also check for seriesField.validationRule
-            const seriesFieldValidationRule = seriesField.validationRule;
-            
-            if (seriesFieldValidationRule && valueToProcess !== undefined) {
-              // Apply series field validation rule to the primitive value
-              switch (seriesFieldValidationRule.type) {
-                case 'tolerance':
-                  if (seriesFieldValidationRule.value !== undefined && seriesFieldValidationRule.tolerance !== undefined) {
-                    fieldEntry.value = seriesFieldValidationRule.value;
-                    fieldEntry.tolerance = seriesFieldValidationRule.tolerance;
-                  } else {
-                    fieldEntry.value = valueToProcess;
-                  }
-                  break;
-                case 'range':
-                  if (seriesFieldValidationRule.min !== undefined && seriesFieldValidationRule.max !== undefined) {
-                    fieldEntry.value = (seriesFieldValidationRule.min + seriesFieldValidationRule.max) / 2;
-                    fieldEntry.tolerance = (seriesFieldValidationRule.max - seriesFieldValidationRule.min) / 2;
-                  } else {
-                    fieldEntry.value = valueToProcess;
-                  }
-                  break;
-                case 'contains':
-                  if (seriesFieldValidationRule.contains !== undefined) {
-                    fieldEntry.contains = seriesFieldValidationRule.contains;
-                    // Don't include value for contains validation
-                  } else {
-                    fieldEntry.value = valueToProcess;
-                  }
-                  break;
-                case 'contains_any':
-                  if (seriesFieldValidationRule.contains_any !== undefined && Array.isArray(seriesFieldValidationRule.contains_any)) {
-                    fieldEntry.contains_any = seriesFieldValidationRule.contains_any;
-                    // Don't include value for contains_any validation
-                  } else {
-                    fieldEntry.value = valueToProcess;
-                  }
-                  break;
-                case 'contains_all':
-                  if (seriesFieldValidationRule.contains_all !== undefined && Array.isArray(seriesFieldValidationRule.contains_all)) {
-                    fieldEntry.contains_all = seriesFieldValidationRule.contains_all;
-                    // Don't include value for contains_all validation
-                  } else {
-                    fieldEntry.value = valueToProcess;
-                  }
-                  break;
-                case 'exact':
-                default:
-                  fieldEntry.value = valueToProcess;
-                  break;
-              }
-            } else {
-              fieldEntry.value = valueToProcess;
-            }
+            fieldEntry.value = actualValue;
           }
-          
+
           return fieldEntry;
-        }).filter((field: any) => field.value !== undefined || field.contains !== undefined || field.tolerance !== undefined || field.contains_any !== undefined || field.contains_all !== undefined) || [];
-        
+        }).filter((field: any) => field.value !== undefined || field.contains !== undefined || field.tolerance !== undefined || field.contains_any !== undefined || field.contains_all !== undefined);
+
         return {
           name: series.name,
           fields: seriesFields
@@ -556,8 +489,7 @@ json.dumps(results)
       description: metadata.description || 'Auto-generated validation template',
       created: new Date().toISOString(),
       authors: metadata.authors || ['Unknown'],
-      acquisitions: dicompareAcquisitions,
-      global_constraints: metadata.globalConstraints || {}
+      acquisitions: dicompareAcquisitions
     };
     
     // Calculate statistics
@@ -819,8 +751,8 @@ json.dumps(result)
    */
   async parseSchema(schemaContent: string, format: string = 'json'): Promise<ParsedSchema> {
     await this.ensureInitialized();
-    
-    // Use the real dicompare.io.load_json_schema with error handling wrapper
+
+    // Use load_schema (handles both simple and hybrid schemas)
     const result = await pyodideManager.runPython(`
 import json
 
@@ -828,8 +760,8 @@ try:
     if "${format}" != "json":
         result = {"error": f"Unsupported format: ${format}"}
     else:
-        # Use real dicompare.io.load_json_schema function
-        schema = dicompare.io.load_json_schema(${JSON.stringify(schemaContent)})
+        # Use load_schema - works for all schema types
+        schema = dicompare.io.load_schema(${JSON.stringify(schemaContent)})
         
         # Convert to expected parsed schema format
         fields = []
@@ -888,9 +820,7 @@ json.dumps(result)
 
   /**
    * Perform compliance checking using schema rules vs DICOM data.
-   * Uses the real dicompare two-step process:
-   * 1. check_session_compliance_with_json_schema() 
-   * 2. format_compliance_results_for_web()
+   * Uses dicompare's check_acquisition_compliance() function for validation.
    * Uses cached DataFrame when dicomData is null (like real implementation).
    */
   async validateCompliance(dicomData: AnalysisResult | null, schemaContent: string, format: string = 'json'): Promise<ComplianceReport> {
@@ -1268,10 +1198,10 @@ import json
 
 try:
     # Import the dicompare test factory
-    from dicompare.tests.test_dicom_factory import DicomTestFactory
-    
+    from dicompare.tests.test_dicom_factory import DicomFactory
+
     # Create test factory instance (uses in-memory storage)
-    factory = DicomTestFactory()
+    factory = DicomFactory()
     
     # Generate T1 MPRAGE acquisition (5 slices for quick processing)
     print("Generating T1 MPRAGE test DICOMs...")
@@ -1454,7 +1384,7 @@ try:
                 for series_field in series_fields:
                     field_name = series_field['name']
                     tag = series_field['tag']
-                    
+
                     if field_name in series_data.columns:
                         field_values = series_data[field_name].dropna().unique()
                         if len(field_values) > 0:
@@ -1466,11 +1396,16 @@ try:
                                     value = list(value)
                                 else:
                                     value = str(value) if not isinstance(value, (int, float, bool)) else value
-                            series_fields_dict[tag] = value
+                            # Store as object with value, field name, and tag for proper rendering
+                            series_fields_dict[tag] = {
+                                "value": value,
+                                "field": field_name,
+                                "name": field_name,
+                                "tag": tag
+                            }
                 
-                clean_name = series_name.split('_Series_')[-1] if '_Series_' in series_name else f"Series_{len(series) + 1}"
                 series.append({
-                    "name": f"Series_{clean_name}",
+                    "name": series_name,
                     "fields": series_fields_dict
                 })
         
@@ -1993,9 +1928,8 @@ try:
         print(f"Hybrid schema loaded: {len(fields) if fields else 0} fields, {len(validation_rules) if validation_rules else 0} rules")
     except Exception as e:
         print(f"Hybrid schema loading failed, falling back to legacy: {e}")
-        fields, schema_data = dicompare.load_json_schema(temp_schema_path)
-        validation_rules = None
-        print(f"Legacy schema loaded: {len(fields) if fields else 0} fields")
+        fields, schema_data, validation_rules = dicompare.io.load_schema(temp_schema_path)
+        print(f"Schema loaded: {len(fields) if fields else 0} fields, {len(validation_rules) if validation_rules else 0} rules")
     
     # Create session mapping - map schema acquisition names to actual acquisition names
     # From UI: we know this acquisition (acq_data['id']) should map to the schema
@@ -2126,8 +2060,8 @@ try:
                 status = 'na'  # Field not applicable/not found
             elif status_value == 'warning':
                 status = 'warning'
-            elif status_value == 'pass':
-                status = 'pass'
+            elif status_value in ['pass', 'ok']:
+                status = 'pass'  # dicompare uses 'ok' for passing
             elif status_value in ['fail', 'error']:
                 status = 'fail'
             else:
@@ -2288,27 +2222,44 @@ json.dumps(result)
       await pyodideManager.setPythonGlobal('test_data_rows', testData);
 
       const result = await pyodideManager.runPythonAsync(`
-from dicompare.io import categorize_fields, get_unhandled_field_warnings
 import json
 
-# Convert JS data to Python
-field_defs = field_definitions.to_py() if hasattr(field_definitions, 'to_py') else field_definitions
-test_rows = test_data_rows.to_py() if hasattr(test_data_rows, 'to_py') else test_data_rows
+try:
+    from dicompare.io import categorize_fields, get_unhandled_field_warnings
 
-# Categorize fields
-categorized = categorize_fields(field_defs)
+    # Convert JS data to Python
+    field_defs = field_definitions.to_py() if hasattr(field_definitions, 'to_py') else field_definitions
+    test_rows = test_data_rows.to_py() if hasattr(test_data_rows, 'to_py') else test_data_rows
 
-# Get warnings for unhandled fields
-warnings = get_unhandled_field_warnings(field_defs, test_rows)
+    # Categorize fields
+    categorized = categorize_fields(field_defs)
 
-result = {
-    'standardFields': len(categorized['standard']),
-    'handledFields': len(categorized['handled']),
-    'unhandledFields': len(categorized['unhandled']),
-    'unhandledFieldWarnings': warnings
-}
+    # Get warnings for unhandled fields
+    warnings = get_unhandled_field_warnings(field_defs, test_rows)
 
-json.dumps(result)
+    output = {
+        'standardFields': len(categorized['standard']),
+        'handledFields': len(categorized['handled']),
+        'unhandledFields': len(categorized['unhandled']),
+        'unhandledFieldWarnings': warnings
+    }
+except ImportError as e:
+    # Functions not available in this version of dicompare
+    output = {
+        'standardFields': 0,
+        'handledFields': 0,
+        'unhandledFields': 0,
+        'unhandledFieldWarnings': []
+    }
+except Exception as e:
+    output = {
+        'standardFields': 0,
+        'handledFields': 0,
+        'unhandledFields': 0,
+        'unhandledFieldWarnings': [f'Error categorizing fields: {str(e)}']
+    }
+
+return json.dumps(output)
 `);
 
       return JSON.parse(result as string);

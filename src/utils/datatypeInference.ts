@@ -1,6 +1,29 @@
-import { FieldDataType } from '../types';
+import { FieldDataType, ValidationRule } from '../types';
 import { getDataTypeFromVR } from './vrMapping';
 import { searchDicomFields, suggestDataType } from '../services/dicomFieldService';
+
+/**
+ * Builds a ValidationRule from schema field properties (tolerance, min/max, contains, etc.)
+ * Used by both acquisition and series field processors
+ */
+export function buildValidationRuleFromSchema(schemaField: any): ValidationRule {
+  if (schemaField.tolerance !== undefined) {
+    return { type: 'tolerance', value: schemaField.value, tolerance: schemaField.tolerance };
+  }
+  if (schemaField.min !== undefined && schemaField.max !== undefined) {
+    return { type: 'range', min: schemaField.min, max: schemaField.max };
+  }
+  if (schemaField.contains !== undefined) {
+    return { type: 'contains', contains: schemaField.contains };
+  }
+  if (schemaField.contains_any !== undefined) {
+    return { type: 'contains_any', contains_any: schemaField.contains_any };
+  }
+  if (schemaField.contains_all !== undefined) {
+    return { type: 'contains_all', contains_all: schemaField.contains_all };
+  }
+  return { type: 'exact', value: schemaField.value };
+}
 
 /**
  * Infers the data type from a given value
@@ -49,9 +72,11 @@ export function convertValueToDataType(value: any, dataType: FieldDataType): any
 
     case 'number':
       if (Array.isArray(value)) {
-        return value.length > 0 ? Number(value[0]) || 0 : 0;
+        const first = value.length > 0 ? Number(value[0]) : 0;
+        return isNaN(first) ? 0 : first;
       }
-      return Number(value) || 0;
+      const num = Number(value);
+      return isNaN(num) ? 0 : num;
 
     case 'list_string':
       if (Array.isArray(value)) {
@@ -132,58 +157,12 @@ export function processSchemaFieldForUI(schemaField: any): any {
     dataType = inferDataTypeFromValue(schemaField.value);
   }
 
-  // Build validation rule from schema properties
-  let validationRule: any = { type: 'exact' };
-
-  // Check for tolerance validation
-  if (schemaField.tolerance !== undefined) {
-    validationRule = {
-      type: 'tolerance',
-      value: schemaField.value,
-      tolerance: schemaField.tolerance
-    };
-  }
-  // Check for range validation
-  else if (schemaField.min !== undefined && schemaField.max !== undefined) {
-    validationRule = {
-      type: 'range',
-      min: schemaField.min,
-      max: schemaField.max
-    };
-  }
-  // Check for contains validation
-  else if (schemaField.contains !== undefined) {
-    validationRule = {
-      type: 'contains',
-      contains: schemaField.contains
-    };
-  }
-  // Check for contains_any validation
-  else if (schemaField.contains_any !== undefined) {
-    validationRule = {
-      type: 'contains_any',
-      contains_any: schemaField.contains_any
-    };
-  }
-  // Check for contains_all validation
-  else if (schemaField.contains_all !== undefined) {
-    validationRule = {
-      type: 'contains_all',
-      contains_all: schemaField.contains_all
-    };
-  }
-  // Default to exact match with the value
-  else {
-    validationRule = {
-      type: 'exact',
-      value: schemaField.value
-    };
-  }
+  const validationRule = buildValidationRuleFromSchema(schemaField);
 
   return {
     tag: schemaField.tag,
     name: schemaField.field || schemaField.name || schemaField.tag,
-    keyword: schemaField.keyword,
+    keyword: schemaField.field, // Schema format stores DICOM keyword in 'field'
     value: schemaField.value,
     vr: schemaField.vr || 'UN',
     level: schemaField.level || 'acquisition',
@@ -197,43 +176,7 @@ export function processSchemaFieldForUI(schemaField: any): any {
  */
 export function processSchemaSeriesFieldValue(schemaField: any, fieldName?: string, tag?: string): any {
   const dataType = inferDataTypeFromValue(schemaField.value);
-
-  // Build validation rule from schema properties
-  let validationRule: any = { type: 'exact' };
-
-  if (schemaField.tolerance !== undefined) {
-    validationRule = {
-      type: 'tolerance',
-      value: schemaField.value,
-      tolerance: schemaField.tolerance
-    };
-  } else if (schemaField.min !== undefined && schemaField.max !== undefined) {
-    validationRule = {
-      type: 'range',
-      min: schemaField.min,
-      max: schemaField.max
-    };
-  } else if (schemaField.contains !== undefined) {
-    validationRule = {
-      type: 'contains',
-      contains: schemaField.contains
-    };
-  } else if (schemaField.contains_any !== undefined) {
-    validationRule = {
-      type: 'contains_any',
-      contains_any: schemaField.contains_any
-    };
-  } else if (schemaField.contains_all !== undefined) {
-    validationRule = {
-      type: 'contains_all',
-      contains_all: schemaField.contains_all
-    };
-  } else {
-    validationRule = {
-      type: 'exact',
-      value: schemaField.value
-    };
-  }
+  const validationRule = buildValidationRuleFromSchema(schemaField);
 
   return {
     value: schemaField.value,

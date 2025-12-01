@@ -20,9 +20,9 @@ const DownloadSchema: React.FC = () => {
   const [showConfirmUpdate, setShowConfirmUpdate] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // Generate schema when component mounts
+  // Generate schema when component mounts - uses centralized DicompareAPI.generateSchemaJS()
   useEffect(() => {
-    const generateSchema = () => {
+    const generateSchema = async () => {
       if (!schemaMetadata || acquisitions.length === 0) {
         setError('Missing schema metadata or acquisitions. Please go back and complete the previous steps.');
         return;
@@ -33,179 +33,17 @@ const DownloadSchema: React.FC = () => {
         console.log('Generating schema from acquisitions:', acquisitions);
         console.log('Schema metadata:', schemaMetadata);
 
-        // Create schema directly from acquisitions data (no Python/pyodide needed)
-        const schemaAcquisitions: Record<string, any> = {};
-
-        acquisitions.forEach(acquisition => {
-          const acquisitionName = acquisition.protocolName || acquisition.id || 'Unknown';
-
-          // Transform acquisition fields
-          const acquisitionFields = acquisition.acquisitionFields?.map((field: any) => {
-            const fieldEntry: any = {
-              field: field.keyword || field.name || '',
-              tag: field.tag
-            };
-
-            // Set the field value
-            fieldEntry.value = field.value;
-
-            // Add validation rule properties to the field entry
-            if (field.validationRule) {
-              const rule = field.validationRule;
-              switch (rule.type) {
-                case 'tolerance':
-                  if (rule.tolerance !== undefined) {
-                    fieldEntry.tolerance = rule.tolerance;
-                  }
-                  break;
-                case 'range':
-                  if (rule.min !== undefined) fieldEntry.min = rule.min;
-                  if (rule.max !== undefined) fieldEntry.max = rule.max;
-                  break;
-                case 'contains':
-                  if (rule.contains !== undefined) fieldEntry.contains = rule.contains;
-                  break;
-                case 'contains_any':
-                  if (rule.contains_any !== undefined) fieldEntry.contains_any = rule.contains_any;
-                  break;
-                case 'contains_all':
-                  if (rule.contains_all !== undefined) fieldEntry.contains_all = rule.contains_all;
-                  break;
-              }
-            }
-
-            // Note: vr and dataType are intentionally omitted - not needed in final schema
-            // The schema should contain only: field, tag, value, and validation properties
-
-            return fieldEntry;
-          }) || [];
-
-          // Transform series data
-          const seriesData = acquisition.series?.map((series: any) => {
-            const seriesEntry: any = {
-              name: series.name || 'Unknown Series',
-              fields: []
-            };
-
-            // Convert series fields - handle both array and object structures
-            const seriesFields = series.fields || [];
-
-            if (Array.isArray(seriesFields)) {
-              // Array structure (from DICOM uploads)
-              seriesFields.forEach((seriesField: any) => {
-                const fieldEntry: any = {
-                  field: seriesField.keyword || seriesField.name || '',
-                  tag: seriesField.tag,
-                  value: seriesField.value
-                };
-
-                // Add validation rule properties
-                if (seriesField.validationRule) {
-                  const rule = seriesField.validationRule;
-                  switch (rule.type) {
-                    case 'tolerance':
-                      if (rule.tolerance !== undefined) {
-                        fieldEntry.tolerance = rule.tolerance;
-                      }
-                      break;
-                    case 'range':
-                      if (rule.min !== undefined) fieldEntry.min = rule.min;
-                      if (rule.max !== undefined) fieldEntry.max = rule.max;
-                      break;
-                    case 'contains':
-                      if (rule.contains !== undefined) fieldEntry.contains = rule.contains;
-                      break;
-                    case 'contains_any':
-                      if (rule.contains_any !== undefined) fieldEntry.contains_any = rule.contains_any;
-                      break;
-                    case 'contains_all':
-                      if (rule.contains_all !== undefined) fieldEntry.contains_all = rule.contains_all;
-                      break;
-                  }
-                }
-
-                seriesEntry.fields.push(fieldEntry);
-              });
-            } else if (typeof seriesFields === 'object') {
-              // Object structure (from .pro files) - fields keyed by tag
-              Object.entries(seriesFields).forEach(([tag, fieldData]: [string, any]) => {
-                const fieldEntry: any = {
-                  field: fieldData.keyword || fieldData.field || '',
-                  tag: tag,
-                  value: fieldData.value
-                };
-
-                // Add validation rule properties
-                if (fieldData.validationRule) {
-                  const rule = fieldData.validationRule;
-                  switch (rule.type) {
-                    case 'tolerance':
-                      if (rule.tolerance !== undefined) {
-                        fieldEntry.tolerance = rule.tolerance;
-                      }
-                      break;
-                    case 'range':
-                      if (rule.min !== undefined) fieldEntry.min = rule.min;
-                      if (rule.max !== undefined) fieldEntry.max = rule.max;
-                      break;
-                    case 'contains':
-                      if (rule.contains !== undefined) fieldEntry.contains = rule.contains;
-                      break;
-                    case 'contains_any':
-                      if (rule.contains_any !== undefined) fieldEntry.contains_any = rule.contains_any;
-                      break;
-                    case 'contains_all':
-                      if (rule.contains_all !== undefined) fieldEntry.contains_all = rule.contains_all;
-                      break;
-                  }
-                }
-
-                seriesEntry.fields.push(fieldEntry);
-              });
-            }
-
-            return seriesEntry;
-          }) || [];
-
-          // Transform validation functions
-          const validationRules = acquisition.validationFunctions?.map((rule: any) => ({
-            id: rule.id,
-            name: rule.customName || rule.name,
-            description: rule.customDescription || rule.description,
-            implementation: rule.customImplementation || rule.implementation,
-            fields: rule.customFields || rule.fields || [],
-            testCases: rule.customTestCases || rule.testCases || []
-          })) || [];
-
-          schemaAcquisitions[acquisitionName] = {
-            description: acquisition.seriesDescription || '',
-            fields: acquisitionFields,
-            series: seriesData,
-            rules: validationRules
-          };
-        });
-
-        // Create the complete schema
-        const generatedSchema = {
+        // Use centralized schema generation from DicompareAPI
+        const generatedSchema = await dicompareAPI.generateSchemaJS(acquisitions, {
           name: schemaMetadata.name,
           description: schemaMetadata.description || '',
           version: schemaMetadata.version || '1.0',
-          authors: schemaMetadata.authors || [],
-          acquisitions: schemaAcquisitions,
-          // Add statistics for UI display
-          statistics: {
-            totalAcquisitions: acquisitions.length,
-            totalFields: acquisitions.reduce((sum, acq) =>
-              sum + (acq.acquisitionFields?.length || 0) + (acq.seriesFields?.length || 0), 0),
-            totalSeries: acquisitions.reduce((sum, acq) => sum + (acq.series?.length || 0), 0),
-            totalValidationRules: acquisitions.reduce((sum, acq) =>
-              sum + (acq.validationFunctions?.length || 0), 0)
-          }
-        };
+          authors: schemaMetadata.authors || []
+        });
 
         setSchema(generatedSchema);
         setError(null);
-        console.log('✅ Schema generated successfully (pure JavaScript)');
+        console.log('✅ Schema generated successfully using DicompareAPI.generateSchemaJS()');
       } catch (err) {
         console.error('Failed to generate schema:', err);
         setError(`Failed to generate schema: ${err instanceof Error ? err.message : 'Unknown error'}`);

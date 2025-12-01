@@ -175,19 +175,6 @@ export interface ProcessingProgress {
   percentage: number;
 }
 
-// Public Reports Types
-export interface PublicReport {
-  id: string;
-  title: string;
-  institution: string;
-  studyType: string;
-  description: string;
-  dateCreated: string;
-  tags: string[];
-  downloadUrl?: string;
-  reportType: 'compliance' | 'certificate';
-}
-
 // UI State Types
 export interface AppState {
   currentAcquisitions: Acquisition[];

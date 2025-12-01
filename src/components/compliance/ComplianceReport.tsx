@@ -47,32 +47,6 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
     }
   };
 
-  const calculateOverallStats = () => {
-    let totalPass = 0;
-    let totalFail = 0;
-    let totalWarning = 0;
-    let totalNA = 0;
-    let totalUnknown = 0;
-
-    complianceResults.forEach((results) => {
-      results.forEach((result) => {
-        switch (result.status) {
-          case 'pass': totalPass++; break;
-          case 'fail': totalFail++; break;
-          case 'warning': totalWarning++; break;
-          case 'na': totalNA++; break;
-          case 'unknown': totalUnknown++; break;
-        }
-      });
-    });
-
-    return { totalPass, totalFail, totalWarning, totalNA, totalUnknown };
-  };
-
-  const overallStats = calculateOverallStats();
-  const totalChecks = overallStats.totalPass + overallStats.totalFail + overallStats.totalWarning + overallStats.totalNA + overallStats.totalUnknown;
-  const compliancePercentage = totalChecks > 0 ? Math.round((overallStats.totalPass / totalChecks) * 100) : 0;
-
   return (
     <div className={`bg-white ${className}`}>
       {/* Report Header */}
@@ -106,23 +80,14 @@ const ComplianceReport: React.FC<ComplianceReportProps> = ({
             unknown: results.filter(r => r.status === 'unknown').length
           };
 
-          const acquisitionTotal = Object.values(statusCounts).reduce((a, b) => a + b, 0);
-          const acquisitionCompliance = acquisitionTotal > 0 ? Math.round((statusCounts.pass / acquisitionTotal) * 100) : 0;
-
           return (
             <div key={acquisition.id} className="border border-gray-200 rounded-lg p-6 break-inside-avoid">
               {/* Acquisition Header */}
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-1">
-                    Schema: {pairing.schema.name} v{pairing.schema.version}: {acquisition.seriesDescription}
-                  </h2>
-                  <p className="text-sm text-gray-600">Protocol: {acquisition.protocolName}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-gray-900 mb-1">{acquisitionCompliance}%</div>
-                  <div className="text-xs text-gray-600">Compliance</div>
-                </div>
+              <div className="mb-4 pb-3 border-b border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-900 mb-1">
+                  Schema: {pairing.schema.name} v{pairing.schema.version}: {acquisition.seriesDescription}
+                </h2>
+                <p className="text-sm text-gray-600">Protocol: {acquisition.protocolName}</p>
               </div>
 
               {/* Acquisition Statistics */}
