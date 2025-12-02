@@ -1350,12 +1350,14 @@ try:
         }]
         return json.dumps(error_result)
     
-    # Get session dataframe for field extraction with proper tags and types
+    # Get session dataframe from Python library's cache
+    # IMPORTANT: analyze_dicom_files_for_web already called assign_acquisition_and_run_numbers
+    # and cached the session. We use that SAME session to ensure acquisition names match exactly.
     import pandas as pd
-    from dicompare import async_load_dicom_session, assign_acquisition_and_run_numbers
+    from dicompare.interface.web_utils import _get_cached_session
     from dicompare.schema import get_tag_info, determine_field_type_from_values
     from dicompare import DEFAULT_DICOM_FIELDS
-    
+
     # Helper function for VR lookup
     def _get_vr_for_field(field_name: str) -> str:
         try:
@@ -1370,32 +1372,66 @@ try:
         except:
             pass
         return 'LO'
-    
-    # Load session to get DataFrame with proper field processing
-    session_df = await async_load_dicom_session(dicom_bytes=dicom_bytes)
-    session_df = assign_acquisition_and_run_numbers(session_df)
+
+    # Get session from library cache - this is the SAME session used to generate acquisitions
+    session_df, _, _ = _get_cached_session()
+    if session_df is None:
+        raise ValueError("No cached session found from analyze_dicom_files_for_web")
+
+    print(f"📦 Got cached session with {len(session_df)} instances, acquisitions: {session_df['Acquisition'].unique().tolist()}")
 
     # Cache the session DataFrame globally for validation use
-    # IMPORTANT: Merge with existing cached data instead of replacing it
+    # IMPORTANT: Merge with existing cached data, renaming collisions
+    acq_name_mapping = {}  # Maps original name -> actual name in cache (for when we rename collisions)
+
     if 'cached_session_df' in globals() and globals()['cached_session_df'] is not None:
         existing_df = globals()['cached_session_df']
-        # Get new acquisition names to avoid duplicating existing ones
         new_acq_names = session_df['Acquisition'].unique().tolist() if 'Acquisition' in session_df.columns else []
         existing_acq_names = existing_df['Acquisition'].unique().tolist() if 'Acquisition' in existing_df.columns else []
 
-        # Only add new acquisitions that don't already exist
-        new_acquisitions_only = session_df[~session_df['Acquisition'].isin(existing_acq_names)] if 'Acquisition' in session_df.columns else session_df
+        print(f"📦 Merging: existing acquisitions = {existing_acq_names}, new = {new_acq_names}")
 
-        if len(new_acquisitions_only) > 0:
-            merged_df = pd.concat([existing_df, new_acquisitions_only], ignore_index=True)
-            globals()['cached_session_df'] = merged_df
-            print(f"✅ Merged session DataFrame: {len(existing_df)} existing + {len(new_acquisitions_only)} new = {len(merged_df)} total instances")
-            print(f"   Existing acquisitions: {existing_acq_names}")
-            print(f"   New acquisitions: {new_acq_names}")
-        else:
-            print(f"ℹ️ No new acquisitions to add. Keeping existing cache with {len(existing_df)} instances")
+        # For each new acquisition, check if it collides with existing
+        # If so, rename it to have a unique suffix
+        session_df_copy = session_df.copy()
+        for orig_name in new_acq_names:
+            if orig_name in existing_acq_names:
+                # Find a unique name by adding suffix
+                counter = 2
+                new_name = f"{orig_name}_{counter}"
+                while new_name in existing_acq_names or new_name in acq_name_mapping.values():
+                    counter += 1
+                    new_name = f"{orig_name}_{counter}"
+
+                print(f"⚠️ Acquisition '{orig_name}' already exists, renaming to '{new_name}'")
+                session_df_copy.loc[session_df_copy['Acquisition'] == orig_name, 'Acquisition'] = new_name
+                acq_name_mapping[orig_name] = new_name
+            else:
+                acq_name_mapping[orig_name] = orig_name
+
+        # Now merge - all acquisitions should have unique names
+        merged_df = pd.concat([existing_df, session_df_copy], ignore_index=True)
+        globals()['cached_session_df'] = merged_df
+
+        # Also update session_df so the UI gets the correct names
+        session_df = session_df_copy
+
+        print(f"✅ Merged session DataFrame: {len(existing_df)} existing + {len(session_df_copy)} new = {len(merged_df)} total instances")
+        print(f"   Name mapping: {acq_name_mapping}")
+
+        # DEBUG: Show sample data for each acquisition
+        for acq in merged_df['Acquisition'].unique():
+            acq_rows = merged_df[merged_df['Acquisition'] == acq]
+            sample_values = {}
+            for field in ['SequenceName', 'SeriesDescription']:
+                if field in acq_rows.columns:
+                    sample_values[field] = acq_rows[field].unique().tolist()
+            print(f"   📊 Acquisition '{acq}': {len(acq_rows)} rows, sample: {sample_values}")
     else:
         globals()['cached_session_df'] = session_df
+        # No renaming needed for first load
+        for orig_name in session_df['Acquisition'].unique().tolist():
+            acq_name_mapping[orig_name] = orig_name
         print(f"✅ Cached session DataFrame with {len(session_df)} instances for validation")
     
     # Convert web result format to UI format with proper tags and types
@@ -1543,9 +1579,12 @@ try:
                 counter += 1
             unique_id = f"{base_id}_{counter}"
         
+        # Use the mapped name (may be renamed if there was a collision)
+        actual_acq_name = acq_name_mapping.get(acq_name, acq_name)
+
         acquisitions.append({
             "id": unique_id,
-            "protocolName": str(acq_name),
+            "protocolName": str(actual_acq_name),
             "seriesDescription": series_desc,
             "totalFiles": len(acq_df),
             "acquisitionFields": acquisition_fields,
@@ -1745,20 +1784,26 @@ try:
     print(f"Selected schema acquisition: {schema_acquisition_name}")
     
     # Create the mapping - map the selected schema acquisition to actual acquisition
-    # Find the actual acquisition name that matches our acquisition ID
+    # The UI's protocolName MUST exactly match an acquisition in the cached DataFrame
+    # (both come from the same assign_acquisition_and_run_numbers call now)
     target_acq_name = None
     acq_protocol = acq_data.get('protocolName', '')
-    
-    print(f"Looking for actual acquisition matching protocol '{acq_protocol}' in: {actual_acq_names}")
-    
+
+    print(f"Looking for acquisition '{acq_protocol}' in cached session: {actual_acq_names}")
+
+    # EXACT match only - no fuzzy matching. If this fails, it indicates a bug.
     for actual_acq in actual_acq_names:
-        if acq_protocol.lower() in actual_acq.lower() or actual_acq.lower() in acq_protocol.lower():
+        if acq_protocol == actual_acq:
             target_acq_name = actual_acq
-            print(f"Found matching acquisition: {target_acq_name}")
+            print(f"✅ Found exact matching acquisition: {target_acq_name}")
             break
-    
+
     if not target_acq_name:
-        raise ValueError(f"No actual acquisition found matching protocol '{acq_protocol}'. Available acquisitions: {actual_acq_names}")
+        raise ValueError(
+            f"CRITICAL: Acquisition '{acq_protocol}' not found in cached session. "
+            f"Available acquisitions: {actual_acq_names}. "
+            f"This indicates a mismatch between UI data and cached DataFrame - please reload the data."
+        )
     
     session_map = {schema_acquisition_name: target_acq_name}
     print(f"Session mapping: {session_map}")
@@ -1798,6 +1843,19 @@ try:
     # The rules are already embedded in schema_acquisition['rules']
     acq_validation_rules = schema_acquisition.get('rules', [])
     print(f"Extracted {len(acq_validation_rules)} validation rules from schema_acquisition")
+
+    # DEBUG: Show what data we actually have for the target acquisition
+    print(f"🔍 DEBUG: session_df has {len(session_df)} total rows")
+    print(f"🔍 DEBUG: session_df acquisitions: {session_df['Acquisition'].unique().tolist()}")
+
+    target_rows = session_df[session_df['Acquisition'] == target_acq_name]
+    print(f"🔍 DEBUG: Found {len(target_rows)} rows for acquisition '{target_acq_name}'")
+
+    # Show a sample of key field values for this acquisition
+    for field in ['SequenceName', 'SeriesDescription', 'ProtocolName']:
+        if field in target_rows.columns:
+            values = target_rows[field].unique().tolist()
+            print(f"🔍 DEBUG: {field} values in target acquisition: {values}")
 
     # Call dicompare validation using check_acquisition_compliance
     print("Calling dicompare.check_acquisition_compliance...")
