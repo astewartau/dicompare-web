@@ -53,6 +53,9 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
   const [codeExecutionResult, setCodeExecutionResult] = useState<{ loading?: boolean; error?: string; success?: boolean } | null>(null);
   const [pyodideReady, setPyodideReady] = useState(false);
   const [dismissedWarnings, setDismissedWarnings] = useState<Set<string>>(new Set());
+  // Track which value source the user has chosen for each conflicting field
+  // Key: fieldName, Value: 'schema' | 'test:<validationName>' to identify the specific test case
+  const [conflictResolutions, setConflictResolutions] = useState<Record<string, string>>({});
 
   // Update code template when test data changes
   useEffect(() => {
@@ -69,10 +72,31 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
     }
   }, [isOpen, acquisition]);
 
+  // Handle choosing which value to use for a conflicting field
+  // choiceKey is 'schema' or 'test:<validationName>' to identify the specific option
+  const handleConflictResolution = (fieldName: string, choiceKey: string, valueToUse: any) => {
+    setConflictResolutions(prev => ({ ...prev, [fieldName]: choiceKey }));
+
+    // Update the test data to use the chosen value
+    setTestData(prevData => {
+      return prevData.map((row, rowIndex) => {
+        if (fieldName in row) {
+          // If valueToUse is an array, cycle through values for each row
+          const newValue = Array.isArray(valueToUse)
+            ? valueToUse[rowIndex % valueToUse.length]
+            : valueToUse;
+          return { ...row, [fieldName]: newValue };
+        }
+        return row;
+      });
+    });
+  };
+
   const analyzeSchemaForGeneration = async () => {
     setStep('analyzing');
     setError(null);
     setDismissedWarnings(new Set()); // Reset dismissed warnings on new analysis
+    setConflictResolutions({}); // Reset conflict resolutions on new analysis
 
     try {
       // Analyze the acquisition fields and series to determine what we can generate
@@ -201,10 +225,29 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
         validationFieldValues,
         maxValidationRows
       });
-      setTestData(initialTestData);
 
-      // Generate code template
-      const code = generateCodeTemplate(generatableFields, initialTestData);
+      // Apply schema values by default for all conflicts
+      // The generateTestDataFromSchema function uses validation test values by default,
+      // but we want schema values to be the default choice
+      let finalTestData = initialTestData;
+      if (conflicts.length > 0) {
+        finalTestData = initialTestData.map(row => {
+          const newRow = { ...row };
+          conflicts.forEach(conflict => {
+            if (conflict.fieldName in newRow) {
+              // Use the schema (existing) value instead of the test value
+              newRow[conflict.fieldName] = conflict.existingValue;
+            }
+          });
+          return newRow;
+        });
+        console.log('📊 Applied schema values as default for conflicts:', conflicts.map(c => c.fieldName));
+      }
+
+      setTestData(finalTestData);
+
+      // Generate code template using the data with schema values applied
+      const code = generateCodeTemplate(generatableFields, finalTestData);
       setCodeTemplate(code);
 
       setStep('editing');
@@ -522,7 +565,7 @@ output
   if (!isOpen) return null;
 
   // Get field names from actual test data (supports validation-only schemas)
-  const fieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
+  const fieldNames: string[] = Array.from(new Set(testData.flatMap((row: TestDataRow) => Object.keys(row))));
   const maxRows = Math.max(1, testData.length);
 
   return (
@@ -545,7 +588,7 @@ output
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {step === 'analyzing' && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
@@ -556,7 +599,7 @@ output
           )}
 
           {step === 'editing' && analysisResult && (
-            <div className="p-6 space-y-6 overflow-y-auto h-full">
+            <div className="p-6 space-y-6">
               {/* Validation Function Success Message */}
               {analysisResult.validationFunctionsWithTests > 0 && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
@@ -570,76 +613,145 @@ output
               )}
 
               {/* Field Conflict Warnings */}
-              {analysisResult.fieldConflicts.length > 0 && !dismissedWarnings.has('schemaConflicts') && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <div className="flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="font-medium text-orange-900 mb-2">
-                        Field Value Conflicts Detected
-                      </h3>
-                      <p className="text-sm text-orange-800 mb-3">
-                        The following fields have different values in the schema vs. validation test cases. <strong>Using validation test values</strong> to ensure generated DICOMs pass validation:
-                      </p>
-                      <div className="space-y-2">
-                        {analysisResult.fieldConflicts.map((conflict, idx) => (
-                          <div key={idx} className="bg-white border border-orange-200 rounded p-3 text-sm">
-                            <div className="font-medium text-orange-900 mb-1">
-                              {conflict.fieldName} (from "{conflict.validationName}")
-                            </div>
-                            <div className="text-orange-800 space-y-1">
-                              <div>Schema value: <code className="bg-orange-100 px-1 rounded">{JSON.stringify(conflict.existingValue)}</code></div>
-                              <div>Test value: <code className="bg-green-100 px-1 rounded">{JSON.stringify(conflict.testValue)}</code> ✓</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-xs text-orange-700 mt-3">
-                        <strong>Recommendation:</strong> Consider removing these fields from the acquisition/series tables since they're controlled by validation functions.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('schemaConflicts'))}
-                      className="ml-2 text-orange-600 hover:text-orange-800"
-                      title="Dismiss warning"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
+              {analysisResult.fieldConflicts.length > 0 && !dismissedWarnings.has('schemaConflicts') && (() => {
+                // Group conflicts by field name to show all options per field
+                const conflictsByField = analysisResult.fieldConflicts.reduce((acc: Record<string, Array<{ existingValue: any; testValue: any; validationName: string }>>, conflict: { fieldName: string; existingValue: any; testValue: any; validationName: string }) => {
+                  if (!acc[conflict.fieldName]) {
+                    acc[conflict.fieldName] = [];
+                  }
+                  acc[conflict.fieldName].push({
+                    existingValue: conflict.existingValue,
+                    testValue: conflict.testValue,
+                    validationName: conflict.validationName
+                  });
+                  return acc;
+                }, {} as Record<string, Array<{ existingValue: any; testValue: any; validationName: string }>>);
 
-              {/* Validation Field Conflict Warnings */}
-              {analysisResult.validationFieldConflictWarnings.length > 0 && !dismissedWarnings.has('fieldConflicts') && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <div className="flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="font-medium text-yellow-900 mb-2">
-                        Conflicting Validation Test Values
-                      </h3>
-                      <p className="text-sm text-yellow-800 mb-2">
-                        Multiple validation functions use the same fields with different test values. The generated test data may not pass all validations:
-                      </p>
-                      <ul className="text-sm text-yellow-800 list-disc list-inside space-y-1">
-                        {analysisResult.validationFieldConflictWarnings.map((warning, idx) => (
-                          <li key={idx}>{warning}</li>
-                        ))}
-                      </ul>
-                      <p className="text-xs text-yellow-700 mt-2">
-                        <strong>Note:</strong> Automatically combining conflicting validation constraints is non-trivial. You may need to manually adjust the test data to satisfy all validations.
-                      </p>
+                return (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                      <AlertTriangle className="h-5 w-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h3 className="font-medium text-orange-900 mb-2">
+                          Field Value Conflicts Detected
+                        </h3>
+                        <p className="text-sm text-orange-800 mb-3">
+                          The following fields have different values in the schema vs. validation test cases. Choose which value to use for each field:
+                        </p>
+                        <div className="space-y-3">
+                          {(Object.entries(conflictsByField) as [string, Array<{ existingValue: any; testValue: any; validationName: string }>][]).map(([fieldName, conflicts]) => {
+                            const resolution = conflictResolutions[fieldName] || 'schema'; // Default to schema value
+                            // Get the schema value (same across all conflicts for this field)
+                            const schemaValue = conflicts[0].existingValue;
+
+                            return (
+                              <div key={fieldName} className="bg-white border border-orange-200 rounded p-3 text-sm">
+                                <div className="font-medium text-orange-900 mb-2">
+                                  {fieldName}
+                                </div>
+                                <div className="space-y-2">
+                                  {/* Schema value option */}
+                                  <button
+                                    onClick={() => handleConflictResolution(fieldName, 'schema', schemaValue)}
+                                    className={`w-full text-left p-2 rounded border transition-colors ${
+                                      resolution === 'schema'
+                                        ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200'
+                                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <span className="text-gray-600">Schema value: </span>
+                                        <code className="bg-orange-100 px-1 rounded">{JSON.stringify(schemaValue)}</code>
+                                      </div>
+                                      {resolution === 'schema' && <span className="text-blue-600 font-medium">✓ Using</span>}
+                                    </div>
+                                  </button>
+                                  {/* Test value options - one per validation function */}
+                                  {conflicts.map((conflict, idx) => {
+                                    const testKey = `test:${conflict.validationName}`;
+                                    return (
+                                      <button
+                                        key={idx}
+                                        onClick={() => handleConflictResolution(fieldName, testKey, conflict.testValue)}
+                                        className={`w-full text-left p-2 rounded border transition-colors ${
+                                          resolution === testKey
+                                            ? 'bg-green-50 border-green-300 ring-2 ring-green-200'
+                                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div>
+                                            <span className="text-gray-600">Test value </span>
+                                            <span className="text-gray-500 text-xs">(from "{conflict.validationName}")</span>
+                                            <span className="text-gray-600">: </span>
+                                            <code className="bg-green-100 px-1 rounded">{JSON.stringify(conflict.testValue)}</code>
+                                          </div>
+                                          {resolution === testKey && <span className="text-green-600 font-medium">✓ Using</span>}
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('schemaConflicts'))}
+                        className="ml-2 text-orange-600 hover:text-orange-800"
+                        title="Dismiss warning"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('fieldConflicts'))}
-                      className="ml-2 text-yellow-600 hover:text-yellow-800"
-                      title="Dismiss warning"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
                   </div>
-                </div>
-              )}
+                );
+              })()}
+
+              {/* Validation Field Conflict Warnings - only show for fields NOT already in the orange choice UI */}
+              {(() => {
+                // Get field names that are already shown in the orange conflict choice UI
+                const fieldsWithChoices = new Set(analysisResult.fieldConflicts.map(c => c.fieldName));
+                // Filter out warnings for fields that already have a choice UI
+                const remainingWarnings = analysisResult.validationFieldConflictWarnings.filter(warning => {
+                  // Extract field name from warning message (format: 'Multiple validation functions use field "FieldName" with...')
+                  const match = warning.match(/field "([^"]+)"/);
+                  return match ? !fieldsWithChoices.has(match[1]) : true;
+                });
+
+                return remainingWarnings.length > 0 && !dismissedWarnings.has('fieldConflicts') && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                      <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h3 className="font-medium text-yellow-900 mb-2">
+                          Conflicting Validation Test Values
+                        </h3>
+                        <p className="text-sm text-yellow-800 mb-2">
+                          Multiple validation functions use the same fields with different test values. The generated test data may not pass all validations:
+                        </p>
+                        <ul className="text-sm text-yellow-800 list-disc list-inside space-y-1">
+                          {remainingWarnings.map((warning, idx) => (
+                            <li key={idx}>{warning}</li>
+                          ))}
+                        </ul>
+                        <p className="text-xs text-yellow-700 mt-2">
+                          <strong>Note:</strong> Automatically combining conflicting validation constraints is non-trivial. You may need to manually adjust the test data to satisfy all validations.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('fieldConflicts'))}
+                        className="ml-2 text-yellow-600 hover:text-yellow-800"
+                        title="Dismiss warning"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Validation Function Warnings */}
               {analysisResult.validationFunctionWarnings.length > 0 && !dismissedWarnings.has('noPassingTests') && (
