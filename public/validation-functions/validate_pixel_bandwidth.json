@@ -12,7 +12,7 @@
       "id": "acceptable_bandwidth",
       "name": "Acceptable Bandwidth Test",
       "description": "Should pass with bandwidth <= 220 Hz/pixel at 3T",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "PixelBandwidth": [180],
         "MagneticFieldStrength": [3.0]
@@ -22,7 +22,7 @@
       "id": "high_bandwidth",
       "name": "High Bandwidth Test",
       "description": "Should fail with bandwidth > 220 Hz/pixel at 3T",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "PixelBandwidth": [300],
         "MagneticFieldStrength": [3.0]

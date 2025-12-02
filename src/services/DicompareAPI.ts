@@ -130,6 +130,25 @@ class DicompareAPI {
   }
 
   /**
+   * Clear the global DICOM session cache. Call this when clearing all data.
+   */
+  async clearSessionCache(): Promise<void> {
+    await this.ensureInitialized();
+    this.cachedDataFrame = null;
+    this.cachedMetadata = null;
+
+    // Also clear the Pyodide global cache
+    await pyodideManager.runPython(`
+if 'cached_session_df' in globals():
+    del globals()['cached_session_df']
+    print("✅ Cleared global session cache")
+else:
+    print("ℹ️ No session cache to clear")
+`);
+    console.log('🗑️ Cleared DICOM session cache');
+  }
+
+  /**
    * Get comprehensive field information from DICOM dictionary.
    */
   async getFieldInfo(tag: string): Promise<FieldDictionary> {
@@ -392,10 +411,22 @@ json.dumps(results)
         return fieldEntry;
       }) || [];
       
-      // Transform series data - handles array format where series.fields is an array of field objects
+      // Transform series data - handles both array and object formats for series.fields
       const seriesData = acquisition.series?.map((series: any) => {
-        // Get fields from series.fields array (new format)
-        const fieldsArray = Array.isArray(series.fields) ? series.fields : [];
+        // Get fields from series.fields - handles both array (DICOM) and object (.pro file) formats
+        let fieldsArray: any[] = [];
+        if (Array.isArray(series.fields)) {
+          fieldsArray = series.fields;
+        } else if (series.fields && typeof series.fields === 'object') {
+          // Object format from .pro files: { "tag": { value, field, name, keyword, ... } }
+          fieldsArray = Object.entries(series.fields).map(([tag, fieldData]: [string, any]) => ({
+            tag,
+            name: fieldData.name || fieldData.field || tag,
+            keyword: fieldData.keyword,
+            value: fieldData.value,
+            validationRule: fieldData.validationRule || { type: 'exact' }
+          }));
+        }
 
         const seriesFields = fieldsArray.map((field: any) => {
           const fieldEntry: any = {
@@ -477,7 +508,8 @@ json.dumps(results)
           description: func.customDescription || func.description,
           implementation: func.customImplementation || func.implementation,
           parameters: func.configuredParams || func.parameters || {},
-          fields: func.customFields || func.fields || []
+          fields: func.customFields || func.fields || [],
+          testCases: func.customTestCases || func.testCases || []
         }));
       }
     });
@@ -1620,10 +1652,29 @@ try:
     # Load session to get DataFrame with proper field processing
     session_df = await async_load_dicom_session(dicom_bytes=dicom_bytes)
     session_df = assign_acquisition_and_run_numbers(session_df)
-    
+
     # Cache the session DataFrame globally for validation use
-    globals()['cached_session_df'] = session_df
-    print(f"✅ Cached session DataFrame with {len(session_df)} instances for validation")
+    # IMPORTANT: Merge with existing cached data instead of replacing it
+    if 'cached_session_df' in globals() and globals()['cached_session_df'] is not None:
+        existing_df = globals()['cached_session_df']
+        # Get new acquisition names to avoid duplicating existing ones
+        new_acq_names = session_df['Acquisition'].unique().tolist() if 'Acquisition' in session_df.columns else []
+        existing_acq_names = existing_df['Acquisition'].unique().tolist() if 'Acquisition' in existing_df.columns else []
+
+        # Only add new acquisitions that don't already exist
+        new_acquisitions_only = session_df[~session_df['Acquisition'].isin(existing_acq_names)] if 'Acquisition' in session_df.columns else session_df
+
+        if len(new_acquisitions_only) > 0:
+            merged_df = pd.concat([existing_df, new_acquisitions_only], ignore_index=True)
+            globals()['cached_session_df'] = merged_df
+            print(f"✅ Merged session DataFrame: {len(existing_df)} existing + {len(new_acquisitions_only)} new = {len(merged_df)} total instances")
+            print(f"   Existing acquisitions: {existing_acq_names}")
+            print(f"   New acquisitions: {new_acq_names}")
+        else:
+            print(f"ℹ️ No new acquisitions to add. Keeping existing cache with {len(existing_df)} instances")
+    else:
+        globals()['cached_session_df'] = session_df
+        print(f"✅ Cached session DataFrame with {len(session_df)} instances for validation")
     
     # Convert web result format to UI format with proper tags and types
     acquisitions = []

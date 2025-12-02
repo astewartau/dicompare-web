@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HelpCircle, Loader } from 'lucide-react';
 import { Acquisition } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
@@ -15,6 +15,7 @@ interface CombinedComplianceViewProps {
   getSchemaContent: (id: string) => Promise<string | null>;
   getSchemaAcquisition: (binding: SchemaBinding) => Promise<Acquisition | null>;
   printMode?: boolean; // Show messages inline instead of tooltips for printing
+  hideUnknownStatus?: boolean; // Hide rows with unknown status (for print/export)
 }
 
 // Helper function to parse dicompare's expectedValue format
@@ -72,12 +73,27 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
   pairing,
   getSchemaContent,
   getSchemaAcquisition,
-  printMode = false
+  printMode = false,
+  hideUnknownStatus = false
 }) => {
   const [schemaAcquisition, setSchemaAcquisition] = useState<Acquisition | null>(null);
   const [complianceResults, setComplianceResults] = useState<ComplianceFieldResult[]>([]);
   const [isValidating, setIsValidating] = useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = useState(true);
+  const mountIdRef = useRef(0);
+  const validationRunRef = useRef(false);
+
+  // Track component mount for debugging
+  useEffect(() => {
+    mountIdRef.current += 1;
+    const mountId = mountIdRef.current;
+    console.log(`🔄 CombinedComplianceView mounted (id: ${mountId}) for acquisition: ${acquisition.id}`);
+    validationRunRef.current = false;
+
+    return () => {
+      console.log(`🔄 CombinedComplianceView unmounting (id: ${mountId}) for acquisition: ${acquisition.id}`);
+    };
+  }, [acquisition.id]);
 
   // Load schema acquisition
   useEffect(() => {
@@ -87,28 +103,41 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
       return;
     }
 
+    let isCancelled = false;
     const loadSchema = async () => {
       setIsLoadingSchema(true);
       try {
+        console.log(`📥 Loading schema for acquisition: ${acquisition.id}, schema: ${pairing.schemaId}`);
         const schemaAcq = await getSchemaAcquisition(pairing);
-        console.log('🔍 Loaded schemaAcquisition:', schemaAcq);
-        console.log('🔍 schemaAcquisition.series:', schemaAcq?.series);
-        console.log('🔍 schemaAcquisition.acquisitionFields:', schemaAcq?.acquisitionFields);
-        setSchemaAcquisition(schemaAcq);
+        if (!isCancelled) {
+          console.log('📥 Schema loaded successfully:', schemaAcq?.id);
+          setSchemaAcquisition(schemaAcq);
+        }
       } catch (error) {
         console.error('Failed to load schema:', error);
       }
-      setIsLoadingSchema(false);
+      if (!isCancelled) {
+        setIsLoadingSchema(false);
+      }
     };
 
     loadSchema();
-  }, [pairing?.schemaId, pairing?.acquisitionId]);
 
-  // Run validation
+    return () => {
+      isCancelled = true;
+    };
+  }, [pairing?.schemaId, pairing?.acquisitionId, acquisition.id, getSchemaAcquisition]);
+
+  // Run validation - triggered by schemaAcquisition change or acquisition change
   useEffect(() => {
-    if (!pairing || !schemaAcquisition) return;
+    if (!pairing || !schemaAcquisition) {
+      console.log(`⏭️ Skipping validation: pairing=${!!pairing}, schemaAcquisition=${!!schemaAcquisition}`);
+      return;
+    }
 
+    let isCancelled = false;
     const runValidation = async () => {
+      console.log(`🔬 Running validation for acquisition: ${acquisition.id}`);
       setIsValidating(true);
       try {
         const results = await dicompareAPI.validateAcquisitionAgainstSchema(
@@ -117,15 +146,28 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
           getSchemaContent,
           pairing.acquisitionId
         );
-        setComplianceResults(results);
+        if (!isCancelled) {
+          console.log(`✅ Validation complete for ${acquisition.id}: ${results.length} results`);
+          setComplianceResults(results);
+          validationRunRef.current = true;
+        }
       } catch (error) {
         console.error('Validation failed:', error);
+        if (!isCancelled) {
+          setComplianceResults([]);
+        }
       }
-      setIsValidating(false);
+      if (!isCancelled) {
+        setIsValidating(false);
+      }
     };
 
     runValidation();
-  }, [acquisition, schemaAcquisition, pairing?.schemaId, pairing?.acquisitionId]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [acquisition.id, schemaAcquisition, pairing?.schemaId, pairing?.acquisitionId, getSchemaContent]);
 
   // Helper to render status with optional inline message for print mode
   const renderStatusWithMessage = (status: ComplianceFieldResult['status'], message: string) => {
@@ -189,43 +231,65 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
   acquisition.acquisitionFields.forEach(f => allAcquisitionFieldTags.add(f.tag));
   schemaAcquisition?.acquisitionFields.forEach(f => allAcquisitionFieldTags.add(f.tag));
 
+  // Helper to get status for an acquisition field tag
+  const getAcquisitionFieldStatus = (tag: string): string => {
+    const dataField = acquisition.acquisitionFields.find(f => f.tag === tag);
+    const schemaField = schemaAcquisition?.acquisitionFields.find(f => f.tag === tag);
+    const result = complianceResults.find(
+      r => r.fieldName === (dataField?.name || schemaField?.name) &&
+           r.validationType === 'field' &&
+           !r.seriesName
+    );
+    if (result) return result.status;
+    return 'unknown'; // No result means unknown status
+  };
+
   // Sort acquisition field tags by status
-  const sortedAcquisitionFieldTags = Array.from(allAcquisitionFieldTags).sort((tagA, tagB) => {
-    const dataFieldA = acquisition.acquisitionFields.find(f => f.tag === tagA);
-    const schemaFieldA = schemaAcquisition?.acquisitionFields.find(f => f.tag === tagA);
-    const resultA = complianceResults.find(
-      r => r.fieldName === (dataFieldA?.name || schemaFieldA?.name) &&
-           r.validationType === 'field' &&
-           !r.seriesName
-    );
+  const sortedAcquisitionFieldTags = Array.from(allAcquisitionFieldTags)
+    .filter(tag => {
+      // Filter out unknown status rows if hideUnknownStatus is enabled
+      if (hideUnknownStatus) {
+        const status = getAcquisitionFieldStatus(tag);
+        return status !== 'unknown';
+      }
+      return true;
+    })
+    .sort((tagA, tagB) => {
+      const dataFieldA = acquisition.acquisitionFields.find(f => f.tag === tagA);
+      const schemaFieldA = schemaAcquisition?.acquisitionFields.find(f => f.tag === tagA);
+      const resultA = complianceResults.find(
+        r => r.fieldName === (dataFieldA?.name || schemaFieldA?.name) &&
+             r.validationType === 'field' &&
+             !r.seriesName
+      );
 
-    const dataFieldB = acquisition.acquisitionFields.find(f => f.tag === tagB);
-    const schemaFieldB = schemaAcquisition?.acquisitionFields.find(f => f.tag === tagB);
-    const resultB = complianceResults.find(
-      r => r.fieldName === (dataFieldB?.name || schemaFieldB?.name) &&
-           r.validationType === 'field' &&
-           !r.seriesName
-    );
+      const dataFieldB = acquisition.acquisitionFields.find(f => f.tag === tagB);
+      const schemaFieldB = schemaAcquisition?.acquisitionFields.find(f => f.tag === tagB);
+      const resultB = complianceResults.find(
+        r => r.fieldName === (dataFieldB?.name || schemaFieldB?.name) &&
+             r.validationType === 'field' &&
+             !r.seriesName
+      );
 
-    return getStatusPriority(resultA?.status) - getStatusPriority(resultB?.status);
-  });
+      return getStatusPriority(resultA?.status) - getStatusPriority(resultB?.status);
+    });
 
   return (
     <div className="space-y-6">
       {/* Validation Rules Table */}
       {validationRules.length > 0 && (
         <div>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
+            <table className="w-full divide-y divide-gray-200 table-fixed">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/3">
                     Rule
                   </th>
-                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/3">
                     Description
                   </th>
-                  <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                  <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase">
                     Status
                   </th>
                 </tr>
@@ -275,8 +339,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
       {/* Acquisition-Level Fields Table */}
       <div>
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
+          <table className="w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
@@ -395,11 +459,32 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
       return null;
     }
 
-    // Get all unique field names/tags across all data series
+    // Filter series based on hideUnknownStatus
+    const filteredDataSeries = hideUnknownStatus
+      ? dataSeries.filter((series, idx) => {
+          const seriesResults = results.filter(r => {
+            if (r.validationType !== 'series') return false;
+            const resultIndex = parseInt(r.seriesName?.match(/\d+$/)?.[0] || '0') - 1;
+            return resultIndex === idx || r.seriesName === series.name;
+          });
+          // Determine overall status
+          if (!schemaAcquisition || seriesResults.length === 0) {
+            return false; // unknown status, filter out
+          }
+          return true;
+        })
+      : dataSeries;
+
+    if (filteredDataSeries.length === 0) {
+      return null;
+    }
+
+
+    // Get all unique field names/tags across all data series (use filtered list)
     const allFieldTags = new Set<string>();
     const fieldTagToName = new Map<string, string>();
 
-    dataSeries.forEach(series => {
+    filteredDataSeries.forEach(series => {
       if (typeof series.fields === 'object' && !Array.isArray(series.fields)) {
         // Object format: { "0018,0081": { value: ..., field: ... } }
         Object.entries(series.fields).forEach(([tag, fieldData]: [string, any]) => {
@@ -422,8 +507,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
     const fieldTagsArray = Array.from(allFieldTags);
 
     return (
-      <div className="border border-gray-200 rounded-lg overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
+      <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
+        <table className="w-full divide-y divide-gray-200 table-fixed">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
@@ -443,13 +528,14 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {dataSeries.map((series, idx) => {
-              // Find validation results for this series
+            {filteredDataSeries.map((series, idx) => {
+              // Find validation results for this series (use original index for matching)
+              const originalIdx = dataSeries.indexOf(series);
               const seriesResults = results.filter(r => {
                 if (r.validationType !== 'series') return false;
-                // Match by series name or index
+                // Match by series name or index (use original index)
                 const resultIndex = parseInt(r.seriesName?.match(/\d+$/)?.[0] || '0') - 1;
-                return resultIndex === idx || r.seriesName === series.name;
+                return resultIndex === originalIdx || r.seriesName === series.name;
               });
 
               // Overall series status
@@ -475,7 +561,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
               const statusMessage = seriesResults.length > 0
                 ? seriesResults.map(r => r.message).join('; ')
-                : 'No validation result';
+                : 'Series not directly checked by schema';
 
               return (
                 <tr key={idx} className={rowBgClass}>
@@ -509,10 +595,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                     <td className="px-2 py-1.5 text-center">
                       {isValidating ? (
                         <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
-                      ) : seriesResults.length > 0 ? (
-                        renderStatusWithMessage(overallStatus, statusMessage)
                       ) : (
-                        <HelpCircle className="h-4 w-4 text-gray-400 mx-auto" />
+                        renderStatusWithMessage(overallStatus, statusMessage)
                       )}
                     </td>
                   )}
@@ -552,8 +636,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
     const fieldsArray = Array.from(allFields.values());
 
     return (
-      <div className="border border-gray-200 rounded-lg overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
+      <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
+        <table className="w-full divide-y divide-gray-200 table-fixed">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
@@ -687,8 +771,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
     return (
       <div>
-        <div className="border border-red-200 rounded-lg overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="border border-red-200 rounded-lg overflow-hidden w-full">
+          <table className="w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-red-50">
               <tr>
                 <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">

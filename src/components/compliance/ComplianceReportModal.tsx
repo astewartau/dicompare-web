@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { X, Printer, Download } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Printer, Download, FileJson } from 'lucide-react';
 import { Acquisition } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { SchemaBinding } from '../../hooks/useSchemaService';
@@ -25,6 +25,7 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
   getSchemaAcquisition
 }) => {
   const reportRef = useRef<HTMLDivElement>(null);
+  const [showAllFields, setShowAllFields] = useState(false);
 
   if (!isOpen) return null;
 
@@ -39,7 +40,7 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
           <!DOCTYPE html>
           <html>
             <head>
-              <title>DICOM Compliance Report</title>
+              <title>dicompare report</title>
               <meta charset="utf-8">
               <style>
                 * {
@@ -122,6 +123,7 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 .space-x-6 > * + * { margin-left: 0.75rem; }
                 .space-y-2 > * + * { margin-top: 0.3rem; }
                 .space-y-4 > * + * { margin-top: 0.5rem; }
+                .space-y-6 > * + * { margin-top: 0.75rem; }
                 .space-y-8 > * + * { margin-top: 1rem; }
 
                 .grid { display: grid; }
@@ -136,6 +138,25 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 .break-inside-avoid { page-break-inside: avoid; }
                 .flex-1 { flex: 1 1 0%; }
                 .flex-shrink-0 { flex-shrink: 0; }
+
+                /* Table styles */
+                table { border-collapse: collapse; width: 100%; }
+                .w-full { width: 100%; }
+                .table-fixed { table-layout: fixed; }
+                .min-w-full { min-width: 100%; }
+                .overflow-hidden { overflow: hidden; }
+                .divide-y > * + * { border-top: 1px solid #E5E7EB; }
+                .divide-gray-200 > * + * { border-color: #E5E7EB; }
+
+                /* Ensure all direct children of space-y containers are full width */
+                .space-y-6 > div { width: 100%; }
+                .space-y-8 > div { width: 100%; }
+
+                /* Column width utilities */
+                .w-16 { width: 4rem; }
+                .w-24 { width: 6rem; }
+                .w-1\/4 { width: 25%; }
+                .w-1\/3 { width: 33.333%; }
 
                 svg {
                   width: 1em;
@@ -180,7 +201,7 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
 <!DOCTYPE html>
 <html>
   <head>
-    <title>DICOM Compliance Report</title>
+    <title>dicompare report</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -202,12 +223,69 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
     }
   };
 
+  const handleDownloadJSON = () => {
+    // Build JSON report from the compliance data
+    const reportData = {
+      generatedAt: new Date().toISOString(),
+      acquisitions: acquisitions.map(acquisition => {
+        const pairing = schemaPairings.get(acquisition.id);
+        const results = complianceResults.get(acquisition.id) || [];
+
+        // Filter results if showAllFields is disabled
+        const filteredResults = showAllFields
+          ? results
+          : results.filter(r => r.status !== 'unknown');
+
+        return {
+          id: acquisition.id,
+          seriesDescription: acquisition.seriesDescription,
+          protocolName: acquisition.protocolName,
+          schema: pairing ? {
+            id: pairing.schema.id,
+            name: pairing.schema.name,
+            version: pairing.schema.version,
+            acquisitionId: pairing.acquisitionId
+          } : null,
+          complianceResults: filteredResults,
+          summary: {
+            pass: results.filter(r => r.status === 'pass').length,
+            fail: results.filter(r => r.status === 'fail').length,
+            warning: results.filter(r => r.status === 'warning').length,
+            na: results.filter(r => r.status === 'na').length,
+            unknown: results.filter(r => r.status === 'unknown').length
+          }
+        };
+      })
+    };
+
+    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `dicom-compliance-report-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Compliance Report</h2>
+          <div className="flex items-center space-x-6">
+            <h2 className="text-xl font-semibold text-gray-900">Compliance Report</h2>
+            <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllFields}
+                onChange={(e) => setShowAllFields(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>Show all protocol fields</span>
+            </label>
+          </div>
           <div className="flex items-center space-x-3">
             <button
               onClick={handlePrint}
@@ -224,6 +302,13 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
               <span>Download HTML</span>
             </button>
             <button
+              onClick={handleDownloadJSON}
+              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <FileJson className="h-4 w-4" />
+              <span>Download JSON</span>
+            </button>
+            <button
               onClick={onClose}
               className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
             >
@@ -238,9 +323,9 @@ const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
             <ComplianceReport
               acquisitions={acquisitions}
               schemaPairings={schemaPairings}
-              complianceResults={complianceResults}
               getSchemaContent={getSchemaContent}
               getSchemaAcquisition={getSchemaAcquisition}
+              hideUnknownStatus={!showAllFields}
               className="print:shadow-none"
             />
           </div>

@@ -12,7 +12,7 @@
       "id": "valid_magnitude_phase",
       "name": "Valid M/P Pairs Test",
       "description": "Should pass with magnitude and phase for each echo",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "EchoTime": [5.0, 5.0, 10.0, 10.0],
         "ImageType": [["M"], ["P"], ["M"], ["P"]]
@@ -22,7 +22,7 @@
       "id": "missing_phase",
       "name": "Missing Phase Test",
       "description": "Should fail when phase images are missing",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "EchoTime": [5.0, 5.0, 10.0],
         "ImageType": [["M"], ["M"], ["M"]]

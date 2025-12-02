@@ -12,7 +12,7 @@
       "id": "isotropic_voxels",
       "name": "Isotropic Voxels Test",
       "description": "Should pass with 1x1x1mm isotropic voxels",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "PixelSpacing": [[1.0, 1.0]],
         "SliceThickness": [1.0]
@@ -22,7 +22,7 @@
       "id": "anisotropic_voxels",
       "name": "Anisotropic Voxels Test",
       "description": "Should fail with anisotropic voxels",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "PixelSpacing": [[1.0, 1.0]],
         "SliceThickness": [3.0]

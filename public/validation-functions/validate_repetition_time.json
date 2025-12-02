@@ -12,7 +12,7 @@
       "id": "short_tr",
       "name": "Short TR Test",
       "description": "Should pass with TR <= 0.5*T1max (825ms at 3T)",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "RepetitionTime": [600],
         "MagneticFieldStrength": [3.0]
@@ -22,7 +22,7 @@
       "id": "long_tr",
       "name": "Long TR Test",
       "description": "Should fail with TR > 0.5*T1max",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "RepetitionTime": [1000],
         "MagneticFieldStrength": [3.0]

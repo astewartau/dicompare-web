@@ -12,7 +12,7 @@
       "id": "matching_slices",
       "name": "Matching Slices Test",
       "description": "Should pass when all images have same slice count",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "ImageType": [["M"], ["P"], ["M"], ["P"]],
         "EchoTime": [5.0, 5.0, 10.0, 10.0],
@@ -23,7 +23,7 @@
       "id": "mismatched_slices",
       "name": "Mismatched Slices Test",
       "description": "Should fail when slice counts differ",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "ImageType": [["M"], ["P"], ["M"], ["P"]],
         "EchoTime": [5.0, 5.0, 10.0, 10.0],

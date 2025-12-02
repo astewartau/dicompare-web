@@ -12,7 +12,7 @@
       "id": "valid_te_range",
       "name": "Valid TE Range Test",
       "description": "Should pass with longest TE in valid range for 3T",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "EchoTime": [10.0, 20.0, 30.0, 40.0],
         "MagneticFieldStrength": [3.0, 3.0, 3.0, 3.0]
@@ -22,7 +22,7 @@
       "id": "te_too_long",
       "name": "TE Too Long Test",
       "description": "Should fail with longest TE > 1.25x max T2*",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "EchoTime": [10.0, 30.0, 60.0, 100.0],
         "MagneticFieldStrength": [3.0, 3.0, 3.0, 3.0]

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Database, Loader, CheckCircle, Plus, X, Trash2, FileText, AlertTriangle } from 'lucide-react';
 import { Acquisition, ProcessingProgress } from '../../types';
@@ -152,7 +152,7 @@ const DataLoadingAndMatching: React.FC = () => {
   const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
   const [isDragOver, setIsDragOver] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [schemaAcquisitions, setSchemaAcquisitions] = useState<Map<string, Acquisition>>(new Map());
+  const schemaAcquisitionsRef = useRef<Map<string, Acquisition>>(new Map());
   const [showComplianceReport, setShowComplianceReport] = useState(false);
   const [allComplianceResults, setAllComplianceResults] = useState<Map<string, any[]>>(new Map());
   const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
@@ -173,10 +173,6 @@ const DataLoadingAndMatching: React.FC = () => {
     }
   }, [loadedData, selectedAcquisitionId]);
 
-  // Clear cache for debugging - remove this later
-  useEffect(() => {
-    setSchemaAcquisitions(new Map());
-  }, []);
 
   // Helper function to convert schema to acquisition format for display
   const convertSchemaToAcquisition = async (binding: SchemaBinding): Promise<Acquisition> => {
@@ -370,23 +366,23 @@ const DataLoadingAndMatching: React.FC = () => {
   };
 
 
-  // Helper to get or load schema acquisition
-  const getSchemaAcquisition = async (binding: SchemaBinding): Promise<Acquisition | null> => {
+  // Helper to get or load schema acquisition - uses ref for stable callback
+  const getSchemaAcquisition = useCallback(async (binding: SchemaBinding): Promise<Acquisition | null> => {
     const key = `${binding.schemaId}-${binding.acquisitionId || 'default'}`;
 
-    if (schemaAcquisitions.has(key)) {
-      return schemaAcquisitions.get(key)!;
+    if (schemaAcquisitionsRef.current.has(key)) {
+      return schemaAcquisitionsRef.current.get(key)!;
     }
 
     try {
       const acquisition = await convertSchemaToAcquisition(binding);
-      setSchemaAcquisitions(prev => new Map(prev.set(key, acquisition)));
+      schemaAcquisitionsRef.current.set(key, acquisition);
       return acquisition;
     } catch (error) {
       console.error('Failed to get schema acquisition:', error);
       return null;
     }
-  };
+  }, []);
 
   // Schema pairing helpers
   const pairSchemaWithAcquisition = (acquisitionId: string, schemaId: string, schemaAcquisitionId?: number) => {
@@ -897,11 +893,19 @@ const DataLoadingAndMatching: React.FC = () => {
     }
   };
 
-  const clearData = () => {
+  const clearData = async () => {
     setLoadedData([]);
     setShowExampleData(false);
     setSchemaPairings(new Map());
     setSelectedAcquisitionId(ADD_NEW_ID);
+    // Clear the schema acquisition cache
+    schemaAcquisitionsRef.current = new Map();
+    // Clear the Pyodide session cache so validation works correctly
+    try {
+      await dicompareAPI.clearSessionCache();
+    } catch (error) {
+      console.error('Failed to clear session cache:', error);
+    }
   };
 
   const handleDeleteAcquisition = (acquisitionId: string) => {
@@ -1129,6 +1133,7 @@ const DataLoadingAndMatching: React.FC = () => {
         {/* Content */}
         <div className="px-6 py-4">
           <CombinedComplianceView
+            key={`${acquisition.id}-${pairing?.schemaId || 'no-schema'}-${pairing?.acquisitionId || 'default'}`}
             acquisition={acquisition}
             pairing={pairing}
             getSchemaContent={getSchemaContent}

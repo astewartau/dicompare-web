@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, Loader2, Copy, AlertTriangle, FileText } from 'lucide-react';
+import { Upload, Plus, Loader2, Copy, AlertTriangle, FileText, ArrowLeft } from 'lucide-react';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import { useSchemaService } from '../../hooks/useSchemaService';
@@ -50,6 +50,7 @@ const BuildSchema: React.FC = () => {
   const [showSchemaModal, setShowSchemaModal] = useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = useState(false);
   const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
+  const [showBackConfirmModal, setShowBackConfirmModal] = useState(false);
   const ADD_NEW_ID = '__add_new__';
 
   // Auto-select logic for new workflow
@@ -703,6 +704,22 @@ const BuildSchema: React.FC = () => {
     navigate('/schema-builder/enter-metadata');
   };
 
+  const handleBack = () => {
+    // If there's any data, show confirmation modal
+    if (acquisitions.length > 0) {
+      setShowBackConfirmModal(true);
+    } else {
+      // No data to lose, go back directly
+      navigate('/schema-builder/start');
+    }
+  };
+
+  const confirmBack = () => {
+    setShowBackConfirmModal(false);
+    setAcquisitions([]); // Clear data
+    navigate('/schema-builder/start');
+  };
+
   // Component to render compact acquisition preview card
   const renderAcquisitionPreview = (acquisition: any) => {
     const incompleteFields = getAcquisitionIncompleteFields(acquisition.id);
@@ -1046,23 +1063,33 @@ const BuildSchema: React.FC = () => {
         </div>
       </div>
 
-      {/* Continue Button */}
-      <div className="mt-8 flex flex-col items-end">
-        {hasIncompleteFields && (
-          <div className="mb-2 text-sm text-red-600 flex items-center">
-            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            Please complete all field values before continuing ({incompleteFields.size} incomplete)
-          </div>
-        )}
+      {/* Navigation Buttons */}
+      <div className="mt-8 flex justify-between items-end">
         <button
-          onClick={handleContinue}
-          disabled={acquisitions.length === 0 || hasIncompleteFields}
-          className="px-6 py-3 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          onClick={handleBack}
+          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center"
         >
-          Continue to Metadata
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Start
         </button>
+
+        <div className="flex flex-col items-end">
+          {hasIncompleteFields && (
+            <div className="mb-2 text-sm text-red-600 flex items-center">
+              <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              Please complete all field values before continuing ({incompleteFields.size} incomplete)
+            </div>
+          )}
+          <button
+            onClick={handleContinue}
+            disabled={acquisitions.length === 0 || hasIncompleteFields}
+            className="px-6 py-3 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Continue to Metadata
+          </button>
+        </div>
       </div>
 
       {/* Schema Selection Modal */}
@@ -1098,6 +1125,35 @@ const BuildSchema: React.FC = () => {
                 expandable={true}
                 getSchemaContent={getSchemaContent}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Back Confirmation Modal */}
+      {showBackConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center mb-4">
+              <AlertTriangle className="h-6 w-6 text-amber-500 mr-3" />
+              <h3 className="text-lg font-medium text-gray-900">Confirm Navigation</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Going back to the starting point will clear all your current progress, including {acquisitions.length} acquisition{acquisitions.length !== 1 ? 's' : ''} and all configured fields.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowBackConfirmModal(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBack}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Clear and Go Back
+              </button>
             </div>
           </div>
         </div>

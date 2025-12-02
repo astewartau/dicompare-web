@@ -12,7 +12,7 @@
       "id": "single_echo",
       "name": "Single Echo Test",
       "description": "Should fail with single echo",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "EchoTime": [5.0]
       }
@@ -21,7 +21,7 @@
       "id": "two_echo",
       "name": "Two Echo Test",
       "description": "Should fail with only two echoes",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "EchoTime": [5.0, 10.0]
       }
@@ -30,7 +30,7 @@
       "id": "three_echo",
       "name": "Three Echo Test",
       "description": "Should pass with three echoes",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "EchoTime": [5.0, 10.0, 15.0]
       }

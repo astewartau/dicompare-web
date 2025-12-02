@@ -12,7 +12,7 @@
       "id": "small_voxels",
       "name": "Small Voxels Test",
       "description": "Should pass with 0.512 mm³ voxels",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "PixelSpacing": [[0.8, 0.8]],
         "SliceThickness": [0.8]
@@ -22,7 +22,7 @@
       "id": "large_voxels",
       "name": "Large Voxels Test",
       "description": "Should fail with 3.375 mm³ voxels",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "PixelSpacing": [[1.5, 1.5]],
         "SliceThickness": [1.5]

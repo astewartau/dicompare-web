@@ -12,7 +12,7 @@
       "id": "3d_acquisition",
       "name": "3D Acquisition Test",
       "description": "Should pass with 3D acquisition",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "MRAcquisitionType": ["3D"]
       }
@@ -21,7 +21,7 @@
       "id": "2d_acquisition",
       "name": "2D Acquisition Test",
       "description": "Should fail with 2D acquisition",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "MRAcquisitionType": ["2D"]
       }

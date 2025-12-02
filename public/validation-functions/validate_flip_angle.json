@@ -12,7 +12,7 @@
       "id": "valid_ernst_angle",
       "name": "Valid Ernst Angle Test",
       "description": "Should pass with flip angle within Ernst angle range",
-      "expectedToPass": true,
+      "expectedResult": "pass",
       "data": {
         "FlipAngle": [15],
         "RepetitionTime": [50],
@@ -23,7 +23,7 @@
       "id": "invalid_ernst_angle",
       "name": "Invalid Ernst Angle Test",
       "description": "Should fail with flip angle outside Ernst angle range",
-      "expectedToPass": false,
+      "expectedResult": "fail",
       "data": {
         "FlipAngle": [45],
         "RepetitionTime": [50],
