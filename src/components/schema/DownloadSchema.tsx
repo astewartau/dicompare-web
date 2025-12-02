@@ -198,7 +198,7 @@ const DownloadSchema: React.FC = () => {
     return (
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Download Schema - Step 4</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Save Schema - Step 4</h2>
           <p className="text-gray-600">Generating your validation schema...</p>
         </div>
         
@@ -216,7 +216,7 @@ const DownloadSchema: React.FC = () => {
     return (
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Download Schema - Step 4</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Save Schema - Step 4</h2>
           <p className="text-gray-600">There was an issue generating your schema.</p>
         </div>
         
@@ -251,7 +251,7 @@ const DownloadSchema: React.FC = () => {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-4">
-          Download Schema - Step 4
+          Save Schema - Step 4
           {originSchema && (
             <span className="text-lg font-normal text-blue-600 ml-2">
               (Based on: {originSchema.name})
@@ -320,7 +320,7 @@ const DownloadSchema: React.FC = () => {
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center mb-4">
             <FileText className="h-6 w-6 mr-2 text-medical-600" />
-            <h3 className="text-xl font-semibold text-gray-900">Save or Download Schema</h3>
+            <h3 className="text-xl font-semibold text-gray-900">Save schema</h3>
           </div>
           
           <p className="text-gray-600 mb-6">

@@ -360,7 +360,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                       <button
                         onClick={(e) => handleDownload(schema.id, schema.name, e)}
                         className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                        title="Download schema"
+                        title="Save schema"
                       >
                         <Download className="h-4 w-4" />
                       </button>

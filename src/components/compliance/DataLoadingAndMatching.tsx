@@ -145,7 +145,6 @@ const DataLoadingAndMatching: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<ProcessingProgress | null>(null);
   const [loadedData, setLoadedData] = useState<Acquisition[]>([]);
-  const [showExampleData, setShowExampleData] = useState(false);
   const [schemaPairings, setSchemaPairings] = useState<Map<string, SchemaBinding>>(new Map());
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -874,28 +873,8 @@ const DataLoadingAndMatching: React.FC = () => {
     }
   }, [handleFileUpload]);
 
-  // Other handlers
-  const loadExampleData = async () => {
-    try {
-      setApiError(null);
-      const acquisitions = await dicompareAPI.getExampleDicomDataForUI();
-      setLoadedData(acquisitions);
-
-      // Auto-select the first acquisition
-      if (acquisitions.length > 0) {
-        setSelectedAcquisitionId(acquisitions[0].id);
-      }
-
-      setShowExampleData(true);
-    } catch (error) {
-      console.error('Failed to load example data:', error);
-      setApiError('Failed to load example DICOM data');
-    }
-  };
-
   const clearData = async () => {
     setLoadedData([]);
-    setShowExampleData(false);
     setSchemaPairings(new Map());
     setSelectedAcquisitionId(ADD_NEW_ID);
     // Clear the schema acquisition cache
@@ -1073,11 +1052,11 @@ const DataLoadingAndMatching: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Plus className="h-4 w-4 text-medical-500 flex-shrink-0" />
           <h3 className="text-sm font-medium text-gray-900">
-            Upload New DICOM
+            Load DICOMs
           </h3>
         </div>
         <p className="text-xs text-gray-600 mt-1">
-          Upload files or load example data
+          
         </p>
       </div>
     );
@@ -1212,7 +1191,7 @@ const DataLoadingAndMatching: React.FC = () => {
                 className="inline-flex items-center px-4 py-2 border border-medical-600 text-medical-600 text-sm font-medium rounded-md hover:bg-medical-50"
               >
                 <Database className="h-4 w-4 mr-2" />
-                Select Schema
+                Generate Example Data
               </button>
             </div>
           </>
@@ -1226,20 +1205,9 @@ const DataLoadingAndMatching: React.FC = () => {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Load & Match DICOM Data</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">Load and Validate DICOM Data</h2>
             <p className="text-gray-600">
-              {loadedData.length > 0 ? (
-                <>
-                  Match each acquisition with a validation template. {getPairedCount()} of {loadedData.length} acquisitions paired.
-                  {showExampleData && (
-                    <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                      Example Data
-                    </span>
-                  )}
-                </>
-              ) : (
-                'Upload DICOM files, Siemens .pro files, or select a schema to generate test data for compliance validation.'
-              )}
+              
             </p>
             {(apiError || schemaError) && (
               <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -1248,23 +1216,14 @@ const DataLoadingAndMatching: React.FC = () => {
             )}
           </div>
 
-          <div className="flex space-x-3">
+          {loadedData.length > 0 && (
             <button
-              onClick={loadExampleData}
-              className="inline-flex items-center px-4 py-2 border border-medical-600 text-medical-600 rounded-lg hover:bg-medical-50"
+              onClick={clearData}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
             >
-              <Database className="h-4 w-4 mr-2" />
-              Load Example Data
+              Clear Data
             </button>
-            {loadedData.length > 0 && (
-              <button
-                onClick={clearData}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                Clear Data
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
@@ -1276,7 +1235,7 @@ const DataLoadingAndMatching: React.FC = () => {
             {/* Header */}
             <div className="px-4 py-3 border-b border-gray-200">
               <h3 className="text-lg font-medium text-gray-900">Acquisitions</h3>
-              <p className="text-sm text-gray-600">Select to view or upload new</p>
+              <p className="text-sm text-gray-600">Select to view or load more data</p>
             </div>
 
             {/* Acquisition List */}

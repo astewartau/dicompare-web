@@ -16,7 +16,7 @@ const SchemaBuilder: React.FC = () => {
     { id: 'start', name: 'Choose Starting Point', path: '/schema-builder/start' },
     { id: 'build-schema', name: 'Build Schema', path: '/schema-builder/build-schema' },
     { id: 'enter-metadata', name: 'Enter Metadata', path: '/schema-builder/enter-metadata' },
-    { id: 'download-schema', name: 'Download Schema', path: '/schema-builder/download-schema' }
+    { id: 'save-schema', name: 'Save Schema', path: '/schema-builder/save-schema' }
   ];
 
   const getCurrentStepIndex = () => {
@@ -90,7 +90,7 @@ const SchemaBuilder: React.FC = () => {
             <Route path="/start" element={<SchemaStartPage />} />
             <Route path="/build-schema" element={<BuildSchema />} />
             <Route path="/enter-metadata" element={<EnterMetadata />} />
-            <Route path="/download-schema" element={<DownloadSchema />} />
+            <Route path="/save-schema" element={<DownloadSchema />} />
           </Routes>
         </div>
         </div>

@@ -91,7 +91,7 @@ const EnterMetadata: React.FC = () => {
     if (validateForm()) {
       // Save metadata to context before navigating
       setSchemaMetadata(metadata);
-      navigate('/schema-builder/download-schema');
+      navigate('/schema-builder/save-schema');
     }
   };
 
