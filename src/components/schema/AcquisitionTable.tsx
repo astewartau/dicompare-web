@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown } from 'lucide-react';
+import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { dicompareAPI } from '../../services/DicompareAPI';
@@ -9,6 +9,7 @@ import DicomFieldSelector from '../common/DicomFieldSelector';
 import ValidationFunctionLibraryModal from '../validation/ValidationFunctionLibraryModal';
 import ValidationFunctionEditorModal from '../validation/ValidationFunctionEditorModal';
 import FieldConversionModal from './FieldConversionModal';
+import DetailedDescriptionModal from './DetailedDescriptionModal';
 import CustomTooltip from '../common/CustomTooltip';
 import { ValidationFunction } from '../validation/ValidationFunctionLibraryModal';
 import TestDicomGeneratorModal from './TestDicomGeneratorModal';
@@ -96,6 +97,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [isNaExpanded, setIsNaExpanded] = useState(true);
   const [isPassedExpanded, setIsPassedExpanded] = useState(false);
   const [showTestDicomGenerator, setShowTestDicomGenerator] = useState(false);
+  const [showDetailedDescription, setShowDetailedDescription] = useState(false);
 
   const isComplianceMode = mode === 'compliance';
   const isSchemaMode = isComplianceMode || Boolean(schemaId);
@@ -308,19 +310,44 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   className="text-sm font-semibold text-gray-900 bg-white border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-medical-500"
                   placeholder="Acquisition Name"
                 />
-                <input
-                  type="text"
-                  value={acquisition.seriesDescription}
-                  onChange={(e) => onUpdate('seriesDescription', e.target.value)}
-                  className="text-xs text-gray-600 bg-white border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-medical-500"
-                  placeholder="Description"
-                />
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={acquisition.seriesDescription}
+                    onChange={(e) => onUpdate('seriesDescription', e.target.value)}
+                    className="text-xs text-gray-600 bg-white border border-gray-300 rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-medical-500"
+                    placeholder="Short description"
+                  />
+                  <button
+                    onClick={() => setShowDetailedDescription(true)}
+                    className={`flex items-center px-2 py-1 text-xs rounded border transition-colors flex-shrink-0 ${
+                      acquisition.detailedDescription
+                        ? 'text-medical-700 border-medical-300 bg-medical-50 hover:bg-medical-100'
+                        : 'text-gray-500 border-gray-300 hover:bg-gray-50'
+                    }`}
+                    title={acquisition.detailedDescription ? 'View/Edit detailed description' : 'Add detailed description'}
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    README
+                  </button>
+                </div>
               </div>
             ) : (
               <div>
-                <h3 className="text-sm font-semibold text-gray-900 truncate">
-                  {title || acquisition.protocolName}
-                </h3>
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-sm font-semibold text-gray-900 truncate">
+                    {title || acquisition.protocolName}
+                  </h3>
+                  {acquisition.detailedDescription && (
+                    <button
+                      onClick={() => setShowDetailedDescription(true)}
+                      className="flex items-center px-1.5 py-0.5 text-xs text-medical-600 hover:text-medical-800 rounded hover:bg-medical-50 transition-colors"
+                      title="View detailed description"
+                    >
+                      <FileText className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
                 {(subtitle || (!isSchemaMode && acquisition.seriesDescription)) && (
                   <p className="text-xs text-gray-600 truncate">
                     {subtitle || acquisition.seriesDescription}
@@ -917,8 +944,19 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
             schemaId={schemaId}
             getSchemaContent={getSchemaContent}
           />
+
         </>
       )}
+
+      {/* Detailed Description Modal - available in all modes */}
+      <DetailedDescriptionModal
+        isOpen={showDetailedDescription}
+        onClose={() => setShowDetailedDescription(false)}
+        title={acquisition.protocolName || 'Acquisition'}
+        description={acquisition.detailedDescription || ''}
+        onSave={isEditMode && !isComplianceMode ? (description) => onUpdate('detailedDescription', description) : undefined}
+        isReadOnly={!isEditMode || isComplianceMode}
+      />
     </div>
   );
 };

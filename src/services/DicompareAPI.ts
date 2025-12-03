@@ -496,10 +496,12 @@ json.dumps(results)
       }) || [];
       
       dicompareAcquisitions[acquisitionName] = {
+        description: acquisition.seriesDescription || '',
+        detailed_description: acquisition.detailedDescription || '', // Map camelCase to snake_case for schema
         fields: acquisitionFields,
         series: seriesData
       };
-      
+
       // Add validation rules if present - CORRECT: Use "rules" key, not "validation_functions"
       if (acquisition.validationFunctions && acquisition.validationFunctions.length > 0) {
         dicompareAcquisitions[acquisitionName].rules = acquisition.validationFunctions.map((func: any, index: number) => ({

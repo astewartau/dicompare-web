@@ -60,6 +60,7 @@ export interface Acquisition {
   id: string;
   protocolName: string;
   seriesDescription: string;
+  detailedDescription?: string; // Extended markdown description (detailed_description in schema)
   totalFiles: number;
   acquisitionFields: DicomField[];
   // seriesFields removed - field definitions now embedded in series[].fields[]

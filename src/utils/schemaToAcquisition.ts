@@ -73,6 +73,7 @@ export const convertSchemaToAcquisition = async (
       id: `schema-${schema.id}-${acquisitionId}`,
       protocolName: acquisitionName,
       seriesDescription: acquisitionData.description || '',
+      detailedDescription: acquisitionData.detailed_description || '', // Map snake_case to camelCase
       totalFiles: 0, // Schema templates don't have files
       acquisitionFields: convertFields(allFields.filter((f: any) => !f.level || f.level === 'acquisition'), 'acquisition'),
       // seriesFields removed - now embedded in series[].fields[]
