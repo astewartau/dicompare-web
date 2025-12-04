@@ -8,6 +8,7 @@ interface TypeSpecificInputsProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  forceListInput?: boolean; // Force comma-separated list input even for string type (for contains_any/contains_all)
 }
 
 const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
@@ -16,7 +17,8 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
   onChange,
   placeholder,
   className = '',
-  disabled = false
+  disabled = false,
+  forceListInput = false
 }) => {
   const [stringListInput, setStringListInput] = useState('');
   const [numberListInput, setNumberListInput] = useState('');
@@ -72,14 +74,14 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
     }
   };
 
-  // Reset initialization flag when dataType or value changes
+  // Reset initialization flag when dataType, value, or forceListInput changes
   React.useEffect(() => {
     setInitialized(false);
-  }, [dataType, value]);
+  }, [dataType, value, forceListInput]);
 
-  // Initialize string list display
+  // Initialize string list display (also handles forceListInput with string type)
   React.useEffect(() => {
-    if (dataType === 'list_string' && !initialized) {
+    if ((dataType === 'list_string' || (dataType === 'string' && forceListInput)) && !initialized) {
       if (Array.isArray(value)) {
         setStringListInput(value.join(', '));
       } else if (value) {
@@ -134,6 +136,43 @@ const TypeSpecificInputs: React.FC<TypeSpecificInputsProps> = ({
       setInitialized(true);
     }
   }, [dataType, value, initialized]);
+
+  // When forceListInput is true with string type, use list-style input
+  if (dataType === 'string' && forceListInput) {
+    return (
+      <div className={className}>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Values (comma-separated)
+        </label>
+        <input
+          type="text"
+          value={stringListInput}
+          onChange={(e) => handleStringListChange(e.target.value)}
+          onBlur={handleStringListBlur}
+          disabled={disabled}
+          placeholder={placeholder || 'value1, value2, value3'}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+            disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+          }`}
+        />
+        <p className="mt-1 text-xs text-gray-500">
+          Enter multiple values separated by commas
+        </p>
+        {Array.isArray(value) && value.length > 0 && (
+          <div className="mt-2">
+            <p className="text-xs text-gray-600">Preview:</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {value.map((item: string, index: number) => (
+                <span key={index} className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  "{item}"
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   switch (dataType) {
     case 'string':

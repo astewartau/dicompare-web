@@ -295,6 +295,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                 value={formData.value}
                 onChange={(newValue) => setFormData(prev => ({ ...prev, value: newValue }))}
                 error={errors.value}
+                forceListInput={formData.validationRule.type === 'contains_any' || formData.validationRule.type === 'contains_all'}
               />
               {errors.value && <p className="text-red-500 text-xs mt-1">{errors.value}</p>}
               {formData.validationRule.type !== 'exact' && (
