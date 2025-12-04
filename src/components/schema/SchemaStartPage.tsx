@@ -5,6 +5,7 @@ import { useSchemaService } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import UnifiedSchemaSelector from './UnifiedSchemaSelector';
 import { SchemaUploadModal } from './SchemaUploadModal';
+import { schemaCacheManager } from '../../services/SchemaCacheManager';
 
 const SchemaStartPage: React.FC = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const SchemaStartPage: React.FC = () => {
   const { setEditingSchema, setOriginSchema } = useSchemaContext();
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const handleCreateNew = () => {
     setEditingSchema(null);
@@ -52,29 +54,26 @@ const SchemaStartPage: React.FC = () => {
   };
 
   const handleSchemaUpload = async (file: File) => {
+    // Clear any previous error
+    setValidationError(null);
+
     try {
-      const content = await file.text();
-      let cleanContent = content.trim();
+      // Validate the schema file (JSON syntax + metaschema validation)
+      const validation = await schemaCacheManager.validateSchemaFile(file);
 
-      if (cleanContent.charCodeAt(0) === 0xFEFF) {
-        cleanContent = cleanContent.slice(1);
+      if (!validation.isValid) {
+        // Show error modal, don't open upload modal
+        setValidationError(validation.error || 'Invalid schema file');
+        return;
       }
 
-      if (!cleanContent.startsWith('{') && !cleanContent.startsWith('[')) {
-        throw new Error('File does not appear to be valid JSON');
-      }
-
-      JSON.parse(cleanContent); // Validate JSON
-
+      // Schema is valid, proceed to upload modal
       setUploadedFile(file);
       setShowUploadModal(true);
     } catch (error) {
-      console.error('Failed to parse schema file:', error);
+      console.error('Failed to validate schema file:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to parse schema file: ${errorMessage}`);
-
-      setUploadedFile(file);
-      setShowUploadModal(true);
+      setValidationError(errorMessage);
     }
   };
 
@@ -149,6 +148,31 @@ const SchemaStartPage: React.FC = () => {
         }}
         preloadedFile={uploadedFile}
       />
+
+      {/* Validation Error Modal */}
+      {validationError && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-start mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <span className="text-red-600 text-xl">!</span>
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-900">Invalid Schema File</h3>
+                <p className="mt-2 text-sm text-gray-600">{validationError}</p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setValidationError(null)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

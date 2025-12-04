@@ -14,6 +14,7 @@
     "@types/react-dom": "19.0.0",
     "@types/react-router-dom": "^5.3.3",
     "@uiw/react-codemirror": "^4.24.2",
+    "ajv": "^8.17.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.534.0",
     "react": "^19.1.1",
