@@ -56,11 +56,11 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
       const fieldNameLower = r.fieldName.toLowerCase();
       const fieldLower = field.name.toLowerCase();
       return fieldNameLower === fieldLower || fieldNameLower.includes(fieldLower) ||
-             (r.fieldPath && r.fieldPath.includes(field.tag));
+             (field.tag && r.fieldPath && r.fieldPath.includes(field.tag));
     });
 
     return result || {
-      fieldPath: field.tag,
+      fieldPath: field.tag || field.name,
       fieldName: field.name,
       status: 'unknown',
       message: 'No validation result available',
@@ -116,14 +116,16 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   }
 
   // Get all unique field definitions across series for table headers
+  // Use tag or name as key (for derived fields that have null tags)
   const allFields: SeriesField[] = [];
   const fieldMap = new Map<string, SeriesField>();
 
   series.forEach(s => {
     const fieldsArray = getFieldsArray(s.fields);
     fieldsArray.forEach(f => {
-      if (!fieldMap.has(f.tag)) {
-        fieldMap.set(f.tag, f);
+      const fieldKey = f.tag || f.name;
+      if (!fieldMap.has(fieldKey)) {
+        fieldMap.set(fieldKey, f);
         allFields.push(f);
       }
     });
@@ -140,22 +142,27 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
               </th>
               {allFields.map((field) => (
                 <th
-                  key={field.tag}
+                  key={field.tag || field.name}
                   className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider min-w-[120px]"
-                  onMouseEnter={() => setHoveredHeader(field.tag)}
+                  onMouseEnter={() => setHoveredHeader(field.tag || field.name)}
                   onMouseLeave={() => setHoveredHeader(null)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium truncate">{field.keyword || field.name}</p>
-                      <p className="text-xs font-normal text-content-muted font-mono">{field.tag}</p>
+                      <p className="text-xs font-normal text-content-muted font-mono">
+                        {field.fieldType === 'derived' ? 'Derived field' :
+                         field.fieldType === 'custom' ? 'Custom field' :
+                         field.fieldType === 'private' ? 'Private field' :
+                         (field.tag || 'Unknown tag')}
+                      </p>
                     </div>
                     {isEditMode && (
                       <div className={`flex items-center ml-1 ${
-                        hoveredHeader === field.tag ? 'opacity-100' : 'opacity-0'
+                        hoveredHeader === (field.tag || field.name) ? 'opacity-100' : 'opacity-0'
                       } transition-opacity`}>
                         <button
-                          onClick={() => onFieldConvert(field.tag)}
+                          onClick={() => onFieldConvert(field.tag || field.name)}
                           className="p-0.5 text-content-muted hover:text-brand-600 transition-colors"
                           title="Convert to acquisition field"
                         >
@@ -206,17 +213,18 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                   )}
                 </td>
                 {allFields.map((headerField) => {
-                  // Find the specific field in this series
+                  // Find the specific field in this series (by tag or name for derived fields)
                   const fieldsArray = getFieldsArray(ser.fields);
-                  const seriesFieldIndex = fieldsArray.findIndex(f => f.tag === headerField.tag);
+                  const fieldIdentifier = headerField.tag || headerField.name;
+                  const seriesFieldIndex = fieldsArray.findIndex(f => f.tag === headerField.tag || f.name === headerField.name);
                   const seriesField = seriesFieldIndex >= 0 ? fieldsArray[seriesFieldIndex] : null;
 
-                  const seriesFieldKey = `${acquisitionId}-series-${seriesIndex}-${headerField.tag}`;
+                  const seriesFieldKey = `${acquisitionId}-series-${seriesIndex}-${fieldIdentifier}`;
                   const isIncomplete = incompleteFields.has(seriesFieldKey);
                   const complianceResult = isComplianceMode && seriesField ? getSeriesFieldComplianceResult(seriesField, ser.name) : null;
 
                   return (
-                    <td key={headerField.tag} className={`px-2 py-1.5 ${
+                    <td key={fieldIdentifier} className={`px-2 py-1.5 ${
                       isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''
                     }`}>
                       <div
@@ -227,7 +235,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                             setEditingCell({
                               seriesIndex,
                               fieldIndex: seriesFieldIndex,
-                              fieldTag: headerField.tag,
+                              fieldTag: fieldIdentifier,
                               fieldName: headerField.name
                             });
                           }

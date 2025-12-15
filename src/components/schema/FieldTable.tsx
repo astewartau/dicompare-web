@@ -131,7 +131,8 @@ const FieldTable: React.FC<FieldTableProps> = ({
           </thead>
           <tbody className="bg-surface-primary divide-y divide-border">
             {fields.map((field, index) => {
-              const fieldKey = `${acquisitionId}-${field.tag}`;
+              const fieldIdentifier = field.tag || field.name;
+              const fieldKey = `${acquisitionId}-${fieldIdentifier}`;
               const isIncomplete = incompleteFields.has(fieldKey);
 
               // Pre-calculate data type display (will be used if needed in render)
@@ -145,7 +146,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
 
               return (
                 <tr
-                  key={field.tag}
+                  key={fieldIdentifier}
                   className={`group ${index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
                     isEditMode ? 'hover:bg-surface-hover transition-colors' : ''
                   } ${isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-500/10' : ''}`}
@@ -156,7 +157,10 @@ const FieldTable: React.FC<FieldTableProps> = ({
                       {field.keyword || field.name}
                     </p>
                     <p className="text-xs text-content-tertiary font-mono">
-                      {field.fieldType === 'derived' ? 'Private/derived field' : field.tag}
+                      {field.fieldType === 'derived' ? 'Derived field' :
+                       field.fieldType === 'custom' ? 'Custom field' :
+                       field.fieldType === 'private' ? 'Private field' :
+                       (field.tag || 'Unknown tag')}
                     </p>
                   </div>
                 </td>
@@ -191,14 +195,14 @@ const FieldTable: React.FC<FieldTableProps> = ({
                   <td className="px-2 py-1.5 text-right">
                     <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => onFieldConvert(field.tag)}
+                        onClick={() => onFieldConvert(fieldIdentifier)}
                         className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
                         title="Convert to series field"
                       >
                         <ArrowRightLeft className="h-3 w-3" />
                       </button>
                       <button
-                        onClick={() => onFieldDelete(field.tag)}
+                        onClick={() => onFieldDelete(fieldIdentifier)}
                         className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"
                         title="Delete field"
                       >
@@ -219,7 +223,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
         <FieldEditModal
           field={editingField}
           onSave={(updates) => {
-            onFieldUpdate(editingField.tag, updates);
+            onFieldUpdate(editingField.tag || editingField.name, updates);
             setEditingField(null);
           }}
           onClose={() => setEditingField(null)}

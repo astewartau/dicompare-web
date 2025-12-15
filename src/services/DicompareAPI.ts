@@ -337,9 +337,13 @@ json.dumps(results)
       
       // Transform acquisition fields - FIXED: Handle complex value objects
       const acquisitionFields = acquisition.acquisitionFields?.map((field: any) => {
+        // Convert null tags to fieldType value for schema compliance
+        // Valid tag values: DICOM format (0018,0081), "private", "derived", or "custom"
+        const tagValue = field.tag || field.fieldType || 'derived';
+
         const fieldEntry: any = {
           field: field.keyword || field.name || '', // Use keyword first, fallback to name
-          tag: field.tag
+          tag: tagValue
         };
         
         // FIXED: Handle complex field.value objects that contain dataType/validationRule
@@ -429,9 +433,13 @@ json.dumps(results)
         }
 
         const seriesFields = fieldsArray.map((field: any) => {
+          // Convert null tags to fieldType value for schema compliance
+          // Valid tag values: DICOM format (0018,0081), "private", "derived", or "custom"
+          const tagValue = field.tag || field.fieldType || 'derived';
+
           const fieldEntry: any = {
             field: field.keyword || field.name || '',
-            tag: field.tag
+            tag: tagValue
           };
 
           // Get the value and validation rule directly from the field object
@@ -1289,15 +1297,18 @@ json.dumps(formatted_result)
       throw new Error('Invalid file format provided to analyzeFilesForUI');
     }
     
-    // Use memory-efficient approach like the old interface
-    // Store files as Record<string, Uint8Array> and use setPythonGlobal
-    const dicomFiles: Record<string, Uint8Array> = {};
+    // For large file sets, pass as parallel arrays which Pyodide handles more efficiently
+    // than converting a large dictionary all at once
+    const fileNames: string[] = [];
+    const fileContents: Uint8Array[] = [];
     for (const file of processedFiles) {
-      dicomFiles[file.name] = file.content;
+      fileNames.push(file.name);
+      fileContents.push(file.content);
     }
 
-    // Set files in Python global scope (memory efficient)
-    await pyodideManager.setPythonGlobal('dicom_files', dicomFiles);
+    // Set files in Python global scope as parallel arrays
+    await pyodideManager.setPythonGlobal('dicom_file_names', fileNames);
+    await pyodideManager.setPythonGlobal('dicom_file_contents', fileContents);
     
     // Set up progress callback as parameter (not global)
     // Remove global approach to avoid conflicts
@@ -1311,30 +1322,39 @@ json.dumps(formatted_result)
 import json
 
 try:
-    # Convert JsProxy to Python dict if needed (our PyodideManager still creates JsProxy objects)
-    if hasattr(dicom_files, 'to_py'):
-        dicom_bytes = dicom_files.to_py()
-    else:
-        dicom_bytes = dicom_files
-    
-    print(f"Loading {len(dicom_bytes)} DICOM files using new dicompare web_utils...")
-    print(f"File names: {list(dicom_bytes.keys())[:3]}{'...' if len(dicom_bytes) > 3 else ''}")
-    
-    # Validate that we have actual file content
-    valid_files = {}
-    for filename, content in dicom_bytes.items():
-        if content is not None and len(content) > 0:
-            valid_files[filename] = content
+    # Reconstruct dictionary from parallel arrays - this is faster than converting
+    # a large JSProxy dictionary all at once which can cause buffer overflow
+    print(f"Reconstructing DICOM files from parallel arrays...")
+
+    # Convert arrays - Pyodide handles list conversion more efficiently
+    names = list(dicom_file_names)
+    total_files = len(names)
+    print(f"Processing {total_files} files...")
+
+    # Build dictionary by converting contents using getBuffer() for speed
+    # getBuffer() is much faster than to_py() for typed arrays in Pyodide
+    dicom_bytes = {}
+    for i, name in enumerate(names):
+        content = dicom_file_contents[i]
+        # Use getBuffer() for fast typed array access, fall back to to_py()
+        if hasattr(content, 'getBuffer'):
+            buf = content.getBuffer()
+            dicom_bytes[name] = bytes(buf.data)
+            buf.release()
+        elif hasattr(content, 'to_py'):
+            dicom_bytes[name] = bytes(content.to_py())
         else:
-            print(f"Warning: Skipping file {filename} - no content or empty file")
+            dicom_bytes[name] = bytes(content)
 
-    if not valid_files:
-        raise ValueError("No valid DICOM files with content found")
+        # Progress every 1000 files
+        if (i + 1) % 1000 == 0:
+            print(f"Converted {i + 1}/{total_files} files...")
 
-    print(f"Processing {len(valid_files)} valid DICOM files...")
-    dicom_bytes = valid_files
+    print(f"Passing {len(dicom_bytes)} DICOM files to dicompare analyze_dicom_files_for_web...")
 
-    # Use the new web_utils async API directly to avoid PyodideTask issues
+    # Pass files directly to analyze_dicom_files_for_web without pre-validation
+    # This avoids iterating over the JSProxy which can cause memory issues with large file sets
+    # The analyze_dicom_files_for_web function handles conversion and validation internally
     from dicompare.interface import analyze_dicom_files_for_web
     result = await analyze_dicom_files_for_web(dicom_bytes, None, progress_callback)
     
@@ -1449,19 +1469,28 @@ try:
             field_value = field_data.get('value')
 
             if field_name:
-                tag_info = get_tag_info(field_name)
-                print(f"🔍 DEBUG tag_info for {field_name}: {tag_info}")
+                # Use fieldType from dicompare output, fall back to get_tag_info if not present
+                field_type = field_data.get('fieldType', None)
+                field_tag = field_data.get('tag', None)
+
+                if field_type is None or field_tag is None:
+                    tag_info = get_tag_info(field_name)
+                    if field_type is None:
+                        field_type = tag_info.get("fieldType", "standard")
+                    if field_tag is None:
+                        field_tag = tag_info["tag"].strip("()") if tag_info["tag"] else None
+
                 data_type = determine_field_type_from_values(field_name, [field_value] if field_value is not None else [])
 
                 field_obj = {
-                    "tag": tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field_name}",
+                    "tag": field_tag,
                     "name": field_name,
-                    "keyword": tag_info.get("keyword", field_name),
+                    "keyword": field_name,
                     "value": field_value,
                     "vr": _get_vr_for_field(field_name),
                     "level": "acquisition",
                     "dataType": data_type,
-                    "fieldType": tag_info.get("fieldType", "standard"),
+                    "fieldType": field_type,
                     "consistency": "constant"
                 }
                 print(f"🔍 DEBUG field object for {field_name}: {field_obj}")
@@ -1475,29 +1504,41 @@ try:
                 for field_data in series_data.get('fields', []):
                     field_name = field_data.get('field')
                     field_value = field_data.get('value')
-                    field_tag = field_data.get('tag', '')
+                    field_tag = field_data.get('tag', None)
+                    field_type = field_data.get('fieldType', None)
 
                     if field_name not in series_field_values:
                         series_field_values[field_name] = {
                             'values': [],
-                            'tag': field_tag
+                            'tag': field_tag,
+                            'fieldType': field_type
                         }
                     series_field_values[field_name]['values'].append(field_value)
 
             # Create series fields from collected data
             for field_name, field_info in series_field_values.items():
-                tag_info = get_tag_info(field_name)
+                # Use fieldType from dicompare output, fall back to get_tag_info if not present
+                field_type = field_info.get('fieldType', None)
+                field_tag = field_info.get('tag', None)
+
+                if field_type is None or field_tag is None:
+                    tag_info = get_tag_info(field_name)
+                    if field_type is None:
+                        field_type = tag_info.get("fieldType", "standard")
+                    if field_tag is None:
+                        field_tag = tag_info["tag"].strip("()") if tag_info["tag"] else None
+
                 data_type = determine_field_type_from_values(field_name, field_info['values'])
 
                 series_fields.append({
-                    "tag": field_info['tag'] if field_info['tag'] else (tag_info["tag"].strip("()") if tag_info["tag"] else f"unknown_{field_name}"),
+                    "tag": field_tag,
                     "name": field_name,
-                    "keyword": tag_info.get("keyword", field_name),
+                    "keyword": field_name,
                     "values": field_info['values'],
                     "vr": _get_vr_for_field(field_name),
                     "level": "series",
                     "dataType": data_type,
-                    "fieldType": tag_info.get("fieldType", "standard"),
+                    "fieldType": field_type,
                     "consistency": "varying"
                 })
         
@@ -1513,15 +1554,30 @@ try:
             print(f"🔍 Series field data: {series_data.get('fields', [])}")
 
             for field_data in series_data.get('fields', []):
-                field_tag = field_data.get('tag', '')
+                field_tag = field_data.get('tag', None)
                 field_value = field_data.get('value')
                 field_name = field_data.get('field', 'unknown')
+                field_type = field_data.get('fieldType', None)
+
+                # Debug: show raw field_data for CoilType
+                if 'Coil' in field_name:
+                    print(f"🔍🔍🔍 RAW FIELD_DATA for {field_name}: {field_data}")
+                    print(f"🔍🔍🔍 field_type from data: {field_type}")
+
+                # If fieldType not in data, look it up
+                if field_type is None:
+                    tag_info = get_tag_info(field_name)
+                    print(f"🔍🔍🔍 get_tag_info({field_name}) returned: {tag_info}")
+                    field_type = tag_info.get("fieldType", "standard")
+                    print(f"🔍🔍🔍 field_type after lookup: {field_type}")
 
                 # Create SeriesField object according to TypeScript interface
+                # Use None for tag if not available (derived fields)
                 series_field = {
                     "name": field_name,
-                    "tag": field_tag if field_tag else f"unknown_{field_name}",
-                    "value": field_value
+                    "tag": field_tag,
+                    "value": field_value,
+                    "fieldType": field_type
                 }
                 series_fields_array.append(series_field)
                 print(f"🔍 Added series field: {series_field}")
@@ -1649,6 +1705,15 @@ except Exception as e:
     console.log('🔍 First series fields:', finalResult[0]?.series?.[0]?.fields);
     console.log('🔍 Fields type:', typeof finalResult[0]?.series?.[0]?.fields);
     console.log('🔍 Fields isArray:', Array.isArray(finalResult[0]?.series?.[0]?.fields));
+
+    // Debug: show fieldType for all series fields
+    finalResult.forEach((acq: any, acqIdx: number) => {
+      acq.series?.forEach((s: any, sIdx: number) => {
+        s.fields?.forEach((f: any) => {
+          console.log(`🏷️ Acq[${acqIdx}] Series[${sIdx}] ${f.name}: tag=${f.tag}, fieldType=${f.fieldType}`);
+        });
+      });
+    });
 
     return finalResult;
   }
@@ -2358,7 +2423,7 @@ json.dumps(pro_data)
           vr,
           level: 'acquisition',
           dataType,
-          fieldType: tag === fieldName ? 'derived' : 'standard'  // If tag wasn't found, it equals fieldName
+          fieldType: fieldObj.fieldType || (tag === fieldName ? 'derived' : 'standard')
         });
       }
     }
@@ -2404,7 +2469,7 @@ json.dumps(pro_data)
             level: 'series',
             dataType: typeof fieldObj.value === 'number' ? 'number' :
                      Array.isArray(fieldObj.value) ? 'list_string' : 'string',
-            fieldType: tag === fieldName ? 'derived' : 'standard'  // If tag wasn't found, it equals fieldName
+            fieldType: fieldObj.fieldType || (tag === fieldName ? 'derived' : 'standard')
           });
         }
       }

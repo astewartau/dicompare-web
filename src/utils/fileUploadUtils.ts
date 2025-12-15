@@ -5,8 +5,33 @@
 import JSZip from 'jszip';
 
 export interface FileObject {
-  name: string;
+  name: string;  // Unique identifier for the file (may include path for subdirectory files)
   content: Uint8Array;
+}
+
+export interface FileSizeInfo {
+  totalBytes: number;
+  totalGB: number;
+  fileCount: number;
+  exceedsLimit: boolean;
+}
+
+// Memory limit for browser processing (WebAssembly constraint)
+// Testing showed crashes occur after converting ~6000 files at 339KB each (~2GB)
+export const MAX_TOTAL_SIZE_BYTES = 1.9 * 1024 * 1024 * 1024; // 1.9 GB
+
+/**
+ * Get a unique name for a file, using webkitRelativePath if available.
+ * This ensures files with the same name from different subdirectories are distinguishable.
+ */
+function getUniqueFileName(file: File): string {
+  // When files are uploaded via webkitdirectory, they have webkitRelativePath
+  // which includes the full relative path from the selected folder
+  const relativePath = (file as any).webkitRelativePath;
+  if (relativePath && relativePath.length > 0) {
+    return relativePath;
+  }
+  return file.name;
 }
 
 /**
@@ -31,10 +56,11 @@ async function extractZipFile(zipFile: File): Promise<File[]> {
       // Get the file content as a Blob
       const blob = await zipEntry.async('blob');
 
-      // Extract just the filename from the path
-      const fileName = path.split('/').pop() || path;
+      // Use full path as filename to ensure uniqueness across subdirectories
+      // This prevents files with the same name in different folders from overwriting each other
+      const fileName = path;
 
-      // Create a File object from the blob
+      // Create a File object from the blob with the full path as name
       const file = new File([blob], fileName, { type: 'application/dicom' });
       extractedFiles.push(file);
 
@@ -49,14 +75,24 @@ async function extractZipFile(zipFile: File): Promise<File[]> {
   }
 }
 
+export interface ProcessFilesOptions {
+  onProgress?: (progress: { current: number; total: number; fileName: string }) => void;
+  skipSizeCheck?: boolean;
+}
+
 /**
  * Process uploaded files, filtering out directories and non-DICOM files
  * Also extracts .zip files and processes their contents
  */
 export async function processUploadedFiles(
   files: FileList,
-  onProgress?: (progress: { current: number; total: number; fileName: string }) => void
+  optionsOrProgress?: ProcessFilesOptions | ((progress: { current: number; total: number; fileName: string }) => void)
 ): Promise<FileObject[]> {
+  // Handle both old signature (callback) and new signature (options object)
+  const options: ProcessFilesOptions = typeof optionsOrProgress === 'function'
+    ? { onProgress: optionsOrProgress }
+    : optionsOrProgress || {};
+  const { onProgress, skipSizeCheck = false } = options;
   const filesArray = Array.from(files);
 
   // First, extract any zip files
@@ -100,7 +136,18 @@ export async function processUploadedFiles(
     throw new Error('No valid DICOM files found in the uploaded content.');
   }
 
-  console.log(`Processing ${actualFiles.length} files out of ${filesArray.length} total items`);
+  // Check total file size before processing - browser memory limits prevent processing very large datasets
+  const totalSize = actualFiles.reduce((sum, file) => sum + file.size, 0);
+  const totalSizeGB = totalSize / (1024 * 1024 * 1024);
+
+  if (!skipSizeCheck && totalSize > MAX_TOTAL_SIZE_BYTES) {
+    throw new Error(
+      `Dataset too large for browser processing: ${totalSizeGB.toFixed(1)} GB (${actualFiles.length.toLocaleString()} files). ` +
+      `Maximum supported size is ~2 GB due to browser memory limits. Please use fewer files or the desktop Python package for larger datasets.`
+    );
+  }
+
+  console.log(`Processing ${actualFiles.length} files (${totalSizeGB.toFixed(2)} GB) out of ${filesArray.length} total items`);
   console.log('File details:', actualFiles.map(f => ({ name: f.name, size: f.size, type: f.type })));
 
   const fileObjects: FileObject[] = [];
@@ -112,7 +159,7 @@ export async function processUploadedFiles(
 
       const content = await file.arrayBuffer();
       fileObjects.push({
-        name: file.name,
+        name: getUniqueFileName(file),
         content: new Uint8Array(content)
       });
     } catch (error) {
@@ -122,6 +169,53 @@ export async function processUploadedFiles(
   }
 
   return fileObjects;
+}
+
+/**
+ * Check total file size and count to determine if it exceeds browser limits.
+ * This extracts zip files to get accurate totals.
+ */
+export async function checkFileSizeLimit(files: FileList): Promise<FileSizeInfo> {
+  const filesArray = Array.from(files);
+
+  // Extract zip files to get accurate file count and size
+  const extractedFiles: File[] = [];
+  const nonZipFiles: File[] = [];
+
+  for (const file of filesArray) {
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      try {
+        const extracted = await extractZipFile(file);
+        extractedFiles.push(...extracted);
+      } catch (error) {
+        console.error(`Failed to extract ${file.name}:`, error);
+      }
+    } else {
+      nonZipFiles.push(file);
+    }
+  }
+
+  const allFiles = [...nonZipFiles, ...extractedFiles];
+
+  // Filter to actual DICOM files
+  const actualFiles = allFiles.filter(file => {
+    if (file.size === 0) return false;
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.txt') || name.endsWith('.json') || name.endsWith('.xml') || name.endsWith('.csv')) {
+      return false;
+    }
+    return true;
+  });
+
+  const totalBytes = actualFiles.reduce((sum, file) => sum + file.size, 0);
+  const totalGB = totalBytes / (1024 * 1024 * 1024);
+
+  return {
+    totalBytes,
+    totalGB,
+    fileCount: actualFiles.length,
+    exceedsLimit: totalBytes > MAX_TOTAL_SIZE_BYTES
+  };
 }
 
 /**

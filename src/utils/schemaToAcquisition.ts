@@ -56,9 +56,10 @@ export const convertSchemaToAcquisition = async (
       acquisitionData.series.forEach((series: any) => {
         if (series.fields && Array.isArray(series.fields)) {
           series.fields.forEach((field: any) => {
-            if (!seriesFieldMap.has(field.tag)) {
+            const fieldKey = field.tag || field.name || field.field;  // Use name/field for derived fields
+            if (!seriesFieldMap.has(fieldKey)) {
               const processedField = processSchemaFieldForUI(field);
-              seriesFieldMap.set(field.tag, {
+              seriesFieldMap.set(fieldKey, {
                 ...processedField,
                 level: 'series'
               });
@@ -85,7 +86,8 @@ export const convertSchemaToAcquisition = async (
             name: processedField.name,
             tag: processedField.tag,
             value: processedField.value ?? field.defaultValue ?? '',
-            validationRule: processedField.validationRule || { type: 'exact' as const }
+            validationRule: processedField.validationRule || { type: 'exact' as const },
+            fieldType: processedField.fieldType || field.fieldType  // Preserve field type (standard/derived)
           };
         })
       })) || [],

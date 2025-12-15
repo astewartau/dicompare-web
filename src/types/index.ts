@@ -1,6 +1,6 @@
 // DICOM Field Types
 export interface DicomField {
-  tag: string;
+  tag: string | null;  // null for custom/derived fields without DICOM tags
   name: string;
   keyword?: string; // DICOM keyword (e.g., "PatientName")
   value: string | number | string[] | number[] | any;
@@ -8,7 +8,7 @@ export interface DicomField {
   level: 'acquisition' | 'series';
   validationRule?: ValidationRule;
   seriesName?: string; // For series-level fields, which series they belong to
-  fieldType?: 'standard' | 'derived'; // Whether field has a DICOM tag or is calculated/metadata
+  fieldType?: 'standard' | 'derived' | 'private' | 'custom'; // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
 }
 
@@ -20,10 +20,11 @@ export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 // Series Types
 export interface SeriesField {
   name: string;
-  tag: string;
+  tag: string | null;  // null for custom/derived fields without DICOM tags
   keyword?: string;  // DICOM keyword (e.g. "EchoTime" vs full name "Echo Time")
   value: any;
   validationRule?: ValidationRule;
+  fieldType?: 'standard' | 'derived' | 'private' | 'custom';  // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
 }
 

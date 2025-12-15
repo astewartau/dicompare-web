@@ -167,7 +167,8 @@ export function processSchemaFieldForUI(schemaField: any): any {
     vr: schemaField.vr || 'UN',
     level: schemaField.level || 'acquisition',
     dataType,
-    validationRule
+    validationRule,
+    fieldType: schemaField.fieldType  // Preserve field type (standard/derived)
   };
 }
 

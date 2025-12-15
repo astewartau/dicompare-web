@@ -9,7 +9,7 @@ import AcquisitionTable from './AcquisitionTable';
 import UnifiedSchemaSelector from './UnifiedSchemaSelector';
 import { processFieldForUI } from '../../utils/fieldProcessing';
 import { roundDicomValue } from '../../utils/valueRounding';
-import { processUploadedFiles } from '../../utils/fileUploadUtils';
+import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo } from '../../utils/fileUploadUtils';
 import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
 import { processSchemaFieldForUI } from '../../utils/datatypeInference';
 import { buildValidationRuleFromField } from '../../utils/fieldFormatters';
@@ -52,6 +52,11 @@ const BuildSchema: React.FC = () => {
   const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
   const [showBackConfirmModal, setShowBackConfirmModal] = useState(false);
   const [dicomAnalysisError, setDicomAnalysisError] = useState<string | null>(null);
+  const [sizeWarning, setSizeWarning] = useState<{ show: boolean; info: FileSizeInfo | null; files: FileList | null }>({
+    show: false,
+    info: null,
+    files: null
+  });
   const ADD_NEW_ID = '__add_new__';
 
   // Auto-select logic for new workflow
@@ -137,33 +142,33 @@ const BuildSchema: React.FC = () => {
         if (rule.type === 'contains_all' && rule.contains_all && rule.contains_all.length > 0) return true;
         return false;
       }
-      // For exact validation, check the value
-      if (!field.value && field.value !== 0) return false;
-      if (typeof field.value === 'string' && field.value.trim() === '') return false;
-      if (Array.isArray(field.value) && field.value.length === 0) return false;
+      // For exact validation, accept any value including empty string, empty array, 0, null
+      // The user explicitly set this value, so it's valid
       return true;
     }
-    
-    // Handle direct values (arrays, strings, numbers) - these are valid if they exist
-    if (field === null || field === undefined) return false;
-    if (typeof field === 'string' && field.trim() === '') return false;
-    if (Array.isArray(field) && field.length === 0) return false;
+
+    // Handle direct values (arrays, strings, numbers)
+    // Accept any value including empty string, empty array, 0, null
+    // Only reject undefined (field not set at all)
+    if (field === undefined) return false;
     return true;
   };
 
   // Helper to get series field definitions from series data
   const getSeriesFieldDefinitions = (acquisition: Acquisition) => {
-    const fieldMap = new Map<string, { tag: string; name: string }>();
+    const fieldMap = new Map<string, { tag: string | null; name: string }>();
 
     // Extract field definitions from all series
+    // Use tag or name as key (for derived fields that have null tags)
     acquisition.series?.forEach(series => {
       // Handle both array format (from loaded schemas) and object format (from processed data)
       if (Array.isArray(series.fields)) {
         series.fields.forEach(field => {
-          if (!fieldMap.has(field.tag)) {
-            fieldMap.set(field.tag, {
+          const fieldKey = field.tag || field.name;
+          if (!fieldMap.has(fieldKey)) {
+            fieldMap.set(fieldKey, {
               tag: field.tag,
-              name: field.field || field.name || field.tag
+              name: field.field || field.name || field.tag || 'unknown'
             });
           }
         });
@@ -193,7 +198,8 @@ const BuildSchema: React.FC = () => {
     // Check acquisition-level fields
     acquisition.acquisitionFields.forEach(field => {
       if (!isFieldValueValid(field)) {
-        acquisitionIncomplete.add(`${acquisition.id}-${field.tag}`);
+        const fieldKey = field.tag || field.name;
+        acquisitionIncomplete.add(`${acquisition.id}-${fieldKey}`);
       }
     });
 
@@ -209,17 +215,19 @@ const BuildSchema: React.FC = () => {
 
         seriesFieldDefs.forEach(fieldDef => {
           let fieldValue = null;
+          const fieldKey = fieldDef.tag || fieldDef.name;
 
           // Handle both array format (from loaded schemas) and object format (from processed data)
+          // Use tag-or-name matching for derived fields with null tags
           if (Array.isArray(series?.fields)) {
-            fieldValue = series.fields.find(f => f.tag === fieldDef.tag);
+            fieldValue = series.fields.find(f => f.tag === fieldDef.tag || f.name === fieldDef.name);
           } else if (series?.fields && typeof series.fields === 'object') {
-            fieldValue = series.fields[fieldDef.tag];
+            fieldValue = series.fields[fieldKey];
           }
 
           // Use == null to check for null/undefined without catching falsy values like 0
           if (fieldValue == null || !isFieldValueValid(fieldValue)) {
-            acquisitionIncomplete.add(`${acquisition.id}-series-${seriesIndex}-${fieldDef.tag}`);
+            acquisitionIncomplete.add(`${acquisition.id}-series-${seriesIndex}-${fieldKey}`);
           }
         });
       }
@@ -244,9 +252,8 @@ const BuildSchema: React.FC = () => {
     ? acquisitions.find(a => a.id === selectedAcquisitionId)
     : null;
 
-  const handleFileUpload = useCallback(async (files: FileList | null) => {
-    if (!files) return;
-
+  // Core file processing logic - called after size check passes or user chooses to proceed anyway
+  const processFiles = useCallback(async (files: FileList, skipSizeCheck: boolean = false) => {
     setIsUploading(true);
     setUploadProgress(0);
     setUploadStatus('Preparing files...');
@@ -256,9 +263,12 @@ const BuildSchema: React.FC = () => {
       // This prevents browser file access timeout issues on slower systems
       setUploadStatus('Reading file data...');
 
-      const fileObjects = await processUploadedFiles(files, (fileProgress) => {
-        setUploadStatus(`Reading file ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.fileName}`);
-        setUploadProgress((fileProgress.current / fileProgress.total) * 30); // 0-30% for file reading
+      const fileObjects = await processUploadedFiles(files, {
+        onProgress: (fileProgress) => {
+          setUploadStatus(`Reading file ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.fileName}`);
+          setUploadProgress((fileProgress.current / fileProgress.total) * 30); // 0-30% for file reading
+        },
+        skipSizeCheck
       });
 
       // Now initialize Pyodide if needed (after files are safely in memory)
@@ -295,7 +305,8 @@ const BuildSchema: React.FC = () => {
                 tag: field.tag,
                 name: field.name,
                 value: roundDicomValue(field.value),  // Direct value, same as acquisition fields
-                validationRule: field.validationRule || { type: 'exact' }
+                validationRule: field.validationRule || { type: 'exact' },
+                fieldType: field.fieldType  // Preserve field type (standard/derived)
               }))
             : [] // Handle old object format by converting to empty array
         }))
@@ -325,6 +336,35 @@ const BuildSchema: React.FC = () => {
       }, 500);
     }
   }, [setAcquisitions, initializePyodideIfNeeded]);
+
+  // Main file upload handler - checks size first and shows warning if needed
+  const handleFileUpload = useCallback(async (files: FileList | null) => {
+    if (!files) return;
+
+    // Check file size before processing
+    setUploadStatus('Checking file sizes...');
+    const sizeInfo = await checkFileSizeLimit(files);
+
+    if (sizeInfo.exceedsLimit) {
+      // Show warning modal and let user decide
+      setSizeWarning({ show: true, info: sizeInfo, files });
+      setUploadStatus('');
+      return;
+    }
+
+    // Size is OK, proceed with processing
+    await processFiles(files, false);
+  }, [processFiles]);
+
+  // Handle "try anyway" from size warning modal
+  const handleProceedAnyway = useCallback(async () => {
+    const files = sizeWarning.files;
+    setSizeWarning({ show: false, info: null, files: null });
+
+    if (files) {
+      await processFiles(files, true);
+    }
+  }, [sizeWarning.files, processFiles]);
 
   const handleProFileUpload = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -609,7 +649,8 @@ const BuildSchema: React.FC = () => {
                 tag: f.tag,
                 name: f.field || f.name,
                 value: f.value,  // Direct value, same as acquisition fields
-                validationRule
+                validationRule,
+                fieldType: f.fieldType  // Preserve field type (standard/derived)
               });
             });
           }
@@ -1150,6 +1191,39 @@ const BuildSchema: React.FC = () => {
                 className="px-4 py-2 bg-surface-secondary text-content-primary rounded-md hover:bg-border-secondary"
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Size Warning Modal */}
+      {sizeWarning.show && sizeWarning.info && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-surface-primary rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center mb-4">
+              <AlertTriangle className="h-6 w-6 text-status-warning mr-3" />
+              <h3 className="text-lg font-medium text-content-primary">Large Dataset Warning</h3>
+            </div>
+            <p className="text-content-secondary mb-4">
+              This dataset is <span className="font-semibold">{sizeWarning.info.totalGB.toFixed(1)} GB</span> ({sizeWarning.info.fileCount.toLocaleString()} files),
+              which exceeds the recommended ~2 GB limit for browser processing.
+            </p>
+            <p className="text-content-tertiary text-sm mb-6">
+              Processing may fail due to browser memory limits. For large datasets, consider using the desktop Python package instead.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setSizeWarning({ show: false, info: null, files: null })}
+                className="px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleProceedAnyway}
+                className="px-4 py-2 bg-status-warning text-content-inverted rounded-lg hover:opacity-90"
+              >
+                Try Anyway
               </button>
             </div>
           </div>

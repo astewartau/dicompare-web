@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, KeyboardEvent, FormEvent } from 'react';
-import { searchDicomFields, isValidDicomTag, type DicomFieldDefinition } from '../../services/dicomFieldService';
+import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import { searchDicomFields, type DicomFieldDefinition } from '../../services/dicomFieldService';
 
 interface DicomFieldSelectorProps {
   selectedFields: string[];
@@ -25,8 +25,6 @@ const DicomFieldSelector = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
-  const [manualEntry, setManualEntry] = useState('');
-  const [showManualEntry, setShowManualEntry] = useState(false);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -86,13 +84,23 @@ const DicomFieldSelector = ({
     onFieldsChange(selectedFields.filter(tag => tag !== fieldTag));
   };
 
+  // Helper to add custom field directly
+  const addCustomField = () => {
+    const trimmedValue = searchTerm.trim();
+    if (trimmedValue && !selectedFields.includes(trimmedValue)) {
+      onFieldsChange([...selectedFields, trimmedValue]);
+    }
+    setSearchTerm('');
+    setIsDropdownOpen(false);
+    setSelectedSuggestionIndex(-1);
+    inputRef.current?.focus();
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (!isDropdownOpen || suggestions.length === 0) {
       if (e.key === 'Enter' && searchTerm.trim()) {
-        // Allow manual entry of field tags
-        setManualEntry(searchTerm);
-        setShowManualEntry(true);
         e.preventDefault();
+        addCustomField();
       }
       return;
     }
@@ -100,48 +108,33 @@ const DicomFieldSelector = ({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedSuggestionIndex(prev => 
+        setSelectedSuggestionIndex(prev =>
           prev < suggestions.length - 1 ? prev + 1 : 0
         );
         break;
-      
+
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedSuggestionIndex(prev => 
+        setSelectedSuggestionIndex(prev =>
           prev > 0 ? prev - 1 : suggestions.length - 1
         );
         break;
-      
+
       case 'Enter':
         e.preventDefault();
         if (selectedSuggestionIndex >= 0) {
+          // Select highlighted suggestion
           handleFieldSelect(suggestions[selectedSuggestionIndex]);
+        } else if (searchTerm.trim()) {
+          // No suggestion selected - add custom field directly
+          addCustomField();
         }
         break;
-      
+
       case 'Escape':
         setIsDropdownOpen(false);
         setSelectedSuggestionIndex(-1);
         break;
-    }
-  };
-
-  const handleManualEntrySubmit = (value: string) => {
-    if (isValidDicomTag(value) && !selectedFields.includes(value)) {
-      onFieldsChange([...selectedFields, value]);
-    }
-    setManualEntry('');
-    setShowManualEntry(false);
-    setSearchTerm('');
-  };
-
-  const getFieldDisplayName = async (tag: string): Promise<string> => {
-    try {
-      const results = await searchDicomFields(tag, 1);
-      const field = results.find(f => f.tag.replace(/[()]/g, '') === tag);
-      return field ? `${field.name} (${tag})` : tag;
-    } catch {
-      return tag;
     }
   };
 
@@ -225,13 +218,13 @@ const DicomFieldSelector = ({
               );
             })}
 
-            {/* Manual Entry Option */}
+            {/* Add Custom Field Option */}
             <div className="px-4 py-2 border-t border-border bg-surface-secondary">
               <button
-                onClick={() => setShowManualEntry(true)}
+                onClick={addCustomField}
                 className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
               >
-                + Add custom field tag manually
+                + Add "{searchTerm}" as custom field
               </button>
             </div>
           </div>
@@ -243,27 +236,15 @@ const DicomFieldSelector = ({
             <div className="px-4 py-3 text-content-secondary text-center">
               No fields found for "{searchTerm}"
               <button
-                onClick={() => setShowManualEntry(true)}
+                onClick={addCustomField}
                 className="block w-full text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 mt-2"
               >
-                Add as custom field tag
+                Add "{searchTerm}" as custom field
               </button>
             </div>
           </div>
         )}
       </div>
-
-      {/* Manual Entry Modal */}
-      {showManualEntry && (
-        <ManualEntryModal
-          initialValue={manualEntry || searchTerm}
-          onSubmit={handleManualEntrySubmit}
-          onCancel={() => {
-            setShowManualEntry(false);
-            setManualEntry('');
-          }}
-        />
-      )}
 
       {/* Field Count Display */}
       {maxSelections && (
@@ -308,83 +289,6 @@ const SelectedFieldTag = ({ fieldTag, onRemove }: { fieldTag: string; onRemove: 
         </svg>
       </button>
     </span>
-  );
-};
-
-// Modal for manual field tag entry
-const ManualEntryModal = ({ 
-  initialValue, 
-  onSubmit, 
-  onCancel 
-}: {
-  initialValue: string;
-  onSubmit: (value: string) => void;
-  onCancel: () => void;
-}) => {
-  const [value, setValue] = useState(initialValue);
-  const [isValid, setIsValid] = useState(false);
-
-  useEffect(() => {
-    setIsValid(isValidDicomTag(value));
-  }, [value]);
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (isValid) {
-      onSubmit(value);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface-primary rounded-lg p-6 w-96">
-        <h3 className="text-lg font-semibold text-content-primary mb-4">Add Custom DICOM Field Tag</h3>
-
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label htmlFor="fieldTag" className="block text-sm font-medium text-content-secondary mb-1">
-              DICOM Tag (format: XXXX,XXXX)
-            </label>
-            <input
-              id="fieldTag"
-              type="text"
-              value={value}
-              onChange={(e) => setValue(e.target.value.toUpperCase())}
-              placeholder="0018,0080"
-              className={`w-full px-3 py-2 border rounded-md bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 font-mono ${
-                value && !isValid ? 'border-red-500/50 focus:border-red-500' : 'border-border-secondary focus:border-brand-500'
-              }`}
-            />
-            {value && !isValid && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                Please enter a valid DICOM tag in format XXXX,XXXX (e.g., 0018,0080)
-              </p>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-4 py-2 text-content-secondary hover:text-content-primary"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!isValid}
-              className={`px-4 py-2 rounded-md ${
-                isValid
-                  ? 'bg-brand-600 text-white hover:bg-brand-700'
-                  : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-              }`}
-            >
-              Add Field
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 };
 

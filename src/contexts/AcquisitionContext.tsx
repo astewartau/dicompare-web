@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Acquisition, DicomField, Series, SeriesField, SelectedValidationFunction } from '../types';
-import { searchDicomFields, suggestDataType, suggestValidationConstraint } from '../services/dicomFieldService';
+import { searchDicomFields, suggestDataType, suggestValidationConstraint, isValidDicomTag } from '../services/dicomFieldService';
 import { convertValueToDataType, inferDataTypeFromValue } from '../utils/datatypeInference';
 import { getSuggestedToleranceValue } from '../utils/vrMapping';
 
@@ -66,62 +66,65 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
     setAcquisitions(prev => [...prev, newAcquisition]);
   }, []);
 
-  const updateField = useCallback((acquisitionId: string, fieldTag: string, updates: Partial<DicomField>) => {
+  const updateField = useCallback((acquisitionId: string, fieldTagOrName: string, updates: Partial<DicomField>) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
 
       return {
         ...acq,
+        // Match by tag OR name to handle custom/derived fields with null tags
         acquisitionFields: acq.acquisitionFields.map(f =>
-          f.tag === fieldTag ? { ...f, ...updates } : f
+          (f.tag === fieldTagOrName || f.name === fieldTagOrName) ? { ...f, ...updates } : f
         ),
         // Update field in all series (new array format)
         series: acq.series?.map(s => ({
           ...s,
           fields: Array.isArray(s.fields) ? s.fields.map(f =>
-            f.tag === fieldTag ? { ...f, ...updates } : f
+            (f.tag === fieldTagOrName || f.name === fieldTagOrName) ? { ...f, ...updates } : f
           ) : []
         }))
       };
     }));
   }, []);
 
-  const deleteField = useCallback((acquisitionId: string, fieldTag: string) => {
+  const deleteField = useCallback((acquisitionId: string, fieldTagOrName: string) => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
 
       return {
         ...acq,
-        acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
+        // Filter by tag OR name to handle custom/derived fields with null tags
+        acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName),
         // Remove field from all series (new array format)
         series: acq.series?.map(s => ({
           ...s,
-          fields: Array.isArray(s.fields) ? s.fields.filter(f => f.tag !== fieldTag) : []
+          fields: Array.isArray(s.fields) ? s.fields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName) : []
         }))
       };
     }));
   }, []);
 
-  const convertFieldLevel = useCallback((acquisitionId: string, fieldTag: string, toLevel: 'acquisition' | 'series', mode: 'separate-series' | 'single-series' = 'single-series') => {
+  const convertFieldLevel = useCallback((acquisitionId: string, fieldTagOrName: string, toLevel: 'acquisition' | 'series', mode: 'separate-series' | 'single-series' = 'single-series') => {
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
 
-      // Find field in acquisition level
-      const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTag);
+      // Find field in acquisition level (by tag or name for derived fields)
+      const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTagOrName || f.name === fieldTagOrName);
       // Find field in any series (handle both old and new formats)
       let seriesField: SeriesField | undefined;
       for (const series of acq.series || []) {
         if (Array.isArray(series.fields)) {
           // New format: fields is an array of SeriesField
-          seriesField = series.fields.find(f => f.tag === fieldTag);
+          // Search by tag first, then by name (for derived fields with null tags)
+          seriesField = series.fields.find(f => f.tag === fieldTagOrName || f.name === fieldTagOrName);
         } else if (series.fields && typeof series.fields === 'object') {
           // Old format: fields is an object {tag: value}
-          const fieldValue = (series.fields as any)[fieldTag];
+          const fieldValue = (series.fields as any)[fieldTagOrName];
           if (fieldValue !== undefined) {
             // Convert old format to SeriesField
             seriesField = {
-              name: fieldTag, // We'll use tag as name for now
-              tag: fieldTag,
+              name: fieldTagOrName, // We'll use tag as name for now
+              tag: fieldTagOrName,
               value: typeof fieldValue === 'object' && fieldValue.value !== undefined ? fieldValue.value : fieldValue,
               validationRule: typeof fieldValue === 'object' && fieldValue.validationRule ? fieldValue.validationRule : undefined
             };
@@ -137,23 +140,25 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
         value: seriesField.value,
         vr: 'UN',
         level: 'series' as const,
-        validationRule: seriesField.validationRule
+        validationRule: seriesField.validationRule,
+        fieldType: seriesField.fieldType  // Preserve field type (standard/derived)
       } : null);
 
       if (!field) return acq;
 
       if (toLevel === 'acquisition') {
         // Remove field from all series and add to acquisition level
+        // Use tag-or-name matching for derived fields with null tags
         const updatedSeries = (acq.series || []).map(series => ({
           ...series,
           fields: Array.isArray(series.fields)
-            ? series.fields.filter(f => f.tag !== fieldTag)
+            ? series.fields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName)
             : [] // Convert old object format to new array format
         }));
 
         return {
           ...acq,
-          acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTag), { ...field, level: 'acquisition' }],
+          acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName), { ...field, level: 'acquisition' }],
           series: updatedSeries
         };
       } else {
@@ -172,14 +177,15 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
                   name: `Series ${String(seriesCounter).padStart(2, '0')}`,
                   fields: [
                     ...(Array.isArray(existingSeries.fields)
-                        ? existingSeries.fields.filter(f => f.tag !== fieldTag)
+                        ? existingSeries.fields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName)
                         : []), // Handle old object format
                     {
                       name: field.name,
                       keyword: field.keyword,
                       tag: field.tag,
                       value: field.value[i],
-                      validationRule: field.validationRule
+                      validationRule: field.validationRule,
+                      fieldType: field.fieldType
                     }
                   ]
                 });
@@ -196,7 +202,8 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
                   keyword: field.keyword,
                   tag: field.tag,
                   value: field.value[i],
-                  validationRule: field.validationRule
+                  validationRule: field.validationRule,
+                  fieldType: field.fieldType
                 }]
               });
             }
@@ -210,14 +217,15 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
               name: existingSeries?.name || `Series ${String(i + 1).padStart(2, '0')}`,
               fields: [
                 ...(existingSeries && Array.isArray(existingSeries.fields)
-                    ? existingSeries.fields.filter(f => f.tag !== fieldTag)
+                    ? existingSeries.fields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName)
                     : []), // Handle old object format
                 {
                   name: field.name,
                   keyword: field.keyword,
                   tag: field.tag,
                   value: field.value,
-                  validationRule: field.validationRule
+                  validationRule: field.validationRule,
+                  fieldType: field.fieldType
                 }
               ]
             });
@@ -226,7 +234,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
 
         return {
           ...acq,
-          acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTag),
+          acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName),
           series: updatedSeries
         };
       }
@@ -236,15 +244,33 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
   const addFields = useCallback(async (acquisitionId: string, fieldTags: string[]) => {
     if (fieldTags.length === 0) return;
 
-    // Process each field tag to get enhanced field data from local service
-    const newFieldsPromises = fieldTags.map(async tag => {
+    // Process each field tag/name to get enhanced field data from local service
+    const newFieldsPromises = fieldTags.map(async (tagOrName) => {
       try {
+        const isDicomFormat = isValidDicomTag(tagOrName);
+
         // Use local DICOM field service (no Pyodide needed!)
-        const results = await searchDicomFields(tag, 1);
-        const fieldDef = results.find(f => f.tag.replace(/[()]/g, '') === tag);
+        const results = await searchDicomFields(tagOrName, 1);
+        const fieldDef = isDicomFormat
+          ? results.find(f => f.tag.replace(/[()]/g, '') === tagOrName)
+          : results.find(f => f.keyword?.toLowerCase() === tagOrName.toLowerCase() || f.name?.toLowerCase() === tagOrName.toLowerCase());
+
+        // Determine field type:
+        // - standard: known DICOM tag found in dictionary
+        // - private: DICOM tag format but not in dictionary
+        // - custom: user-defined name (not DICOM format)
+        let fieldType: 'standard' | 'private' | 'custom';
+        if (fieldDef) {
+          fieldType = 'standard';
+        } else if (isDicomFormat) {
+          fieldType = 'private';
+        } else {
+          fieldType = 'custom';
+        }
 
         const vr = fieldDef?.vr || fieldDef?.valueRepresentation || 'UN';
-        const name = fieldDef?.name || tag;
+        const tag = fieldDef?.tag?.replace(/[()]/g, '') || (isDicomFormat ? tagOrName : null);
+        const name = fieldDef?.name || tagOrName;
         const keyword = fieldDef?.keyword || name;
         const suggestedDataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
         const constraintType = fieldDef ? suggestValidationConstraint(fieldDef) : 'exact' as const;
@@ -256,7 +282,7 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
 
         // Add tolerance value for fields that use tolerance validation
         if (constraintType === 'tolerance') {
-          const toleranceValue = getSuggestedToleranceValue(name, tag);
+          const toleranceValue = getSuggestedToleranceValue(name, tag || '');
           if (toleranceValue !== undefined) {
             validationRule.tolerance = toleranceValue;
             validationRule.value = defaultValue; // Include value for tolerance validation check
@@ -271,19 +297,22 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
           vr,
           dataType: suggestedDataType, // Include the properly inferred data type
           level: 'acquisition' as const,
-          validationRule
+          validationRule,
+          fieldType
         };
       } catch (error) {
-        // Fallback if field lookup fails
+        // Fallback if field lookup fails - determine type based on format
+        const isDicomFormat = isValidDicomTag(tagOrName);
         return {
-          tag,
-          name: tag,
-          keyword: tag,
+          tag: isDicomFormat ? tagOrName : null,
+          name: tagOrName,
+          keyword: tagOrName,
           value: '', // Keep as empty string for unknown fields
           vr: 'UN',
           dataType: 'string', // Default data type for unknown fields
           level: 'acquisition' as const,
-          validationRule: { type: 'exact' as const }
+          validationRule: { type: 'exact' as const },
+          fieldType: isDicomFormat ? 'private' as const : 'custom' as const
         };
       }
     });
@@ -293,9 +322,21 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
     setAcquisitions(prev => prev.map(acq => {
       if (acq.id !== acquisitionId) return acq;
 
+      // Filter out duplicates - don't add fields that already exist (by tag or name)
+      const existingTags = new Set(acq.acquisitionFields.map(f => f.tag).filter(Boolean));
+      const existingNames = new Set(acq.acquisitionFields.map(f => f.name.toLowerCase()));
+
+      const uniqueNewFields = newFields.filter(newField => {
+        // Check if tag already exists (for standard/private fields)
+        if (newField.tag && existingTags.has(newField.tag)) return false;
+        // Check if name already exists (for all fields, case-insensitive)
+        if (existingNames.has(newField.name.toLowerCase())) return false;
+        return true;
+      });
+
       return {
         ...acq,
-        acquisitionFields: [...acq.acquisitionFields, ...newFields]
+        acquisitionFields: [...acq.acquisitionFields, ...uniqueNewFields]
       };
     }));
   }, []);
@@ -364,8 +405,9 @@ export const AcquisitionProvider: React.FC<AcquisitionProviderProps> = ({ childr
         // Collect all unique fields from all series
         currentSeries.forEach(s => {
           s.fields.forEach(f => {
-            if (!fieldMap.has(f.tag)) {
-              fieldMap.set(f.tag, f);
+            const fieldKey = f.tag || f.name;  // Use name as key for derived fields with null tags
+            if (!fieldMap.has(fieldKey)) {
+              fieldMap.set(fieldKey, f);
             }
           });
         });
