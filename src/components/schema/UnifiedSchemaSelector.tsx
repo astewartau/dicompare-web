@@ -348,7 +348,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                         {schema.isMultiAcquisition && (
                           <>
                             <span>•</span>
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                            <span className="px-2 py-0.5 bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded-full">
                               {schema.acquisitions.length} acquisitions
                             </span>
                           </>
@@ -359,7 +359,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                       {/* Download button - always visible */}
                       <button
                         onClick={(e) => handleDownload(schema.id, schema.name, e)}
-                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                        className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
                         title="Save schema"
                       >
                         <Download className="h-4 w-4" />
@@ -369,7 +369,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                       {activeTab === 'uploaded' && (
                         <button
                           onClick={(e) => handleDelete(schema.id, schema.name, e)}
-                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                          className="p-1 text-content-tertiary hover:text-status-error transition-colors"
                           title="Delete schema"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -378,7 +378,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
                       {/* Expand chevron */}
                       {expandable && selectionMode === 'acquisition' && (
-                        <div className="p-1 text-gray-600">
+                        <div className="p-1 text-content-secondary">
                           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </div>
                       )}
@@ -388,11 +388,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
                 {/* Expanded Acquisitions */}
                 {expandable && isExpanded && selectionMode === 'acquisition' && (
-                  <div className="p-4 border-t border-gray-100 bg-gray-50">
+                  <div className="p-4 border-t border-border bg-surface-secondary">
                     {isLoading ? (
                       <div className="flex items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600"></div>
-                        <span className="ml-2 text-sm text-gray-600">Loading acquisitions...</span>
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600"></div>
+                        <span className="ml-2 text-sm text-content-secondary">Loading acquisitions...</span>
                       </div>
                     ) : acquisitions.length > 0 ? (
                       <div className="space-y-2">
@@ -400,20 +400,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                           <button
                             key={acquisition.id}
                             onClick={() => onAcquisitionSelect?.(schema.id, index)}
-                            className="w-full text-left border border-gray-200 rounded-lg p-3 bg-white hover:bg-medical-50 hover:border-medical-300 transition-all"
+                            className="w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700 transition-all"
                           >
                             <div className="flex items-start space-x-3">
-                              <FileText className="h-5 w-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                              <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
-                                <div className="font-medium text-sm text-gray-900">
+                                <div className="font-medium text-sm text-content-primary">
                                   {acquisition.protocolName}
                                 </div>
                                 {acquisition.seriesDescription && (
-                                  <div className="text-xs text-gray-600 mt-1">
+                                  <div className="text-xs text-content-secondary mt-1">
                                     {acquisition.seriesDescription}
                                   </div>
                                 )}
-                                <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
                                   {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
                                     <span className="flex items-center">
                                       <List className="h-3 w-3 mr-1" />
@@ -426,7 +426,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                     </span>
                                   )}
                                   {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
-                                    <span className="text-purple-600">
+                                    <span className="text-brand-600 dark:text-brand-400">
                                       {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
                                     </span>
                                   )}
@@ -437,7 +437,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-4 text-sm text-gray-500">
+                      <div className="text-center py-4 text-sm text-content-tertiary">
                         No acquisitions found in this schema
                       </div>
                     )}
@@ -449,7 +449,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         </div>
 
         {displayedSchemas.length === 0 && (
-          <p className="text-sm text-gray-500 text-center py-8">
+          <p className="text-sm text-content-tertiary text-center py-8">
             {activeTab === 'library'
               ? 'No library schemas available.'
               : 'No custom schemas. Upload a schema to get started.'}
