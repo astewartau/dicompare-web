@@ -5,7 +5,7 @@ import ThemeToggle from '../components/common/ThemeToggle';
 
 const LandingPage: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-surface-primary">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-surface-primary dark:from-surface dark:to-surface">
       {/* Header */}
       <header className="bg-surface-primary shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
