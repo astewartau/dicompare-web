@@ -175,7 +175,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
       return (
         <div className="flex items-start space-x-2">
           <div className="flex-shrink-0 mt-0.5"><StatusIcon status={status} /></div>
-          <p className="text-xs text-gray-700">{message}</p>
+          <p className="text-xs text-content-secondary">{message}</p>
         </div>
       );
     }
@@ -191,8 +191,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
   if (isLoadingSchema && pairing) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader className="h-8 w-8 animate-spin text-medical-600" />
-        <span className="ml-3 text-gray-600">Loading schema...</span>
+        <Loader className="h-8 w-8 animate-spin text-brand-600" />
+        <span className="ml-3 text-content-secondary">Loading schema...</span>
       </div>
     );
   }
@@ -200,7 +200,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
   if (pairing && !schemaAcquisition) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-600">Failed to load schema</p>
+        <p className="text-status-error">Failed to load schema</p>
       </div>
     );
   }
@@ -279,53 +279,53 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
       {/* Validation Rules Table */}
       {validationRules.length > 0 && (
         <div>
-          <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
-            <table className="w-full divide-y divide-gray-200 table-fixed">
-              <thead className="bg-gray-50">
+          <div className="border border-border rounded-lg overflow-hidden w-full">
+            <table className="w-full divide-y divide-border table-fixed">
+              <thead className="bg-surface-secondary">
                 <tr>
-                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/3">
+                  <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase w-1/3">
                     Rule
                   </th>
-                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/3">
+                  <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase w-1/3">
                     Description
                   </th>
-                  <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase">
                     Status
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-surface-primary divide-y divide-border">
                 {sortedValidationRules.map((rule, idx) => {
                   const result = validationRuleResults.find(r => r.rule_name === (rule.customName || rule.name));
 
                   // Determine row background color based on status
-                  let rowBgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                  let rowBgClass = idx % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-secondary';
                   if (result) {
-                    if (result.status === 'pass') rowBgClass = 'bg-green-50';
-                    else if (result.status === 'fail') rowBgClass = 'bg-red-50';
-                    else if (result.status === 'warning') rowBgClass = 'bg-yellow-50';
+                    if (result.status === 'pass') rowBgClass = 'bg-green-500/10 dark:bg-green-500/20';
+                    else if (result.status === 'fail') rowBgClass = 'bg-red-500/10 dark:bg-red-500/20';
+                    else if (result.status === 'warning') rowBgClass = 'bg-yellow-500/10 dark:bg-yellow-500/20';
                   }
 
                   return (
                     <tr key={idx} className={rowBgClass}>
                       <td className="px-2 py-1.5">
-                        <p className="text-sm font-medium text-gray-900">{rule.customName || rule.name}</p>
+                        <p className="text-sm font-medium text-content-primary">{rule.customName || rule.name}</p>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {(rule.customFields || rule.fields).map(field => (
-                            <span key={field} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                            <span key={field} className="px-2 py-0.5 bg-blue-500/10 text-blue-700 dark:text-blue-400 text-xs rounded">
                               {field}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td className="px-2 py-1.5 text-sm text-gray-900">{rule.customDescription || rule.description}</td>
+                      <td className="px-2 py-1.5 text-sm text-content-primary">{rule.customDescription || rule.description}</td>
                       <td className="px-2 py-1.5 text-center">
                         {isValidating ? (
-                          <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
+                          <Loader className="h-4 w-4 animate-spin mx-auto text-content-tertiary" />
                         ) : result ? (
                           renderStatusWithMessage(result.status, result.message)
                         ) : (
-                          <HelpCircle className="h-4 w-4 text-gray-400 mx-auto" />
+                          <HelpCircle className="h-4 w-4 text-content-muted mx-auto" />
                         )}
                       </td>
                     </tr>
@@ -339,29 +339,29 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
       {/* Acquisition-Level Fields Table */}
       <div>
-        <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
-          <table className="w-full divide-y divide-gray-200 table-fixed">
-            <thead className="bg-gray-50">
+        <div className="border border-border rounded-lg overflow-hidden w-full">
+          <table className="w-full divide-y divide-border table-fixed">
+            <thead className="bg-surface-secondary">
               <tr>
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
+                <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase w-1/4">
                   Acquisition Field
                 </th>
                 {schemaAcquisition && (
-                  <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
+                  <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase w-1/4">
                     Expected Value
                   </th>
                 )}
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase w-1/4">
+                <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase w-1/4">
                   Actual Value
                 </th>
                 {schemaAcquisition && (
-                  <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                  <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase w-24">
                     Status
                   </th>
                 )}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-surface-primary divide-y divide-border">
               {sortedAcquisitionFieldTags.map((tag, idx) => {
                 const dataField = acquisition.acquisitionFields.find(f => f.tag === tag);
                 const schemaField = schemaAcquisition?.acquisitionFields.find(f => f.tag === tag);
@@ -372,18 +372,18 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                 );
 
                 // Determine row background color based on status
-                let rowBgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                let rowBgClass = idx % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-secondary';
                 if (schemaAcquisition && result) {
-                  if (result.status === 'pass') rowBgClass = 'bg-green-50';
-                  else if (result.status === 'fail') rowBgClass = 'bg-red-50';
-                  else if (result.status === 'warning') rowBgClass = 'bg-yellow-50';
+                  if (result.status === 'pass') rowBgClass = 'bg-green-500/10 dark:bg-green-500/20';
+                  else if (result.status === 'fail') rowBgClass = 'bg-red-500/10 dark:bg-red-500/20';
+                  else if (result.status === 'warning') rowBgClass = 'bg-yellow-500/10 dark:bg-yellow-500/20';
                 }
 
                 return (
                   <tr key={tag} className={rowBgClass}>
                     <td className="px-2 py-1.5">
-                      <p className="text-sm font-medium text-gray-900">{dataField?.name || schemaField?.name}</p>
-                      <p className="text-xs text-gray-500">{tag}</p>
+                      <p className="text-sm font-medium text-content-primary">{dataField?.name || schemaField?.name}</p>
+                      <p className="text-xs text-content-tertiary">{tag}</p>
                     </td>
                     {schemaAcquisition && (
                       <td className="px-2 py-1.5">
@@ -391,10 +391,10 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                           <div>
                             {/* Format value directly from schema field, like AcquisitionTable does */}
                             {console.log('Schema field for', schemaField.name, ':', schemaField)}
-                            <p className="text-sm text-gray-900">
+                            <p className="text-sm text-content-primary">
                               {formatFieldValue(schemaField)}
                             </p>
-                            <p className="text-xs text-gray-500 mt-0.5">
+                            <p className="text-xs text-content-tertiary mt-0.5">
                               {formatFieldTypeInfo(
                                 schemaField.dataType || inferDataTypeFromValue(schemaField.value),
                                 schemaField.validationRule
@@ -402,21 +402,21 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                             </p>
                           </div>
                         ) : (
-                          <span className="text-gray-400 italic">—</span>
+                          <span className="text-content-muted italic">—</span>
                         )}
                       </td>
                     )}
                     <td className="px-2 py-1.5">
                       {dataField ? (
-                        <p className="text-sm text-gray-900">{formatFieldValue(dataField)}</p>
+                        <p className="text-sm text-content-primary">{formatFieldValue(dataField)}</p>
                       ) : (
-                        <span className="text-gray-400 italic">—</span>
+                        <span className="text-content-muted italic">—</span>
                       )}
                     </td>
                     {schemaAcquisition && (
                       <td className="px-2 py-1.5 text-center">
                         {isValidating ? (
-                          <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
+                          <Loader className="h-4 w-4 animate-spin mx-auto text-content-tertiary" />
                         ) : result ? (
                           renderStatusWithMessage(result.status, result.message)
                         ) : schemaField ? (
@@ -507,27 +507,27 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
     const fieldTagsArray = Array.from(allFieldTags);
 
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
-        <table className="w-full divide-y divide-gray-200 table-fixed">
-          <thead className="bg-gray-50">
+      <div className="border border-border rounded-lg overflow-hidden w-full">
+        <table className="w-full divide-y divide-border table-fixed">
+          <thead className="bg-surface-secondary">
             <tr>
-              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase">
                 Series
               </th>
               {fieldTagsArray.map(tag => (
-                <th key={tag} className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+                <th key={tag} className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase">
                   {fieldTagToName.get(tag)}
-                  <div className="text-xs text-gray-400 font-mono normal-case font-normal">{tag}</div>
+                  <div className="text-xs text-content-muted font-mono normal-case font-normal">{tag}</div>
                 </th>
               ))}
               {schemaAcquisition && (
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase w-24">
                   Status
                 </th>
               )}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-surface-primary divide-y divide-border">
             {filteredDataSeries.map((series, idx) => {
               // Find validation results for this series (use original index for matching)
               const originalIdx = dataSeries.indexOf(series);
@@ -552,11 +552,11 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
               }
 
               // Determine row background color
-              let rowBgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+              let rowBgClass = idx % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-secondary';
               if (schemaAcquisition && overallStatus !== 'unknown') {
-                if (overallStatus === 'pass') rowBgClass = 'bg-green-50';
-                else if (overallStatus === 'fail') rowBgClass = 'bg-red-50';
-                else if (overallStatus === 'warning') rowBgClass = 'bg-yellow-50';
+                if (overallStatus === 'pass') rowBgClass = 'bg-green-500/10 dark:bg-green-500/20';
+                else if (overallStatus === 'fail') rowBgClass = 'bg-red-500/10 dark:bg-red-500/20';
+                else if (overallStatus === 'warning') rowBgClass = 'bg-yellow-500/10 dark:bg-yellow-500/20';
               }
 
               const statusMessage = seriesResults.length > 0
@@ -565,7 +565,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
               return (
                 <tr key={idx} className={rowBgClass}>
-                  <td className="px-2 py-1.5 text-sm font-medium text-gray-900">
+                  <td className="px-2 py-1.5 text-sm font-medium text-content-primary">
                     {series.name || `Series ${idx + 1}`}
                   </td>
                   {fieldTagsArray.map(tag => {
@@ -587,14 +587,14 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
                     return (
                       <td key={tag} className="px-2 py-1.5">
-                        <p className="text-sm text-gray-900">{fieldValue}</p>
+                        <p className="text-sm text-content-primary">{fieldValue}</p>
                       </td>
                     );
                   })}
                   {schemaAcquisition && (
                     <td className="px-2 py-1.5 text-center">
                       {isValidating ? (
-                        <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
+                        <Loader className="h-4 w-4 animate-spin mx-auto text-content-tertiary" />
                       ) : (
                         renderStatusWithMessage(overallStatus, statusMessage)
                       )}
@@ -636,27 +636,27 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
     const fieldsArray = Array.from(allFields.values());
 
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
-        <table className="w-full divide-y divide-gray-200 table-fixed">
-          <thead className="bg-gray-50">
+      <div className="border border-border rounded-lg overflow-hidden w-full">
+        <table className="w-full divide-y divide-border table-fixed">
+          <thead className="bg-surface-secondary">
             <tr>
-              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase">
                 Expected Series
               </th>
               {fieldsArray.map(field => (
-                <th key={field.name} className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+                <th key={field.name} className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase">
                   <div>
                     <p className="font-medium">{field.name}</p>
-                    {field.tag && <p className="text-xs font-normal text-gray-400 font-mono">{field.tag}</p>}
+                    {field.tag && <p className="text-xs font-normal text-content-muted font-mono">{field.tag}</p>}
                   </div>
                 </th>
               ))}
-              <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
+              <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase w-24">
                 Status
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-surface-primary divide-y divide-border">
             {schemaSeries.map((series, idx) => {
               // Find validation results for this series by matching against series names in results
               const seriesResults = seriesValidationResults.filter(r => {
@@ -682,10 +682,10 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
               }
 
               // Determine row background color
-              let rowBgClass = 'bg-white';
-              if (overallStatus === 'pass') rowBgClass = 'bg-green-50';
-              else if (overallStatus === 'fail') rowBgClass = 'bg-red-50';
-              else if (overallStatus === 'warning') rowBgClass = 'bg-yellow-50';
+              let rowBgClass = 'bg-surface-primary';
+              if (overallStatus === 'pass') rowBgClass = 'bg-green-500/10 dark:bg-green-500/20';
+              else if (overallStatus === 'fail') rowBgClass = 'bg-red-500/10 dark:bg-red-500/20';
+              else if (overallStatus === 'warning') rowBgClass = 'bg-yellow-500/10 dark:bg-yellow-500/20';
 
               const statusMessage = seriesResults.length > 0
                 ? seriesResults.map(r => r.message).join('; ')
@@ -693,7 +693,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
               return (
                 <tr key={idx} className={rowBgClass}>
-                  <td className="px-2 py-1.5 text-sm font-medium text-gray-900">
+                  <td className="px-2 py-1.5 text-sm font-medium text-content-primary">
                     {series.name}
                   </td>
                   {fieldsArray.map(headerField => {
@@ -716,16 +716,16 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
                     return (
                       <td key={headerField.name} className="px-2 py-1.5">
-                        <p className="text-sm text-gray-900">{fieldValue}</p>
+                        <p className="text-sm text-content-primary">{fieldValue}</p>
                         {fieldTypeInfo && (
-                          <p className="text-xs text-gray-500">{fieldTypeInfo}</p>
+                          <p className="text-xs text-content-tertiary">{fieldTypeInfo}</p>
                         )}
                       </td>
                     );
                   })}
                   <td className="px-2 py-1.5 text-center">
                     {isValidating ? (
-                      <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
+                      <Loader className="h-4 w-4 animate-spin mx-auto text-content-tertiary" />
                     ) : (
                       renderStatusWithMessage(overallStatus, statusMessage)
                     )}
@@ -771,27 +771,27 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
 
     return (
       <div>
-        <div className="border border-red-200 rounded-lg overflow-hidden w-full">
-          <table className="w-full divide-y divide-gray-200 table-fixed">
-            <thead className="bg-red-50">
+        <div className="border border-red-500/30 dark:border-red-500/50 rounded-lg overflow-hidden w-full">
+          <table className="w-full divide-y divide-border table-fixed">
+            <thead className="bg-red-500/10 dark:bg-red-500/20">
               <tr>
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase">
                   Missing Series
                 </th>
                 {fieldTagsArray.map(tag => {
                   const field = missingSeries.flatMap(s => s.fields || []).find((f: any) => f.tag === tag);
                   return (
-                    <th key={tag} className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th key={tag} className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase">
                       {field?.name || tag}
                     </th>
                   );
                 })}
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase w-24">
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase w-24">
                   Status
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-surface-primary divide-y divide-border">
               {missingSeries.map((series, idx) => {
                 // Look for validation results for this missing series
                 const seriesResults = results.filter(
@@ -804,8 +804,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                   : `Required series "${series.name}" not found in data`;
 
                 return (
-                  <tr key={idx} className="bg-red-50">
-                    <td className="px-2 py-1.5 text-sm font-medium text-gray-900">
+                  <tr key={idx} className="bg-red-500/10 dark:bg-red-500/20">
+                    <td className="px-2 py-1.5 text-sm font-medium text-content-primary">
                       {series.name || `Series ${idx + 1}`}
                     </td>
                     {fieldTagsArray.map(tag => {
@@ -817,8 +817,8 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                         <td key={tag} className="px-2 py-1.5">
                           {schemaField ? (
                             <div>
-                              <p className="text-sm text-gray-900">{formatSeriesFieldValue(schemaField.value, schemaField.validationRule)}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">
+                              <p className="text-sm text-content-primary">{formatSeriesFieldValue(schemaField.value, schemaField.validationRule)}</p>
+                              <p className="text-xs text-content-tertiary mt-0.5">
                                 {formatFieldTypeInfo(
                                   inferDataTypeFromValue(schemaField.value),
                                   schemaField.validationRule
@@ -826,7 +826,7 @@ const CombinedComplianceView: React.FC<CombinedComplianceViewProps> = ({
                               </p>
                             </div>
                           ) : (
-                            <span className="text-gray-400 italic">—</span>
+                            <span className="text-content-muted italic">—</span>
                           )}
                         </td>
                       );
