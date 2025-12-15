@@ -574,6 +574,43 @@
           "parameters": {},
           "fields": [
             "DiffusionGradientDirectionSequence"
+          ],
+          "testCases": [
+            {
+              "id": "test_diffusion_directions_pass",
+              "name": "100 unique directions",
+              "data": {
+                "DiffusionGradientDirectionSequence": [
+                  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                  11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                  21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                  31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+                  41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+                  51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+                  61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
+                  71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                  81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
+                  91, 92, 93, 94, 95, 96, 97, 98, 99, 100
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "Valid UK Biobank diffusion acquisition with 100 unique gradient directions"
+            },
+            {
+              "id": "test_diffusion_directions_fail_too_few",
+              "name": "Only 50 directions",
+              "data": {
+                "DiffusionGradientDirectionSequence": [
+                  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                  11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                  21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                  31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+                  41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+                ]
+              },
+              "expectedResult": "fail",
+              "description": "Insufficient diffusion directions - only 50 instead of required 100"
+            }
           ]
         },
         {
@@ -584,6 +621,68 @@
           "parameters": {},
           "fields": [
             "DiffusionBValue"
+          ],
+          "testCases": [
+            {
+              "id": "test_bvalue_distribution_pass",
+              "name": "Valid b-value distribution",
+              "data": {
+                "DiffusionBValue": [
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "Valid distribution: 10 b=0, 50 b=1000, 50 b=2000"
+            },
+            {
+              "id": "test_bvalue_distribution_fail_b0",
+              "name": "Too few b=0 images",
+              "data": {
+                "DiffusionBValue": [
+                  0, 0, 0, 0, 0,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000
+                ]
+              },
+              "expectedResult": "fail",
+              "description": "Only 5 b=0 images instead of expected 8-12"
+            },
+            {
+              "id": "test_bvalue_distribution_fail_b1000",
+              "name": "Too few b=1000 images",
+              "data": {
+                "DiffusionBValue": [
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000
+                ]
+              },
+              "expectedResult": "fail",
+              "description": "Only 20 b=1000 images instead of expected 45-55"
+            }
           ]
         }
       ]
@@ -766,6 +865,35 @@
           "parameters": {},
           "fields": [
             "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "test_swi_echo_count_pass",
+              "name": "Two echoes",
+              "data": {
+                "EchoTime": [9.42, 9.42, 19.7, 19.7]
+              },
+              "expectedResult": "pass",
+              "description": "Valid SWI acquisition with two unique echo times"
+            },
+            {
+              "id": "test_swi_echo_count_fail_single",
+              "name": "Single echo",
+              "data": {
+                "EchoTime": [9.42, 9.42, 9.42, 9.42]
+              },
+              "expectedResult": "fail",
+              "description": "Invalid - only one unique echo time instead of required two"
+            },
+            {
+              "id": "test_swi_echo_count_fail_three",
+              "name": "Three echoes",
+              "data": {
+                "EchoTime": [9.42, 15.0, 19.7]
+              },
+              "expectedResult": "fail",
+              "description": "Invalid - three echo times instead of required two"
+            }
           ]
         },
         {
@@ -777,6 +905,51 @@
           "fields": [
             "ImageType",
             "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "test_swi_mag_phase_pass",
+              "name": "Valid magnitude/phase pairs",
+              "data": {
+                "ImageType": [
+                  ["ORIGINAL", "PRIMARY", "M"],
+                  ["ORIGINAL", "PRIMARY", "P"],
+                  ["ORIGINAL", "PRIMARY", "M"],
+                  ["ORIGINAL", "PRIMARY", "P"]
+                ],
+                "EchoTime": [9.42, 9.42, 19.7, 19.7]
+              },
+              "expectedResult": "pass",
+              "description": "Each echo time has both magnitude and phase images"
+            },
+            {
+              "id": "test_swi_mag_phase_fail_missing_phase",
+              "name": "Missing phase at TE2",
+              "data": {
+                "ImageType": [
+                  ["ORIGINAL", "PRIMARY", "M"],
+                  ["ORIGINAL", "PRIMARY", "P"],
+                  ["ORIGINAL", "PRIMARY", "M"]
+                ],
+                "EchoTime": [9.42, 9.42, 19.7]
+              },
+              "expectedResult": "fail",
+              "description": "Second echo time (19.7 ms) is missing phase image"
+            },
+            {
+              "id": "test_swi_mag_phase_fail_missing_magnitude",
+              "name": "Missing magnitude at TE1",
+              "data": {
+                "ImageType": [
+                  ["ORIGINAL", "PRIMARY", "P"],
+                  ["ORIGINAL", "PRIMARY", "M"],
+                  ["ORIGINAL", "PRIMARY", "P"]
+                ],
+                "EchoTime": [9.42, 19.7, 19.7]
+              },
+              "expectedResult": "fail",
+              "description": "First echo time (9.42 ms) is missing magnitude image"
+            }
           ]
         }
       ]
