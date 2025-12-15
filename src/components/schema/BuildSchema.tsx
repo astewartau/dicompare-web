@@ -51,6 +51,7 @@ const BuildSchema: React.FC = () => {
   const [isLoadingSchema, setIsLoadingSchema] = useState(false);
   const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
   const [showBackConfirmModal, setShowBackConfirmModal] = useState(false);
+  const [dicomAnalysisError, setDicomAnalysisError] = useState<string | null>(null);
   const ADD_NEW_ID = '__add_new__';
 
   // Auto-select logic for new workflow
@@ -348,20 +349,13 @@ const BuildSchema: React.FC = () => {
     } catch (error) {
       console.error('❌ Upload failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setUploadStatus(`Upload failed: ${errorMessage}`);
-      
-      // Keep error message visible longer for user to read
-      setTimeout(() => {
-        setUploadStatus('');
-      }, 5000);
+      setDicomAnalysisError(errorMessage);
+      setUploadStatus('');
     } finally {
       setTimeout(() => {
         setIsUploading(false);
         setUploadProgress(0);
-        // Only clear status if it's not an error message
-        if (!uploadStatus.includes('failed:')) {
-          setUploadStatus('');
-        }
+        setUploadStatus('');
       }, 500);
     }
   }, [setAcquisitions, initializePyodideIfNeeded]);
@@ -1153,6 +1147,43 @@ const BuildSchema: React.FC = () => {
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
                 Clear and Go Back
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DICOM Analysis Error Modal */}
+      {dicomAnalysisError && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="flex items-start mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-900">DICOM Analysis Failed</h3>
+                <p className="mt-1 text-sm text-gray-500">An error occurred while processing the DICOM files.</p>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 mb-4 relative">
+              <button
+                onClick={() => navigator.clipboard.writeText(dicomAnalysisError)}
+                className="absolute top-2 right-2 p-1.5 bg-white rounded border border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-gray-700"
+                title="Copy error to clipboard"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+              <pre className="bg-gray-100 rounded p-3 pr-10 text-xs text-gray-700 font-mono whitespace-pre-wrap break-words overflow-y-auto max-h-[40vh]">
+                {dicomAnalysisError}
+              </pre>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setDicomAnalysisError(null)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                OK
               </button>
             </div>
           </div>

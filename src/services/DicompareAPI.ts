@@ -1295,7 +1295,7 @@ json.dumps(formatted_result)
     for (const file of processedFiles) {
       dicomFiles[file.name] = file.content;
     }
-    
+
     // Set files in Python global scope (memory efficient)
     await pyodideManager.setPythonGlobal('dicom_files', dicomFiles);
     
@@ -1327,30 +1327,19 @@ try:
             valid_files[filename] = content
         else:
             print(f"Warning: Skipping file {filename} - no content or empty file")
-    
+
     if not valid_files:
         raise ValueError("No valid DICOM files with content found")
-    
+
     print(f"Processing {len(valid_files)} valid DICOM files...")
     dicom_bytes = valid_files
-    
+
     # Use the new web_utils async API directly to avoid PyodideTask issues
     from dicompare.interface import analyze_dicom_files_for_web
     result = await analyze_dicom_files_for_web(dicom_bytes, None, progress_callback)
     
     if result.get("status") == "error":
-        print(f"Error in analyze_dicom_files_for_web: {result.get('message', 'Unknown error')}")
-        error_result = [{
-            "id": "acq_error",
-            "protocolName": "Error Analysis",
-            "seriesDescription": f"Failed to analyze files: {result.get('message', 'Unknown error')}",
-            "totalFiles": 0,
-            "acquisitionFields": [],
-            "seriesFields": [],
-            "series": [],
-            "metadata": {"error": result.get('message', 'Unknown error')}
-        }]
-        return json.dumps(error_result)
+        raise RuntimeError(f"DICOM analysis failed: {result.get('message', 'Unknown error')}")
     
     # Get session dataframe from Python library's cache
     # IMPORTANT: analyze_dicom_files_for_web already called assign_acquisition_and_run_numbers
@@ -1606,17 +1595,7 @@ try:
 except Exception as e:
     import traceback
     traceback.print_exc()
-    error_result = [{
-        "id": "acq_error",
-        "protocolName": "Error Analysis", 
-        "seriesDescription": f"Failed to analyze files: {str(e)}",
-        "totalFiles": 0,
-        "acquisitionFields": [],
-        "seriesFields": [],
-        "series": [],
-        "metadata": {"error": str(e)}
-    }]
-    return json.dumps(error_result)
+    raise RuntimeError(f"DICOM analysis failed: {str(e)}")
     `);
     
     const acquisitions = JSON.parse(result);
