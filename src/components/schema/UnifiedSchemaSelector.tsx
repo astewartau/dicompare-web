@@ -44,16 +44,16 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
+      <div className="bg-surface-primary rounded-lg max-w-md w-full p-6">
         <div className="flex items-start mb-4">
           <div className="flex-shrink-0">
-            <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
-              <Trash2 className="h-6 w-6 text-red-600" />
+            <div className="h-12 w-12 rounded-full bg-status-error-bg flex items-center justify-center">
+              <Trash2 className="h-6 w-6 text-status-error" />
             </div>
           </div>
           <div className="ml-4 flex-1">
-            <h3 className="text-lg font-medium text-gray-900">Delete Schema</h3>
-            <p className="mt-2 text-sm text-gray-600">
+            <h3 className="text-lg font-medium text-content-primary">Delete Schema</h3>
+            <p className="mt-2 text-sm text-content-secondary">
               Are you sure you want to delete <strong>{schemaName}</strong>? This action cannot be undone.
             </p>
           </div>
@@ -61,13 +61,13 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
         <div className="flex justify-end space-x-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-medium text-content-secondary bg-surface-primary border border-border-secondary rounded-md hover:bg-surface-secondary"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700"
+            className="px-4 py-2 text-sm font-medium text-content-inverted bg-status-error border border-transparent rounded-md hover:opacity-90"
           >
             Delete
           </button>
@@ -229,23 +229,23 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 h-fit">
+      <div className="bg-surface-primary rounded-lg shadow-md p-6 border border-border h-fit">
         {/* Tabs */}
-        <div className="border-b border-gray-200 mb-4">
+        <div className="border-b border-border mb-4">
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('library')}
               className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'library'
-                  ? 'border-medical-600 text-medical-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-brand-600 text-brand-600'
+                  : 'border-transparent text-content-tertiary hover:text-content-secondary hover:border-border-secondary'
               }`}
             >
               <div className="flex items-center">
                 <Library className="h-4 w-4 mr-2" />
                 Library
                 {librarySchemas.length > 0 && (
-                  <span className="ml-2 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-surface-secondary text-content-secondary rounded-full">
                     {librarySchemas.length}
                   </span>
                 )}
@@ -255,15 +255,15 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
               onClick={() => setActiveTab('uploaded')}
               className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'uploaded'
-                  ? 'border-medical-600 text-medical-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-brand-600 text-brand-600'
+                  : 'border-transparent text-content-tertiary hover:text-content-secondary hover:border-border-secondary'
               }`}
             >
               <div className="flex items-center">
                 <FolderOpen className="h-4 w-4 mr-2" />
                 Custom
                 {uploadedSchemas.length > 0 && (
-                  <span className="ml-2 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-surface-secondary text-content-secondary rounded-full">
                     {uploadedSchemas.length}
                   </span>
                 )}
@@ -278,8 +278,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
             <div
               className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
                 dragActive
-                  ? 'border-medical-400 bg-medical-50'
-                  : 'border-gray-300 hover:border-gray-400'
+                  ? 'border-brand-500 bg-brand-50'
+                  : 'border-border-secondary hover:border-content-muted'
               }`}
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
@@ -292,11 +292,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                 onChange={handleFileInput}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
-              <Upload className="h-6 w-6 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-600 mb-1">
+              <Upload className="h-6 w-6 text-content-muted mx-auto mb-2" />
+              <p className="text-sm text-content-secondary mb-1">
                 Drop schema file here or click to browse
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-content-tertiary">
                 Supports .json files
               </p>
             </div>
@@ -314,30 +314,30 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
             return (
               <div
                 key={schema.id}
-                className={`border rounded-lg bg-white shadow-sm transition-all ${
-                  isSelected ? 'border-medical-500 ring-2 ring-medical-200' : 'border-gray-200'
+                className={`border rounded-lg bg-surface-primary shadow-sm transition-all ${
+                  isSelected ? 'border-brand-500 ring-2 ring-brand-100' : 'border-border'
                 }`}
               >
                 {/* Schema Header */}
                 <div
                   className={`px-4 py-3 rounded-t-lg cursor-pointer transition-colors ${
                     selectionMode === 'schema'
-                      ? 'hover:bg-gray-50'
+                      ? 'hover:bg-surface-secondary'
                       : expandable
-                        ? 'hover:bg-gray-50'
+                        ? 'hover:bg-surface-secondary'
                         : ''
                   }`}
                   onClick={() => handleSchemaClick(schema.id)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-gray-900 truncate">
+                      <h3 className="text-sm font-semibold text-content-primary truncate">
                         {schema.name}
                       </h3>
-                      <p className="text-xs text-gray-600 truncate mt-1">
+                      <p className="text-xs text-content-secondary truncate mt-1">
                         {schema.description || 'No description available'}
                       </p>
-                      <div className="mt-2 flex items-center space-x-3 text-xs text-gray-500">
+                      <div className="mt-2 flex items-center space-x-3 text-xs text-content-tertiary">
                         <span>v{schema.version || '1.0.0'}</span>
                         {schema.authors?.length > 0 && (
                           <>

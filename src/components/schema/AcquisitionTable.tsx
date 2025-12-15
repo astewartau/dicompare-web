@@ -296,9 +296,9 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   };
 
   return (
-    <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit">
+    <div className="border border-border-secondary rounded-lg bg-surface-primary shadow-sm h-fit">
       {/* Compact Header Bar */}
-      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+      <div className="px-3 py-2 bg-surface-secondary border-b border-border rounded-t-lg">
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
             {isEditMode && !isSchemaMode ? (
@@ -307,7 +307,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   type="text"
                   value={acquisition.protocolName}
                   onChange={(e) => onUpdate('protocolName', e.target.value)}
-                  className="text-sm font-semibold text-gray-900 bg-white border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-medical-500"
+                  className="text-sm font-semibold text-content-primary bg-surface-primary border border-border-secondary rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Acquisition Name"
                 />
                 <div className="flex items-center space-x-2">
@@ -315,15 +315,15 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                     type="text"
                     value={acquisition.seriesDescription}
                     onChange={(e) => onUpdate('seriesDescription', e.target.value)}
-                    className="text-xs text-gray-600 bg-white border border-gray-300 rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-medical-500"
+                    className="text-xs text-content-secondary bg-surface-primary border border-border-secondary rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-brand-500"
                     placeholder="Short description"
                   />
                   <button
                     onClick={() => setShowDetailedDescription(true)}
                     className={`flex items-center px-2 py-1 text-xs rounded border transition-colors flex-shrink-0 ${
                       acquisition.detailedDescription
-                        ? 'text-medical-700 border-medical-300 bg-medical-50 hover:bg-medical-100'
-                        : 'text-gray-500 border-gray-300 hover:bg-gray-50'
+                        ? 'text-brand-700 border-brand-500/30 bg-brand-50 hover:bg-brand-100'
+                        : 'text-content-tertiary border-border-secondary hover:bg-surface-secondary'
                     }`}
                     title={acquisition.detailedDescription ? 'View/Edit detailed description' : 'Add detailed description'}
                   >
@@ -335,13 +335,13 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
             ) : (
               <div>
                 <div className="flex items-center space-x-2">
-                  <h3 className="text-sm font-semibold text-gray-900 truncate">
+                  <h3 className="text-sm font-semibold text-content-primary truncate">
                     {title || acquisition.protocolName}
                   </h3>
                   {acquisition.detailedDescription && (
                     <button
                       onClick={() => setShowDetailedDescription(true)}
-                      className="flex items-center px-1.5 py-0.5 text-xs text-medical-600 hover:text-medical-800 rounded hover:bg-medical-50 transition-colors"
+                      className="flex items-center px-1.5 py-0.5 text-xs text-brand-600 hover:text-brand-700 rounded hover:bg-brand-50 transition-colors"
                       title="View detailed description"
                     >
                       <FileText className="h-3 w-3" />
@@ -349,20 +349,20 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   )}
                 </div>
                 {(subtitle || (!isSchemaMode && acquisition.seriesDescription)) && (
-                  <p className="text-xs text-gray-600 truncate">
+                  <p className="text-xs text-content-secondary truncate">
                     {subtitle || acquisition.seriesDescription}
                   </p>
                 )}
               </div>
             )}
           </div>
-          
+
           <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
             {/* Generate Test DICOMs button - show in schema edit mode or schema builder */}
             {isEditMode && !isComplianceMode && (
               <button
                 onClick={() => setShowTestDicomGenerator(true)}
-                className="p-1 text-gray-600 hover:text-medical-600 transition-colors"
+                className="p-1 text-content-secondary hover:text-brand-600 transition-colors"
                 title="Generate test DICOMs from schema"
               >
                 <FileDown className="h-3 w-3" />
@@ -371,7 +371,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
             {onDeselect && (
               <button
                 onClick={onDeselect}
-                className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+                className="p-1 text-content-secondary hover:text-status-error transition-colors"
                 title="Deselect schema"
               >
                 <X className="h-3 w-3" />
@@ -380,7 +380,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
             {isEditMode && !isSchemaMode && (
               <button
                 onClick={onDelete}
-                className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+                className="p-1 text-content-secondary hover:text-status-error transition-colors"
                 title="Delete acquisition"
               >
                 <Trash2 className="h-3 w-3" />
@@ -389,16 +389,16 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
             <button
               onClick={onToggleCollapse ? onToggleCollapse : () => setIsExpanded(!isExpanded)}
-              className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
+              className="p-1 text-content-secondary hover:text-content-primary transition-colors"
               title={isExpanded ? 'Collapse' : 'Expand'}
             >
               {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             </button>
           </div>
         </div>
-        
+
         {/* Schema info or stats row */}
-        <div className="mt-1 text-xs text-gray-500">
+        <div className="mt-1 text-xs text-content-tertiary">
           {isSchemaMode ? (
             <>
               v{version || '1.0.0'} • {authors?.join(', ') || 'Schema Template'}
@@ -446,64 +446,64 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   </button>
                 </div>
               )}
-              
+
               {/* Validation Functions Table */}
               {validationFunctions.length > 0 && (
                 <div className="mb-3">
 
                   {/* Validation error display */}
                   {isComplianceMode && validationRuleError && (
-                    <div className="border border-red-200 rounded-md p-3 text-center mb-2">
-                      <p className="text-red-600 text-xs">{validationRuleError}</p>
+                    <div className="border border-status-error/30 rounded-md p-3 text-center mb-2">
+                      <p className="text-status-error text-xs">{validationRuleError}</p>
                     </div>
                   )}
 
                   {/* Loading state */}
                   {isComplianceMode && isValidatingRules && validationRuleResults.length === 0 && (
-                    <div className="border border-gray-200 rounded-md p-3 text-center mb-2">
+                    <div className="border border-border rounded-md p-3 text-center mb-2">
                       <Loader className="h-4 w-4 animate-spin mx-auto mb-2" />
-                      <p className="text-gray-500 text-xs">Validating rules...</p>
+                      <p className="text-content-tertiary text-xs">Validating rules...</p>
                     </div>
                   )}
-                  <div className="border border-gray-200 rounded-md overflow-hidden">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                  <div className="border border-border rounded-md overflow-hidden">
+                    <table className="min-w-full divide-y divide-border">
+                      <thead className="bg-surface-secondary">
                         <tr>
-                          <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider w-1/3">
                             Validation Rule
                           </th>
-                          <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/2">
+                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider w-1/2">
                             Description
                           </th>
                           {isComplianceMode && (
-                            <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                            <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
                               Status
                             </th>
                           )}
                           {!isComplianceMode && (
-                            <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                            <th className="px-2 py-1.5 text-right text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
                               Actions
                             </th>
                           )}
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-surface-primary divide-y divide-border">
                         {validationFunctions.map((func, index) => {
                           const ruleResult = isComplianceMode ? getValidationRuleResult(func) : null;
 
                           return (
                             <tr
                               key={`${func.id}-${index}`}
-                              className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
-                                !isComplianceMode ? 'hover:bg-blue-50 transition-colors' : ''
+                              className={`${index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
+                                !isComplianceMode ? 'hover:bg-surface-hover transition-colors' : ''
                               }`}
                             >
                               <td className="px-2 py-1.5">
                                 <div className="min-w-0">
-                                  <p className="text-xs font-medium text-gray-900 break-words">{func.customName || func.name}</p>
+                                  <p className="text-xs font-medium text-content-primary break-words">{func.customName || func.name}</p>
                                   <div className="flex flex-wrap gap-1 mt-1">
                                     {(func.customFields || func.fields).map(field => (
-                                      <span key={field} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                      <span key={field} className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs rounded">
                                         {field}
                                       </span>
                                     ))}
@@ -511,12 +511,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                 </div>
                               </td>
                               <td className="px-2 py-1.5">
-                                <p className="text-xs text-gray-900 break-words">{func.customDescription || func.description}</p>
+                                <p className="text-xs text-content-primary break-words">{func.customDescription || func.description}</p>
                               </td>
                               {isComplianceMode && ruleResult && (
                                 <td className="px-2 py-1.5 text-center">
                                   {isValidatingRules ? (
-                                    <Loader className="h-4 w-4 animate-spin mx-auto text-gray-500" />
+                                    <Loader className="h-4 w-4 animate-spin mx-auto text-content-tertiary" />
                                   ) : (
                                     <CustomTooltip
                                       content={ruleResult.message}
@@ -535,14 +535,14 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                   <div className="flex items-center justify-end space-x-1">
                                     <button
                                       onClick={() => handleValidationFunctionEdit(index)}
-                                      className="p-1 text-gray-400 hover:text-blue-600"
+                                      className="p-1 text-content-muted hover:text-brand-600"
                                       title="Edit function"
                                     >
                                       <Edit2 className="h-3 w-3" />
                                     </button>
                                     <button
                                       onClick={() => handleValidationFunctionDelete(index)}
-                                      className="p-1 text-gray-400 hover:text-red-600"
+                                      className="p-1 text-content-muted hover:text-status-error"
                                       title="Remove function"
                                     >
                                       <Trash2 className="h-3 w-3" />
@@ -610,7 +610,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
           {/* Compliance Summary - Only show in compliance mode */}
           {isComplianceMode && realAcquisition && (
-            <div className="mt-4 border-t border-gray-200 pt-4">
+            <div className="mt-4 border-t border-border pt-4">
               {(() => {
                 // Use all compliance results directly (no combination needed)
                 const allResults = allComplianceResults;
@@ -634,12 +634,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   <>
                     {/* Summary Header with Toggle */}
                     <div
-                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded"
+                      className="flex items-center justify-between cursor-pointer hover:bg-surface-secondary -mx-2 px-2 py-1 rounded"
                       onClick={() => setIsComplianceSummaryExpanded(!isComplianceSummaryExpanded)}
                     >
                       <div className="flex items-center space-x-2">
                         <button
-                          className="p-0.5 text-gray-500 hover:text-gray-700"
+                          className="p-0.5 text-content-tertiary hover:text-content-secondary"
                           aria-label={isComplianceSummaryExpanded ? "Collapse summary" : "Expand summary"}
                         >
                           {isComplianceSummaryExpanded ? (
@@ -648,33 +648,33 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                             <ChevronDown className="h-4 w-4" />
                           )}
                         </button>
-                        <h4 className="text-sm font-semibold text-gray-900">Compliance Summary</h4>
+                        <h4 className="text-sm font-semibold text-content-primary">Compliance Summary</h4>
                       </div>
 
                       {/* Always show status counts in header */}
                       <div className="flex items-center gap-2">
                         {statusCounts.fail > 0 && (
-                          <div className="flex items-center space-x-1 bg-red-50 px-2 py-0.5 rounded-full">
-                            <XCircle className="h-3 w-3 text-red-600" />
-                            <span className="text-xs font-medium text-red-900">{statusCounts.fail}</span>
+                          <div className="flex items-center space-x-1 bg-red-500/10 px-2 py-0.5 rounded-full">
+                            <XCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
+                            <span className="text-xs font-medium text-red-700 dark:text-red-300">{statusCounts.fail}</span>
                           </div>
                         )}
                         {statusCounts.warning > 0 && (
-                          <div className="flex items-center space-x-1 bg-yellow-50 px-2 py-0.5 rounded-full">
-                            <AlertTriangle className="h-3 w-3 text-yellow-600" />
-                            <span className="text-xs font-medium text-yellow-900">{statusCounts.warning}</span>
+                          <div className="flex items-center space-x-1 bg-yellow-500/10 px-2 py-0.5 rounded-full">
+                            <AlertTriangle className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />
+                            <span className="text-xs font-medium text-yellow-700 dark:text-yellow-300">{statusCounts.warning}</span>
                           </div>
                         )}
                         {statusCounts.pass > 0 && (
-                          <div className="flex items-center space-x-1 bg-green-50 px-2 py-0.5 rounded-full">
-                            <CheckCircle className="h-3 w-3 text-green-600" />
-                            <span className="text-xs font-medium text-green-900">{statusCounts.pass}</span>
+                          <div className="flex items-center space-x-1 bg-green-500/10 px-2 py-0.5 rounded-full">
+                            <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
+                            <span className="text-xs font-medium text-green-700 dark:text-green-300">{statusCounts.pass}</span>
                           </div>
                         )}
                         {statusCounts.na > 0 && (
-                          <div className="flex items-center space-x-1 bg-gray-100 px-2 py-0.5 rounded-full">
-                            <HelpCircle className="h-3 w-3 text-gray-500" />
-                            <span className="text-xs font-medium text-gray-700">{statusCounts.na}</span>
+                          <div className="flex items-center space-x-1 bg-surface-secondary px-2 py-0.5 rounded-full">
+                            <HelpCircle className="h-3 w-3 text-content-tertiary" />
+                            <span className="text-xs font-medium text-content-secondary">{statusCounts.na}</span>
                           </div>
                         )}
                       </div>
@@ -685,21 +685,21 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                       <div className="mt-3">
                         {/* Detailed Status Counts */}
                         <div className="flex flex-wrap gap-3 mb-4">
-                          <div className="flex items-center space-x-1.5 bg-green-50 px-3 py-1.5 rounded-full">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                            <span className="text-sm font-medium text-green-900">{statusCounts.pass} Passed</span>
+                          <div className="flex items-center space-x-1.5 bg-green-500/10 px-3 py-1.5 rounded-full">
+                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <span className="text-sm font-medium text-green-700 dark:text-green-300">{statusCounts.pass} Passed</span>
                           </div>
-                          <div className="flex items-center space-x-1.5 bg-red-50 px-3 py-1.5 rounded-full">
-                            <XCircle className="h-4 w-4 text-red-600" />
-                            <span className="text-sm font-medium text-red-900">{statusCounts.fail} Failed</span>
+                          <div className="flex items-center space-x-1.5 bg-red-500/10 px-3 py-1.5 rounded-full">
+                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            <span className="text-sm font-medium text-red-700 dark:text-red-300">{statusCounts.fail} Failed</span>
                           </div>
-                          <div className="flex items-center space-x-1.5 bg-yellow-50 px-3 py-1.5 rounded-full">
-                            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                            <span className="text-sm font-medium text-yellow-900">{statusCounts.warning} Warnings</span>
+                          <div className="flex items-center space-x-1.5 bg-yellow-500/10 px-3 py-1.5 rounded-full">
+                            <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                            <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">{statusCounts.warning} Warnings</span>
                           </div>
-                          <div className="flex items-center space-x-1.5 bg-gray-100 px-3 py-1.5 rounded-full">
-                            <HelpCircle className="h-4 w-4 text-gray-500" />
-                            <span className="text-sm font-medium text-gray-700">{statusCounts.na} N/A</span>
+                          <div className="flex items-center space-x-1.5 bg-surface-secondary px-3 py-1.5 rounded-full">
+                            <HelpCircle className="h-4 w-4 text-content-tertiary" />
+                            <span className="text-sm font-medium text-content-secondary">{statusCounts.na} N/A</span>
                           </div>
                         </div>
 
@@ -707,12 +707,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                         {errors.length > 0 && (
                           <div className="mb-3">
                             <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-red-50 -mx-2 px-2 py-1 rounded mb-2"
+                              className="flex items-center justify-between cursor-pointer hover:bg-red-500/10 -mx-2 px-2 py-1 rounded mb-2"
                               onClick={() => setIsErrorsExpanded(!isErrorsExpanded)}
                             >
-                              <h5 className="text-xs font-semibold text-red-700 flex items-center">
+                              <h5 className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center">
                                 <button
-                                  className="p-0.5 text-red-600 hover:text-red-800 mr-1"
+                                  className="p-0.5 text-red-600 dark:text-red-400 hover:text-red-800 mr-1"
                                   aria-label={isErrorsExpanded ? "Collapse errors" : "Expand errors"}
                                 >
                                   {isErrorsExpanded ? (
@@ -728,19 +728,19 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                             {isErrorsExpanded && (
                               <div className="space-y-1">
                                 {errors.map((error, idx) => (
-                                  <div key={idx} className="bg-red-50 border border-red-200 rounded px-3 py-2">
+                                  <div key={idx} className="bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
                                     <div className="flex items-start">
                                       <div className="flex-1">
-                                        <p className="text-xs font-medium text-red-900">
+                                        <p className="text-xs font-medium text-red-800 dark:text-red-300">
                                           {error.rule_name || error.fieldName}
                                           {error.seriesName && (
-                                            <span className="ml-2 text-red-700">({error.seriesName})</span>
+                                            <span className="ml-2 text-red-700 dark:text-red-400">({error.seriesName})</span>
                                           )}
                                         </p>
                                         {error.rule_name && error.fieldName && (
-                                          <p className="text-xs text-red-600 mt-0.5">{error.fieldName}</p>
+                                          <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{error.fieldName}</p>
                                         )}
-                                        <p className="text-xs text-red-700 mt-0.5">{error.message}</p>
+                                        <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">{error.message}</p>
                                       </div>
                                     </div>
                                   </div>
@@ -754,12 +754,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                         {warnings.length > 0 && (
                           <div className="mb-3">
                             <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-yellow-50 -mx-2 px-2 py-1 rounded mb-2"
+                              className="flex items-center justify-between cursor-pointer hover:bg-yellow-500/10 -mx-2 px-2 py-1 rounded mb-2"
                               onClick={() => setIsWarningsExpanded(!isWarningsExpanded)}
                             >
-                              <h5 className="text-xs font-semibold text-yellow-700 flex items-center">
+                              <h5 className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 flex items-center">
                                 <button
-                                  className="p-0.5 text-yellow-600 hover:text-yellow-800 mr-1"
+                                  className="p-0.5 text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 mr-1"
                                   aria-label={isWarningsExpanded ? "Collapse warnings" : "Expand warnings"}
                                 >
                                   {isWarningsExpanded ? (
@@ -775,19 +775,19 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                             {isWarningsExpanded && (
                               <div className="space-y-1">
                                 {warnings.map((warning, idx) => (
-                                  <div key={idx} className="bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
+                                  <div key={idx} className="bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2">
                                     <div className="flex items-start">
                                       <div className="flex-1">
-                                        <p className="text-xs font-medium text-yellow-900">
+                                        <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300">
                                           {warning.rule_name || warning.fieldName}
                                           {warning.seriesName && (
-                                            <span className="ml-2 text-yellow-700">({warning.seriesName})</span>
+                                            <span className="ml-2 text-yellow-700 dark:text-yellow-400">({warning.seriesName})</span>
                                           )}
                                         </p>
                                         {warning.rule_name && warning.fieldName && (
-                                          <p className="text-xs text-yellow-600 mt-0.5">{warning.fieldName}</p>
+                                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-0.5">{warning.fieldName}</p>
                                         )}
-                                        <p className="text-xs text-yellow-700 mt-0.5">{warning.message}</p>
+                                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">{warning.message}</p>
                                       </div>
                                     </div>
                                   </div>
@@ -801,12 +801,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                         {naResults.length > 0 && (
                           <div className="mb-3">
                             <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded mb-2"
+                              className="flex items-center justify-between cursor-pointer hover:bg-surface-secondary -mx-2 px-2 py-1 rounded mb-2"
                               onClick={() => setIsNaExpanded(!isNaExpanded)}
                             >
-                              <h5 className="text-xs font-semibold text-gray-700 flex items-center">
+                              <h5 className="text-xs font-semibold text-content-secondary flex items-center">
                                 <button
-                                  className="p-0.5 text-gray-600 hover:text-gray-800 mr-1"
+                                  className="p-0.5 text-content-tertiary hover:text-content-secondary mr-1"
                                   aria-label={isNaExpanded ? "Collapse N/A" : "Expand N/A"}
                                 >
                                   {isNaExpanded ? (
@@ -822,16 +822,16 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                             {isNaExpanded && (
                               <div className="space-y-1">
                                 {naResults.map((naResult, idx) => (
-                                  <div key={idx} className="bg-gray-50 border border-gray-200 rounded px-3 py-2">
+                                  <div key={idx} className="bg-surface-secondary border border-border rounded px-3 py-2">
                                     <div className="flex items-start">
                                       <div className="flex-1">
-                                        <p className="text-xs font-medium text-gray-900">
+                                        <p className="text-xs font-medium text-content-primary">
                                           {naResult.seriesName ? `Series ${naResult.seriesName}:` : (naResult.rule_name || naResult.fieldName)}
                                         </p>
                                         {naResult.rule_name && naResult.fieldName && (
-                                          <p className="text-xs text-gray-600 mt-0.5">{naResult.fieldName}</p>
+                                          <p className="text-xs text-content-secondary mt-0.5">{naResult.fieldName}</p>
                                         )}
-                                        <p className="text-xs text-gray-700 mt-0.5">{naResult.message}</p>
+                                        <p className="text-xs text-content-secondary mt-0.5">{naResult.message}</p>
                                       </div>
                                     </div>
                                   </div>
@@ -845,12 +845,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                         {passedResults.length > 0 && (
                           <div className="mb-3">
                             <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-green-50 -mx-2 px-2 py-1 rounded mb-2"
+                              className="flex items-center justify-between cursor-pointer hover:bg-green-500/10 -mx-2 px-2 py-1 rounded mb-2"
                               onClick={() => setIsPassedExpanded(!isPassedExpanded)}
                             >
-                              <h5 className="text-xs font-semibold text-green-700 flex items-center">
+                              <h5 className="text-xs font-semibold text-green-700 dark:text-green-400 flex items-center">
                                 <button
-                                  className="p-0.5 text-green-600 hover:text-green-800 mr-1"
+                                  className="p-0.5 text-green-600 dark:text-green-400 hover:text-green-800 mr-1"
                                   aria-label={isPassedExpanded ? "Collapse passed" : "Expand passed"}
                                 >
                                   {isPassedExpanded ? (
@@ -866,16 +866,16 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                             {isPassedExpanded && (
                               <div className="space-y-1">
                                 {passedResults.map((passedResult, idx) => (
-                                  <div key={idx} className="bg-green-50 border border-green-200 rounded px-3 py-2">
+                                  <div key={idx} className="bg-green-500/10 border border-green-500/20 rounded px-3 py-2">
                                     <div className="flex items-start">
                                       <div className="flex-1">
-                                        <p className="text-xs font-medium text-green-900">
+                                        <p className="text-xs font-medium text-green-800 dark:text-green-300">
                                           {passedResult.seriesName ? passedResult.seriesName : (passedResult.rule_name || passedResult.fieldName)}
                                         </p>
                                         {!passedResult.seriesName && passedResult.rule_name && passedResult.fieldName && (
-                                          <p className="text-xs text-green-600 mt-0.5">{passedResult.fieldName}</p>
+                                          <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">{passedResult.fieldName}</p>
                                         )}
-                                        <p className="text-xs text-green-700 mt-0.5">{passedResult.message}</p>
+                                        <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">{passedResult.message}</p>
                                       </div>
                                     </div>
                                   </div>
@@ -887,10 +887,10 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
                         {/* Success message if all pass */}
                         {errors.length === 0 && warnings.length === 0 && naResults.length === 0 && statusCounts.pass > 0 && (
-                          <div className="bg-green-50 border border-green-200 rounded px-4 py-3">
+                          <div className="bg-green-500/10 border border-green-500/20 rounded px-4 py-3">
                             <div className="flex items-center">
-                              <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
-                              <p className="text-sm text-green-800 font-medium">
+                              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mr-2" />
+                              <p className="text-sm text-green-800 dark:text-green-300 font-medium">
                                 All compliance checks passed successfully!
                               </p>
                             </div>

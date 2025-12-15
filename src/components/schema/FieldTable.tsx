@@ -88,9 +88,9 @@ const FieldTable: React.FC<FieldTableProps> = ({
   if (fields.length === 0) {
     if (isComplianceMode && isValidating) {
       return (
-        <div className="border border-gray-200 rounded-md p-4 text-center">
+        <div className="border border-border rounded-md p-4 text-center">
           <Loader className="h-4 w-4 animate-spin mx-auto mb-2" />
-          <p className="text-gray-500 text-xs">Validating compliance...</p>
+          <p className="text-content-tertiary text-xs">Validating compliance...</p>
         </div>
       );
     }
@@ -99,37 +99,37 @@ const FieldTable: React.FC<FieldTableProps> = ({
 
   if (isComplianceMode && validationError) {
     return (
-      <div className="border border-red-200 rounded-md p-4 text-center">
-        <p className="text-red-600 text-xs">{validationError}</p>
+      <div className="border border-red-500/20 rounded-md p-4 text-center">
+        <p className="text-red-600 dark:text-red-400 text-xs">{validationError}</p>
       </div>
     );
   }
 
   return (
     <>
-      <div className="border border-gray-200 rounded-md overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="border border-border rounded-md overflow-hidden">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-surface-secondary">
             <tr>
-              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
                 Field
               </th>
-              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
                 {isComplianceMode ? 'Expected Value' : 'Value'}
               </th>
               {isComplianceMode && (
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
                   Status
                 </th>
               )}
               {isEditMode && (
-                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                <th className="px-2 py-1.5 text-right text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
                   Actions
                 </th>
               )}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-surface-primary divide-y divide-border">
             {fields.map((field, index) => {
               const fieldKey = `${acquisitionId}-${field.tag}`;
               const isIncomplete = incompleteFields.has(fieldKey);
@@ -146,28 +146,28 @@ const FieldTable: React.FC<FieldTableProps> = ({
               return (
                 <tr
                   key={field.tag}
-                  className={`group ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
-                    isEditMode ? 'hover:bg-blue-50 transition-colors' : ''
-                  } ${isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''}`}
+                  className={`group ${index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
+                    isEditMode ? 'hover:bg-surface-hover transition-colors' : ''
+                  } ${isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-500/10' : ''}`}
                 >
                 <td className="px-2 py-1.5">
                   <div>
-                    <p className="text-xs font-medium text-gray-900">
+                    <p className="text-xs font-medium text-content-primary">
                       {field.keyword || field.name}
                     </p>
-                    <p className="text-xs text-gray-500 font-mono">
+                    <p className="text-xs text-content-tertiary font-mono">
                       {field.fieldType === 'derived' ? 'Private/derived field' : field.tag}
                     </p>
                   </div>
                 </td>
                 <td className="px-2 py-1.5">
                   <div
-                    className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
+                    className={`${isEditMode ? 'cursor-pointer hover:bg-blue-500/10 rounded px-1 -mx-1' : ''}`}
                     onClick={() => isEditMode && setEditingField(field)}
                   >
-                    <p className="text-xs text-gray-900 break-words">{formatFieldValue(field)}</p>
+                    <p className="text-xs text-content-primary break-words">{formatFieldValue(field)}</p>
                     {(isEditMode || isComplianceMode) && (
-                      <p className="text-xs text-gray-500 mt-0.5">{fieldTypeDisplay}</p>
+                      <p className="text-xs text-content-tertiary mt-0.5">{fieldTypeDisplay}</p>
                     )}
                     {!isEditMode && !isComplianceMode && (
                       <p className="text-xs mt-0.5 invisible">&nbsp;</p>
@@ -192,14 +192,14 @@ const FieldTable: React.FC<FieldTableProps> = ({
                     <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => onFieldConvert(field.tag)}
-                        className="p-0.5 text-gray-600 hover:text-medical-600 transition-colors"
+                        className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
                         title="Convert to series field"
                       >
                         <ArrowRightLeft className="h-3 w-3" />
                       </button>
                       <button
                         onClick={() => onFieldDelete(field.tag)}
-                        className="p-0.5 text-gray-600 hover:text-red-600 transition-colors"
+                        className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"
                         title="Delete field"
                       >
                         <Trash2 className="h-3 w-3" />

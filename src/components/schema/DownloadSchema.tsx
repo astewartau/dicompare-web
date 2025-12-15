@@ -6,9 +6,11 @@ import { json } from '@codemirror/lang-json';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { dicompareAPI } from '../../services/DicompareAPI';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const DownloadSchema: React.FC = () => {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const { acquisitions, schemaMetadata } = useAcquisitions();
   const { uploadSchema, updateExistingSchema, originSchema } = useSchemaContext();
   const [schema, setSchema] = useState<any>(null);
@@ -198,14 +200,14 @@ const DownloadSchema: React.FC = () => {
     return (
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Save Schema - Step 4</h2>
-          <p className="text-gray-600">Generating your validation schema...</p>
+          <h2 className="text-3xl font-bold text-content-primary mb-4">Save Schema - Step 4</h2>
+          <p className="text-content-secondary">Generating your validation schema...</p>
         </div>
-        
-        <div className="bg-white rounded-lg shadow-md p-12 text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-medical-600 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Generating Schema</h3>
-          <p className="text-gray-600">Using dicompare to create your validation schema...</p>
+
+        <div className="bg-surface-primary rounded-lg shadow-md p-12 text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-brand-600 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-content-primary mb-2">Generating Schema</h3>
+          <p className="text-content-secondary">Using dicompare to create your validation schema...</p>
         </div>
       </div>
     );
@@ -216,13 +218,13 @@ const DownloadSchema: React.FC = () => {
     return (
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Save Schema - Step 4</h2>
-          <p className="text-gray-600">There was an issue generating your schema.</p>
+          <h2 className="text-3xl font-bold text-content-primary mb-4">Save Schema - Step 4</h2>
+          <p className="text-content-secondary">There was an issue generating your schema.</p>
         </div>
-        
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-red-800 mb-2">Schema Generation Failed</h3>
-          <p className="text-red-700 mb-4">{error}</p>
+
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-red-700 dark:text-red-300 mb-2">Schema Generation Failed</h3>
+          <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
           <div className="space-x-4">
             <button
               onClick={() => navigate('/schema-builder/enter-metadata')}
@@ -232,7 +234,7 @@ const DownloadSchema: React.FC = () => {
             </button>
             <button
               onClick={() => navigate('/schema-builder/build-schema')}
-              className="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50"
+              className="px-4 py-2 border border-red-500/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-500/10"
             >
               Start Over
             </button>
@@ -250,60 +252,60 @@ const DownloadSchema: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">
+        <h2 className="text-3xl font-bold text-content-primary mb-4">
           Save Schema - Step 4
           {originSchema && (
-            <span className="text-lg font-normal text-blue-600 ml-2">
+            <span className="text-lg font-normal text-blue-600 dark:text-blue-400 ml-2">
               (Based on: {originSchema.name})
             </span>
           )}
         </h2>
-        <p className="text-gray-600">
+        <p className="text-content-secondary">
           Your schema has been generated successfully! Download it in your preferred format or preview the content.
         </p>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Schema Summary */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-            <Eye className="h-6 w-6 mr-2 text-medical-600" />
+        <div className="bg-surface-primary rounded-lg shadow-md p-6">
+          <h3 className="text-xl font-semibold text-content-primary mb-4 flex items-center">
+            <Eye className="h-6 w-6 mr-2 text-brand-600" />
             Schema Summary
           </h3>
-          
+
           <div className="space-y-4">
             <div>
-              <h4 className="font-medium text-gray-700">Schema Name</h4>
-              <p className="text-gray-900">{schemaMetadata?.name || 'Generated Schema'}</p>
+              <h4 className="font-medium text-content-secondary">Schema Name</h4>
+              <p className="text-content-primary">{schemaMetadata?.name || 'Generated Schema'}</p>
             </div>
-            
+
             <div>
-              <h4 className="font-medium text-gray-700">Version</h4>
-              <p className="text-gray-900">{schemaMetadata?.version || '1.0'}</p>
+              <h4 className="font-medium text-content-secondary">Version</h4>
+              <p className="text-content-primary">{schemaMetadata?.version || '1.0'}</p>
             </div>
-            
+
             <div>
-              <h4 className="font-medium text-gray-700">Authors</h4>
-              <p className="text-gray-900">{schemaMetadata?.authors?.join(', ') || 'Unknown'}</p>
+              <h4 className="font-medium text-content-secondary">Authors</h4>
+              <p className="text-content-primary">{schemaMetadata?.authors?.join(', ') || 'Unknown'}</p>
             </div>
-            
+
             {schemaMetadata?.description && (
               <div>
-                <h4 className="font-medium text-gray-700">Description</h4>
-                <p className="text-gray-900">{schemaMetadata.description}</p>
+                <h4 className="font-medium text-content-secondary">Description</h4>
+                <p className="text-content-primary">{schemaMetadata.description}</p>
               </div>
             )}
-            
+
             <div>
-              <h4 className="font-medium text-gray-700">Acquisitions</h4>
+              <h4 className="font-medium text-content-secondary">Acquisitions</h4>
               <div className="mt-2 space-y-2">
                 {acquisitions.map((acquisition) => (
-                  <div key={acquisition.id} className="p-3 bg-gray-50 rounded-lg">
-                    <p className="font-medium text-gray-900">{acquisition.protocolName}</p>
-                    <p className="text-sm text-gray-600">
+                  <div key={acquisition.id} className="p-3 bg-surface-secondary rounded-lg">
+                    <p className="font-medium text-content-primary">{acquisition.protocolName}</p>
+                    <p className="text-sm text-content-secondary">
                       {acquisition.acquisitionFields.length + (acquisition.series?.reduce((count, s) => count + (s.fields?.length || 0), 0) || 0)} validation fields
                       {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
-                        <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+                        <span className="ml-2 px-2 py-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-full text-xs">
                           {acquisition.validationFunctions.length} validator {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
                         </span>
                       )}
@@ -312,37 +314,37 @@ const DownloadSchema: React.FC = () => {
                 ))}
               </div>
             </div>
-            
+
           </div>
         </div>
 
         {/* Download Options */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-surface-primary rounded-lg shadow-md p-6">
           <div className="flex items-center mb-4">
-            <FileText className="h-6 w-6 mr-2 text-medical-600" />
-            <h3 className="text-xl font-semibold text-gray-900">Save schema</h3>
+            <FileText className="h-6 w-6 mr-2 text-brand-600" />
+            <h3 className="text-xl font-semibold text-content-primary">Save schema</h3>
           </div>
-          
-          <p className="text-gray-600 mb-6">
+
+          <p className="text-content-secondary mb-6">
             Save your schema to your library for immediate use, or download it as a JSON file.
           </p>
 
           {/* Success Message */}
           {/* Origin Schema Info */}
           {originSchema && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
               <div className="flex items-center mb-2">
-                <Edit className="h-4 w-4 text-blue-600 mr-2" />
-                <span className="text-sm font-medium text-blue-800">
+                <Edit className="h-4 w-4 text-blue-600 dark:text-blue-400 mr-2" />
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
                   Started from: {originSchema.type === 'library' ? 'Library' : 'Custom'} schema "{originSchema.name}"
                 </span>
               </div>
               {originSchema.type === 'library' ? (
-                <p className="text-xs text-blue-600">
+                <p className="text-xs text-blue-600 dark:text-blue-400">
                   Library schemas are read-only. Your changes will be saved as a new schema.
                 </p>
               ) : (
-                <p className="text-xs text-blue-600">
+                <p className="text-xs text-blue-600 dark:text-blue-400">
                   You can save as a new schema or update the original.
                 </p>
               )}
@@ -351,14 +353,14 @@ const DownloadSchema: React.FC = () => {
 
           {/* Success Messages */}
           {saveSuccess && saveOption === 'new' && (
-            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center">
+            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-300 rounded-lg flex items-center">
               <CheckCircle className="h-4 w-4 mr-2" />
               New schema saved to library successfully! It's now available in Compliance Checker.
             </div>
           )}
 
           {saveSuccess && saveOption === 'update' && (
-            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center">
+            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-300 rounded-lg flex items-center">
               <CheckCircle className="h-4 w-4 mr-2" />
               Original schema "{originSchema?.name}" updated successfully!
             </div>
@@ -372,7 +374,7 @@ const DownloadSchema: React.FC = () => {
               <button
                 onClick={handleSaveAsNew}
                 disabled={isSaving}
-                className="flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+                className="flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed font-medium"
               >
                 {isSaving && saveOption === 'new' ? (
                   <>
@@ -392,7 +394,7 @@ const DownloadSchema: React.FC = () => {
                 <button
                   onClick={handleConfirmUpdate}
                   disabled={isSaving}
-                  className="flex items-center justify-center px-6 py-4 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+                  className="flex items-center justify-center px-6 py-4 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed font-medium"
                 >
                   {isSaving && saveOption === 'update' ? (
                     <>
@@ -411,7 +413,7 @@ const DownloadSchema: React.FC = () => {
               {/* Download - Always available */}
               <button
                 onClick={handleDownloadJSON}
-                className="flex items-center justify-center px-6 py-4 bg-medical-600 text-white rounded-lg hover:bg-medical-700 font-medium"
+                className="flex items-center justify-center px-6 py-4 bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-medium"
               >
                 <Download className="h-5 w-5 mr-2" />
                 Download JSON
@@ -422,10 +424,10 @@ const DownloadSchema: React.FC = () => {
       </div>
 
       {/* Schema Preview */}
-      <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+      <div className="mt-8 bg-surface-primary rounded-lg shadow-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-semibold text-gray-900 flex items-center">
-            <FileText className="h-6 w-6 mr-2 text-medical-600" />
+          <h3 className="text-xl font-semibold text-content-primary flex items-center">
+            <FileText className="h-6 w-6 mr-2 text-brand-600" />
             Schema Content Preview
           </h3>
 
@@ -448,14 +450,14 @@ const DownloadSchema: React.FC = () => {
           </button>
         </div>
 
-        <div className="border border-gray-300 rounded-lg overflow-hidden">
+        <div className="border border-border-secondary rounded-lg overflow-hidden">
           <CodeMirror
             value={schema ? JSON.stringify((() => {
               const { statistics, ...schemaContent } = schema;
               return schemaContent;
             })(), null, 2) : 'Loading...'}
             extensions={[json()]}
-            theme="light"
+            theme={theme === 'dark' ? 'dark' : 'light'}
             height="400px"
             editable={false}
             basicSetup={{
@@ -472,7 +474,7 @@ const DownloadSchema: React.FC = () => {
             }}
           />
         </div>
-        <div className="mt-2 text-xs text-gray-500">
+        <div className="mt-2 text-xs text-content-tertiary">
           JSON syntax highlighting enabled • Read-only preview • Scrollable content
         </div>
       </div>
@@ -481,20 +483,20 @@ const DownloadSchema: React.FC = () => {
       <div className="mt-8 flex justify-between">
         <button
           onClick={handleBack}
-          className="flex items-center px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+          className="flex items-center px-6 py-3 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
         >
           <ArrowLeft className="h-5 w-5 mr-2" />
           Back to Metadata
         </button>
-        
+
         <div className="space-x-4">
           <button
             onClick={handleStartOver}
-            className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            className="px-6 py-3 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
           >
             Create Another Schema
           </button>
-          
+
           <button
             onClick={() => navigate('/')}
             className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
@@ -507,13 +509,13 @@ const DownloadSchema: React.FC = () => {
       {/* Update Confirmation Modal */}
       {showConfirmUpdate && originSchema && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-surface-primary rounded-lg max-w-md w-full p-6">
             <div className="flex items-center mb-4">
-              <AlertCircle className="h-6 w-6 text-orange-600 mr-3" />
-              <h3 className="text-lg font-medium text-gray-900">Update Original Schema</h3>
+              <AlertCircle className="h-6 w-6 text-orange-600 dark:text-orange-400 mr-3" />
+              <h3 className="text-lg font-medium text-content-primary">Update Original Schema</h3>
             </div>
 
-            <p className="text-gray-600 mb-6">
+            <p className="text-content-secondary mb-6">
               Are you sure you want to update the original schema "{originSchema.name}"?
               This action will permanently replace the existing schema with your changes.
             </p>
@@ -521,14 +523,14 @@ const DownloadSchema: React.FC = () => {
             <div className="flex space-x-3">
               <button
                 onClick={() => setShowConfirmUpdate(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={handleUpdateOriginal}
                 disabled={isSaving}
-                className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
               >
                 {isSaving ? (
                   <>

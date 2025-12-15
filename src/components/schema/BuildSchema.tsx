@@ -726,25 +726,25 @@ const BuildSchema: React.FC = () => {
         onClick={() => setSelectedAcquisitionId(acquisition.id)}
         className={`border rounded-lg p-4 cursor-pointer transition-all ${
           isSelected
-            ? 'border-medical-500 bg-medical-50 shadow-md'
-            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+            ? 'border-brand-500 bg-brand-50 shadow-md'
+            : 'border-border hover:border-border-secondary hover:bg-surface-secondary'
         }`}
       >
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center space-x-2">
-              <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
-              <h3 className="text-sm font-medium text-gray-900 truncate">
+              <FileText className="h-4 w-4 text-content-tertiary flex-shrink-0" />
+              <h3 className="text-sm font-medium text-content-primary truncate">
                 {acquisition.protocolName || 'Untitled Acquisition'}
               </h3>
               {hasIncomplete && (
-                <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" title={`${incompleteFields.size} incomplete fields`} />
+                <AlertTriangle className="h-4 w-4 text-status-error flex-shrink-0" title={`${incompleteFields.size} incomplete fields`} />
               )}
             </div>
-            <p className="text-xs text-gray-600 mt-1 truncate">
+            <p className="text-xs text-content-secondary mt-1 truncate">
               {acquisition.seriesDescription || 'No description'}
             </p>
-            <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+            <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
               <span>{acquisition.acquisitionFields.length} fields</span>
               {acquisition.series && acquisition.series.length > 0 && (
                 <span>{acquisition.series.length} series</span>
@@ -768,17 +768,17 @@ const BuildSchema: React.FC = () => {
         onClick={() => setSelectedAcquisitionId(ADD_NEW_ID)}
         className={`border rounded-lg p-4 cursor-pointer transition-all ${
           isSelected
-            ? 'border-medical-500 bg-medical-50 shadow-md'
-            : 'border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+            ? 'border-brand-500 bg-brand-50 shadow-md'
+            : 'border-dashed border-border-secondary hover:border-content-muted hover:bg-surface-secondary'
         }`}
       >
         <div className="flex items-center space-x-2">
-          <Plus className="h-4 w-4 text-medical-500 flex-shrink-0" />
-          <h3 className="text-sm font-medium text-gray-900">
+          <Plus className="h-4 w-4 text-brand-500 flex-shrink-0" />
+          <h3 className="text-sm font-medium text-content-primary">
             Add New Acquisition
           </h3>
         </div>
-        <p className="text-xs text-gray-600 mt-1">
+        <p className="text-xs text-content-secondary mt-1">
           Upload files or create acquisition manually
         </p>
       </div>
@@ -787,12 +787,12 @@ const BuildSchema: React.FC = () => {
 
   // Component to render unified upload card
   const renderUnifiedUploadCard = (isAdditional: boolean = false) => (
-    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6 h-fit">
+    <div className="border border-border rounded-lg bg-surface-primary shadow-sm p-6 h-fit">
       <div
         className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
           isDragOver
-            ? 'border-medical-500 bg-medical-50'
-            : 'border-medical-300 hover:border-medical-400'
+            ? 'border-brand-500 bg-brand-50'
+            : 'border-brand-500/30 hover:border-brand-500'
         }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -800,39 +800,39 @@ const BuildSchema: React.FC = () => {
       >
         {isUploading ? (
           <>
-            <Loader2 className="h-12 w-12 text-medical-600 mx-auto mb-4 animate-spin" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2 text-center">Processing Files</h3>
-            <p className="text-gray-600 mb-4 text-center">{uploadStatus}</p>
+            <Loader2 className="h-12 w-12 text-brand-600 mx-auto mb-4 animate-spin" />
+            <h3 className="text-lg font-semibold text-content-primary mb-2 text-center">Processing Files</h3>
+            <p className="text-content-secondary mb-4 text-center">{uploadStatus}</p>
 
             <div className="max-w-md mx-auto space-y-3 mb-4">
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-surface-secondary rounded-full h-2">
                 <div
-                  className="bg-medical-600 h-2 rounded-full transition-all duration-500"
+                  className="bg-brand-600 h-2 rounded-full transition-all duration-500"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <p className="text-sm text-gray-600 text-center">
+              <p className="text-sm text-content-secondary text-center">
                 {Math.round(uploadProgress)}% complete
               </p>
             </div>
           </>
         ) : (
           <>
-            <Upload className="h-10 w-10 text-medical-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2 text-center">
+            <Upload className="h-10 w-10 text-brand-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-content-primary mb-2 text-center">
               {isAdditional ? 'Add More Content' : 'Create Acquisitions'}
             </h3>
-            <p className="text-sm text-gray-600 mb-6 text-center">
+            <p className="text-sm text-content-secondary mb-6 text-center">
               {isAdditional ? 'Upload more files, zip archives, or add manual acquisitions' : 'Upload files, zip archives, drag and drop, or create acquisitions manually'}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* DICOM Upload Section */}
-          <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/50 hover:bg-blue-50 transition-colors">
+          <div className="border border-blue-500/20 rounded-lg p-4 bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
             <div className="text-center">
               <Upload className="h-6 w-6 text-blue-500 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900 mb-1">DICOM Files</h4>
-              <p className="text-xs text-gray-600 mb-3">Upload DICOM files, zip archives, or folders</p>
+              <h4 className="text-sm font-medium text-content-primary mb-1">DICOM Files</h4>
+              <p className="text-xs text-content-secondary mb-3">Upload DICOM files, zip archives, or folders</p>
               <input
                 type="file"
                 multiple
@@ -847,7 +847,7 @@ const BuildSchema: React.FC = () => {
                 className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
                   !isUploading
                     ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer'
-                    : 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                    : 'text-content-muted bg-surface-secondary cursor-not-allowed'
                 }`}
               >
                 <Upload className="h-3 w-3 mr-1" />
@@ -857,11 +857,11 @@ const BuildSchema: React.FC = () => {
           </div>
 
           {/* Protocol Upload Section */}
-          <div className="border border-purple-200 rounded-lg p-4 bg-purple-50/50 hover:bg-purple-50 transition-colors">
+          <div className="border border-purple-500/20 rounded-lg p-4 bg-purple-500/5 hover:bg-purple-500/10 transition-colors">
             <div className="text-center">
               <Upload className="h-6 w-6 text-purple-500 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900 mb-1">Siemens Protocol</h4>
-              <p className="text-xs text-gray-600 mb-3">Upload .pro protocol files</p>
+              <h4 className="text-sm font-medium text-content-primary mb-1">Siemens Protocol</h4>
+              <p className="text-xs text-content-secondary mb-3">Upload .pro protocol files</p>
               <input
                 type="file"
                 accept=".pro"
@@ -872,9 +872,9 @@ const BuildSchema: React.FC = () => {
               <label
                 htmlFor={!isUploading ? (isAdditional ? "protocol-upload-extra" : "protocol-upload") : ""}
                 className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
-                  !isUploading 
-                    ? 'text-white bg-purple-600 hover:bg-purple-700 cursor-pointer' 
-                    : 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                  !isUploading
+                    ? 'text-white bg-purple-600 hover:bg-purple-700 cursor-pointer'
+                    : 'text-content-muted bg-surface-secondary cursor-not-allowed'
                 }`}
               >
                 <Upload className="h-3 w-3 mr-1" />
@@ -884,11 +884,11 @@ const BuildSchema: React.FC = () => {
           </div>
 
           {/* Manual Entry Section */}
-          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors">
+          <div className="border border-border rounded-lg p-4 bg-surface-secondary/50 hover:bg-surface-secondary transition-colors">
             <div className="text-center">
-              <Plus className="h-6 w-6 text-gray-500 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900 mb-1">Manual Entry</h4>
-              <p className="text-xs text-gray-600 mb-3">Create acquisition manually</p>
+              <Plus className="h-6 w-6 text-content-tertiary mx-auto mb-2" />
+              <h4 className="text-sm font-medium text-content-primary mb-1">Manual Entry</h4>
+              <p className="text-xs text-content-secondary mb-3">Create acquisition manually</p>
               <button
                 onClick={() => {
                   // Create a new acquisition manually here so we can get its ID
@@ -910,7 +910,7 @@ const BuildSchema: React.FC = () => {
                   // Auto-select the newly created acquisition
                   setSelectedAcquisitionId(newAcquisitionId);
                 }}
-                className="inline-flex items-center justify-center w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+                className="inline-flex items-center justify-center w-full px-3 py-2 border border-border-secondary rounded-md text-xs font-medium text-content-secondary bg-surface-primary hover:bg-surface-secondary"
               >
                 <Plus className="h-3 w-3 mr-1" />
                 Add Acquisition
@@ -919,18 +919,18 @@ const BuildSchema: React.FC = () => {
           </div>
 
           {/* Copy from Schema Section */}
-          <div className="border border-orange-200 rounded-lg p-4 bg-orange-50/50 hover:bg-orange-50 transition-colors">
+          <div className="border border-orange-500/20 rounded-lg p-4 bg-orange-500/5 hover:bg-orange-500/10 transition-colors">
             <div className="text-center">
               <Copy className="h-6 w-6 text-orange-500 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900 mb-1">Copy from Schema</h4>
-              <p className="text-xs text-gray-600 mb-3">Import from existing schemas</p>
+              <h4 className="text-sm font-medium text-content-primary mb-1">Copy from Schema</h4>
+              <p className="text-xs text-content-secondary mb-3">Import from existing schemas</p>
               <button
                 onClick={() => setShowSchemaModal(true)}
                 disabled={isLoadingSchema}
                 className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
                   !isLoadingSchema
                     ? 'text-white bg-orange-600 hover:bg-orange-700 cursor-pointer'
-                    : 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                    : 'text-content-muted bg-surface-secondary cursor-not-allowed'
                 }`}
               >
                 {isLoadingSchema ? (
@@ -962,15 +962,15 @@ const BuildSchema: React.FC = () => {
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+            <h2 className="text-3xl font-bold text-content-primary mb-4">
               Build Schema - Step 2
               {editingSchema && (
-                <span className="text-lg font-normal text-blue-600 ml-2">
+                <span className="text-lg font-normal text-brand-600 ml-2">
                   (Editing: {editingSchema.metadata?.name || 'Schema'})
                 </span>
               )}
             </h2>
-            <p className="text-gray-600">
+            <p className="text-content-secondary">
               {acquisitions.length > 0 ? (
                 editingSchema ?
                   'Review and modify the loaded schema acquisitions and configure which DICOM fields to include.' :
@@ -980,12 +980,12 @@ const BuildSchema: React.FC = () => {
               )}
             </p>
           </div>
-          
+
           <div className="flex space-x-3">
             {acquisitions.length > 0 && (
               <button
                 onClick={clearData}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
               >
                 Clear Data
               </button>
@@ -998,11 +998,11 @@ const BuildSchema: React.FC = () => {
       <div className="grid grid-cols-12 gap-6 min-h-[600px]">
         {/* Left Panel - Acquisition Selector */}
         <div className="col-span-12 md:col-span-4 lg:col-span-3">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">Acquisitions</h3>
-              <p className="text-sm text-gray-600">Select an acquisition to edit or create new</p>
+            <div className="px-4 py-3 border-b border-border">
+              <h3 className="text-lg font-medium text-content-primary">Acquisitions</h3>
+              <p className="text-sm text-content-secondary">Select an acquisition to edit or create new</p>
             </div>
 
             {/* Acquisition List */}
@@ -1046,11 +1046,11 @@ const BuildSchema: React.FC = () => {
             />
           ) : (
             /* Fallback - should rarely happen */
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 h-full flex items-center justify-center">
+            <div className="bg-surface-primary rounded-lg border border-border shadow-sm p-6 h-full flex items-center justify-center">
               <div className="text-center">
-                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nothing Selected</h3>
-                <p className="text-gray-600">Select an option from the left panel</p>
+                <FileText className="h-12 w-12 text-content-muted mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-content-primary mb-2">Nothing Selected</h3>
+                <p className="text-content-secondary">Select an option from the left panel</p>
               </div>
             </div>
           )}
@@ -1061,7 +1061,7 @@ const BuildSchema: React.FC = () => {
       <div className="mt-8 flex justify-between items-end">
         <button
           onClick={handleBack}
-          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center"
+          className="px-6 py-3 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary flex items-center"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Start
@@ -1069,7 +1069,7 @@ const BuildSchema: React.FC = () => {
 
         <div className="flex flex-col items-end">
           {hasIncompleteFields && (
-            <div className="mb-2 text-sm text-red-600 flex items-center">
+            <div className="mb-2 text-sm text-status-error flex items-center">
               <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
@@ -1079,7 +1079,7 @@ const BuildSchema: React.FC = () => {
           <button
             onClick={handleContinue}
             disabled={acquisitions.length === 0 || hasIncompleteFields}
-            className="px-6 py-3 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="px-6 py-3 bg-brand-600 text-content-inverted rounded-lg hover:bg-brand-700 disabled:bg-surface-secondary disabled:text-content-muted disabled:cursor-not-allowed"
           >
             Continue to Metadata
           </button>
@@ -1089,20 +1089,20 @@ const BuildSchema: React.FC = () => {
       {/* Schema Selection Modal */}
       {showSchemaModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
+          <div className="bg-surface-primary rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-border">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-gray-900">Select Schema and Acquisition</h3>
+                <h3 className="text-lg font-medium text-content-primary">Select Schema and Acquisition</h3>
                 <button
                   onClick={() => setShowSchemaModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-content-muted hover:text-content-secondary"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              <p className="text-gray-600 mt-4">
+              <p className="text-content-secondary mt-4">
                 Select a schema from your library, then choose a specific acquisition to import into your current schema.
               </p>
             </div>
@@ -1127,24 +1127,24 @@ const BuildSchema: React.FC = () => {
       {/* Back Confirmation Modal */}
       {showBackConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-surface-primary rounded-lg max-w-md w-full p-6">
             <div className="flex items-center mb-4">
-              <AlertTriangle className="h-6 w-6 text-amber-500 mr-3" />
-              <h3 className="text-lg font-medium text-gray-900">Confirm Navigation</h3>
+              <AlertTriangle className="h-6 w-6 text-status-warning mr-3" />
+              <h3 className="text-lg font-medium text-content-primary">Confirm Navigation</h3>
             </div>
-            <p className="text-gray-600 mb-6">
+            <p className="text-content-secondary mb-6">
               Going back to the starting point will clear all your current progress, including {acquisitions.length} acquisition{acquisitions.length !== 1 ? 's' : ''} and all configured fields.
             </p>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowBackConfirmModal(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmBack}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                className="px-4 py-2 bg-status-error text-content-inverted rounded-lg hover:opacity-90"
               >
                 Clear and Go Back
               </button>
@@ -1156,32 +1156,32 @@ const BuildSchema: React.FC = () => {
       {/* DICOM Analysis Error Modal */}
       {dicomAnalysisError && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] flex flex-col">
+          <div className="bg-surface-primary rounded-lg p-6 w-full max-w-lg max-h-[80vh] flex flex-col">
             <div className="flex items-start mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
+              <div className="flex-shrink-0 w-10 h-10 bg-status-error-bg rounded-full flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-status-error" />
               </div>
               <div className="ml-4">
-                <h3 className="text-lg font-semibold text-gray-900">DICOM Analysis Failed</h3>
-                <p className="mt-1 text-sm text-gray-500">An error occurred while processing the DICOM files.</p>
+                <h3 className="text-lg font-semibold text-content-primary">DICOM Analysis Failed</h3>
+                <p className="mt-1 text-sm text-content-tertiary">An error occurred while processing the DICOM files.</p>
               </div>
             </div>
             <div className="flex-1 min-h-0 mb-4 relative">
               <button
                 onClick={() => navigator.clipboard.writeText(dicomAnalysisError)}
-                className="absolute top-2 right-2 p-1.5 bg-white rounded border border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-gray-700"
+                className="absolute top-2 right-2 p-1.5 bg-surface-primary rounded border border-border-secondary hover:bg-surface-secondary text-content-tertiary hover:text-content-secondary"
                 title="Copy error to clipboard"
               >
                 <Copy className="h-4 w-4" />
               </button>
-              <pre className="bg-gray-100 rounded p-3 pr-10 text-xs text-gray-700 font-mono whitespace-pre-wrap break-words overflow-y-auto max-h-[40vh]">
+              <pre className="bg-surface-secondary rounded p-3 pr-10 text-xs text-content-secondary font-mono whitespace-pre-wrap break-words overflow-y-auto max-h-[40vh]">
                 {dicomAnalysisError}
               </pre>
             </div>
             <div className="flex justify-end">
               <button
                 onClick={() => setDicomAnalysisError(null)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                className="px-4 py-2 bg-surface-secondary text-content-primary rounded-md hover:bg-border-secondary"
               >
                 OK
               </button>

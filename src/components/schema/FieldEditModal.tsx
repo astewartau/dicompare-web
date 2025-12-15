@@ -238,18 +238,18 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-xl w-full mx-4 max-h-[85vh] overflow-y-auto">
+      <div className="bg-surface-primary rounded-lg shadow-xl max-w-xl w-full mx-4 max-h-[85vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold text-content-primary">
               {isSeriesValue ? 'Edit Series Value' : 'Edit Field'}
             </h3>
-            <p className="text-sm text-gray-600">{field.name} ({field.tag})</p>
+            <p className="text-sm text-content-secondary">{field.name} ({field.tag})</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1 text-content-tertiary hover:text-content-primary transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -260,7 +260,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
           {/* Data Type and Constraint - Side by side for compactness */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-content-primary mb-1">
                 Data Type
               </label>
               <DataTypeSelector
@@ -270,7 +270,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-content-primary mb-1">
                 Validation
               </label>
               <ValidationConstraintSelector
@@ -285,7 +285,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
           {/* Field Value - Show for exact, contains_any, contains_all (they all use formData.value) */}
           {['exact', 'contains_any', 'contains_all'].includes(formData.validationRule.type) && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-content-primary mb-1">
                 {formData.validationRule.type === 'exact' ? 'Value' :
                  formData.validationRule.type === 'contains_any' ? 'Values to Search For (must contain any)' :
                  'Required Elements (must contain all)'}
@@ -297,9 +297,9 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                 error={errors.value}
                 forceListInput={formData.validationRule.type === 'contains_any' || formData.validationRule.type === 'contains_all'}
               />
-              {errors.value && <p className="text-red-500 text-xs mt-1">{errors.value}</p>}
+              {errors.value && <p className="text-red-600 dark:text-red-400 text-xs mt-1">{errors.value}</p>}
               {formData.validationRule.type !== 'exact' && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-content-tertiary">
                   {formData.validationRule.type === 'contains_any'
                     ? 'Field must contain at least one of these values'
                     : 'Field must contain all of these values'}
@@ -311,7 +311,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
           {/* Constraint-specific parameters (for tolerance, range, contains only) */}
           {['tolerance', 'range', 'contains'].includes(formData.validationRule.type) && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-content-primary mb-1">
                 Parameters
               </label>
               <ConstraintInputWidgets
@@ -319,13 +319,13 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                 value={formData.validationRule}
                 onChange={handleConstraintValueChange}
               />
-              {errors.constraint && <p className="text-red-500 text-xs mt-1">{errors.constraint}</p>}
+              {errors.constraint && <p className="text-red-600 dark:text-red-400 text-xs mt-1">{errors.constraint}</p>}
             </div>
           )}
 
           {/* Compact Preview */}
-          <div className="bg-gray-50 p-3 rounded border">
-            <div className="text-xs text-gray-600 space-y-1">
+          <div className="bg-surface-secondary p-3 rounded border border-border">
+            <div className="text-xs text-content-secondary space-y-1">
               <div className="flex justify-between">
                 <span className="font-medium">Type:</span>
                 <span>{formData.dataType}</span>
@@ -361,16 +361,16 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-2 p-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end space-x-2 p-4 border-t border-border bg-surface-secondary">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+            className="px-3 py-1.5 text-sm text-content-primary border border-border-secondary rounded hover:bg-surface-hover transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="inline-flex items-center px-3 py-1.5 text-sm bg-medical-600 text-white rounded hover:bg-medical-700 transition-colors"
+            className="inline-flex items-center px-3 py-1.5 text-sm bg-brand-600 text-white rounded hover:bg-brand-700 transition-colors"
           >
             <Save className="h-3.5 w-3.5 mr-1" />
             Save

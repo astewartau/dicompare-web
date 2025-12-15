@@ -5,6 +5,7 @@ import { python } from '@codemirror/lang-python';
 import { linter, lintGutter } from '@codemirror/lint';
 import { SelectedFunction, TestCase, TestCaseExpectation } from './ValidationFunctionLibraryModal';
 import { pyodideManager } from '../../services/PyodideManager';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface ValidationFunctionEditorModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
   onClose,
   onSave
 }) => {
+  const { theme } = useTheme();
   const [editedFunc, setEditedFunc] = useState<SelectedFunction | null>(null);
   const [pyodideReady, setPyodideReady] = useState(false);
   const [pandasInstalled, setPandasInstalled] = useState(false);
@@ -773,13 +775,13 @@ json.dumps({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <div className="bg-surface-primary rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-border">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Edit Validation Function</h3>
+            <h3 className="text-lg font-semibold text-content-primary">Edit Validation Function</h3>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-content-tertiary hover:text-content-secondary"
             >
               <X className="h-5 w-5" />
             </button>
@@ -791,27 +793,27 @@ json.dumps({
             {/* Left Panel - Function Details */}
             <div className="space-y-4 flex flex-col min-h-0">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Function Name</label>
+                <label className="block text-sm font-medium text-content-secondary mb-2">Function Name</label>
                 <input
                   type="text"
                   value={editedFunc.customName || ''}
                   onChange={(e) => setEditedFunc(prev => prev ? ({ ...prev, customName: e.target.value }) : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-medical-500"
+                  className="w-full px-3 py-2 border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <label className="block text-sm font-medium text-content-secondary mb-2">Description</label>
                 <textarea
                   value={editedFunc.customDescription || ''}
                   onChange={(e) => setEditedFunc(prev => prev ? ({ ...prev, customDescription: e.target.value }) : null)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-medical-500"
+                  className="w-full px-3 py-2 border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Fields</label>
+                <label className="block text-sm font-medium text-content-secondary mb-2">Fields</label>
                 <div className="space-y-2">
                   {(editedFunc.customFields || editedFunc.fields).map((field, fieldIndex) => (
                     <div key={fieldIndex} className="flex items-center space-x-2">
@@ -819,12 +821,12 @@ json.dumps({
                         type="text"
                         value={field}
                         onChange={(e) => updateFieldInFunction(fieldIndex, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-medical-500"
+                        className="flex-1 px-3 py-2 border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
                         placeholder="Field name"
                       />
                       <button
                         onClick={() => removeFieldFromFunction(fieldIndex)}
-                        className="p-2 text-red-500 hover:text-red-700"
+                        className="p-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -832,7 +834,7 @@ json.dumps({
                   ))}
                   <button
                     onClick={addFieldToFunction}
-                    className="flex items-center px-3 py-2 text-sm text-medical-600 border border-medical-300 rounded-md hover:bg-medical-50"
+                    className="flex items-center px-3 py-2 text-sm text-brand-600 dark:text-brand-400 border border-brand-500/30 rounded-md hover:bg-brand-500/10"
                   >
                     <Plus className="h-4 w-4 mr-1" />
                     Add Field
@@ -841,7 +843,7 @@ json.dumps({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">System Fields</label>
+                <label className="block text-sm font-medium text-content-secondary mb-2">System Fields</label>
                 <div className="space-y-2">
                   {Object.entries(SYSTEM_FIELDS).map(([fieldName, fieldInfo]) => {
                     const isEnabled = (editedFunc.enabledSystemFields || []).includes(fieldName);
@@ -852,16 +854,16 @@ json.dumps({
                           id={`system-field-${fieldName}`}
                           checked={isEnabled}
                           onChange={() => toggleSystemField(fieldName)}
-                          className="rounded border-gray-300 text-medical-600 focus:ring-medical-500"
+                          className="rounded border-border-secondary text-brand-600 focus:ring-brand-500"
                         />
                         <label htmlFor={`system-field-${fieldName}`} className="flex-1 cursor-pointer">
-                          <div className="text-sm font-medium text-gray-900">{fieldInfo.name}</div>
-                          <div className="text-xs text-gray-500">{fieldInfo.description}</div>
+                          <div className="text-sm font-medium text-content-primary">{fieldInfo.name}</div>
+                          <div className="text-xs text-content-tertiary">{fieldInfo.description}</div>
                         </label>
                         <span className={`px-2 py-1 text-xs rounded ${
-                          isEnabled 
-                            ? 'bg-purple-100 text-purple-700' 
-                            : 'bg-gray-100 text-gray-500'
+                          isEnabled
+                            ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                            : 'bg-surface-secondary text-content-tertiary'
                         }`}>
                           {isEnabled ? 'Enabled' : 'Disabled'}
                         </span>
@@ -872,8 +874,8 @@ json.dumps({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Validation Code</label>
-                <div className="border border-gray-300 rounded-md overflow-hidden">
+                <label className="block text-sm font-medium text-content-secondary mb-2">Validation Code</label>
+                <div className="border border-border-secondary rounded-md overflow-hidden">
                   <CodeMirror
                     value={editedFunc.customImplementation || ''}
                     onChange={(value) => {
@@ -882,7 +884,7 @@ json.dumps({
                       setTestResults({});
                     }}
                     extensions={[python(), pythonLinter, lintGutter()]}
-                    theme="light"
+                    theme={theme === 'dark' ? 'dark' : 'light'}
                     height="200px"
                     basicSetup={{
                       lineNumbers: true,
@@ -898,7 +900,7 @@ json.dumps({
                     placeholder="Enter Python code..."
                   />
                 </div>
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="mt-1 text-xs text-content-tertiary">
                   Python syntax highlighting, auto-indentation, and basic linting enabled
                 </div>
               </div>
@@ -907,10 +909,10 @@ json.dumps({
             {/* Right Panel - Test Cases */}
             <div className="flex flex-col min-h-0 h-full">
               <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                <h4 className="text-lg font-medium text-gray-900">Test Cases</h4>
+                <h4 className="text-lg font-medium text-content-primary">Test Cases</h4>
                 <button
                   onClick={addTestCase}
-                  className="flex items-center px-3 py-2 bg-medical-600 text-white rounded-md hover:bg-medical-700"
+                  className="flex items-center px-3 py-2 bg-brand-600 text-white rounded-md hover:bg-brand-700"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Add Test
@@ -919,25 +921,25 @@ json.dumps({
 
               <div className="space-y-4 flex-1 overflow-y-auto min-h-0">
                 {(editedFunc.customTestCases || []).map((testCase, testIndex) => (
-                  <div key={testCase.id} className="border border-gray-200 rounded-lg p-4">
+                  <div key={testCase.id} className="border border-border rounded-lg p-4 bg-surface-primary">
                     <div className="flex items-center justify-between mb-3">
                       <input
                         type="text"
                         value={testCase.name}
                         onChange={(e) => updateTestCase(testIndex, { name: e.target.value })}
-                        className="font-medium text-gray-900 bg-transparent border-none focus:outline-none"
+                        className="font-medium text-content-primary bg-transparent border-none focus:outline-none"
                       />
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => runTestCase(testCase, editedFunc.customImplementation || editedFunc.implementation, editedFunc.customFields || editedFunc.fields, editedFunc.enabledSystemFields || [])}
-                          className="p-1 text-purple-500 hover:text-purple-700"
+                          className="p-1 text-purple-500 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
                           title="Run this test (loads Python runtime on first use)"
                         >
                           <Play className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => deleteTestCase(testIndex)}
-                          className="p-1 text-red-500 hover:text-red-700"
+                          className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -947,7 +949,7 @@ json.dumps({
                     <div className="mb-3">
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-700 font-medium">Expected Result:</span>
+                          <span className="text-sm text-content-secondary font-medium">Expected Result:</span>
                           <select
                             value={testCase.expectedResult}
                             onChange={(e) => {
@@ -956,7 +958,7 @@ json.dumps({
                                 expectedResult: newExpectedResult
                               });
                             }}
-                            className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-medical-500"
+                            className="text-sm border border-border-secondary rounded-md px-2 py-1 bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
                           >
                             <option value="pass">Pass</option>
                             <option value="fail">Fail</option>
@@ -974,8 +976,8 @@ json.dumps({
                             onClick={() => setActiveTab(testCase.id, 'table')}
                             className={`px-3 py-1 text-xs font-medium rounded-t-md border-b-2 ${
                               getActiveTab(testCase.id) === 'table'
-                                ? 'text-blue-600 border-blue-600 bg-blue-50'
-                                : 'text-gray-500 border-transparent hover:text-gray-700'
+                                ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-500/10'
+                                : 'text-content-tertiary border-transparent hover:text-content-secondary'
                             }`}
                           >
                             Table Editor
@@ -984,8 +986,8 @@ json.dumps({
                             onClick={() => setActiveTab(testCase.id, 'code')}
                             className={`px-3 py-1 text-xs font-medium rounded-t-md border-b-2 ${
                               getActiveTab(testCase.id) === 'code'
-                                ? 'text-green-600 border-green-600 bg-green-50'
-                                : 'text-gray-500 border-transparent hover:text-gray-700'
+                                ? 'text-green-600 dark:text-green-400 border-green-600 dark:border-green-400 bg-green-500/10'
+                                : 'text-content-tertiary border-transparent hover:text-content-secondary'
                             }`}
                           >
                             Code Editor
@@ -1004,7 +1006,7 @@ json.dumps({
                               });
                               updateTestCase(testIndex, { data: newData });
                             }}
-                            className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                            className="px-2 py-1 text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-500/20"
                           >
                             + Add Row
                           </button>
@@ -1014,17 +1016,17 @@ json.dumps({
                       {/* Table Editor */}
                       {getActiveTab(testCase.id) === 'table' && (
                         <>
-                        <div className="border border-gray-300 rounded-md overflow-hidden">
+                        <div className="border border-border-secondary rounded-md overflow-hidden">
                         {/* Header */}
-                        <div className="bg-gray-50 border-b border-gray-300 flex">
-                          <div className="w-8 px-2 py-1 text-xs font-medium text-gray-700 border-r border-gray-300">#</div>
+                        <div className="bg-surface-secondary border-b border-border-secondary flex">
+                          <div className="w-8 px-2 py-1 text-xs font-medium text-content-secondary border-r border-border-secondary">#</div>
                           {(editedFunc.customFields || editedFunc.fields).map(field => (
-                            <div key={field} className="flex-1 px-2 py-1 text-xs font-medium text-gray-700 border-r border-gray-300 last:border-r-0">
+                            <div key={field} className="flex-1 px-2 py-1 text-xs font-medium text-content-secondary border-r border-border-secondary last:border-r-0">
                               {field}
                             </div>
                           ))}
                           {(editedFunc.enabledSystemFields || []).map(field => (
-                            <div key={field} className="flex-1 px-2 py-1 text-xs font-medium text-purple-700 border-r border-gray-300 last:border-r-0 bg-purple-50">
+                            <div key={field} className="flex-1 px-2 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 border-r border-border-secondary last:border-r-0 bg-purple-500/10">
                               {field}
                             </div>
                           ))}
@@ -1037,7 +1039,7 @@ json.dumps({
                               !regularFields.includes(f) && !systemFields.includes(f)
                             );
                             return extraFields.map(field => (
-                              <div key={field} className="flex-1 px-2 py-1 text-xs font-medium text-orange-700 border-r border-gray-300 last:border-r-0 bg-orange-50" title="Extra field from test data (not in validation function fields)">
+                              <div key={field} className="flex-1 px-2 py-1 text-xs font-medium text-orange-600 dark:text-orange-400 border-r border-border-secondary last:border-r-0 bg-orange-500/10" title="Extra field from test data (not in validation function fields)">
                                 {field}
                               </div>
                             ));
@@ -1062,15 +1064,15 @@ json.dumps({
                           const maxRows = Math.max(1, ...allFields.map(field => (testCase.data[field] || []).length));
 
                           return Array.from({ length: maxRows }, (_, rowIndex) => (
-                            <div key={rowIndex} className="flex border-b border-gray-200 last:border-b-0">
-                              <div className="w-8 px-2 py-1 text-xs text-gray-500 border-r border-gray-300 bg-gray-50">
+                            <div key={rowIndex} className="flex border-b border-border last:border-b-0">
+                              <div className="w-8 px-2 py-1 text-xs text-content-tertiary border-r border-border-secondary bg-surface-secondary">
                                 {rowIndex}
                               </div>
                               {allFields.map(field => {
                                 const isSystemField = systemFields.includes(field);
                                 const isExtraField = extraFields.includes(field);
                                 return (
-                                <div key={field} className={`flex-1 border-r border-gray-300 last:border-r-0 ${isSystemField ? 'bg-purple-25' : ''} ${isExtraField ? 'bg-orange-25' : ''}`}>
+                                <div key={field} className={`flex-1 border-r border-border-secondary last:border-r-0 ${isSystemField ? 'bg-purple-500/5' : ''} ${isExtraField ? 'bg-orange-500/5' : ''}`}>
                                   <input
                                     type="text"
                                     value={(() => {
@@ -1085,15 +1087,15 @@ json.dumps({
                                     onChange={(e) => {
                                       const newData = { ...testCase.data };
                                       if (!newData[field]) newData[field] = [];
-                                      
+
                                       // Ensure array is long enough
                                       while (newData[field].length <= rowIndex) {
                                         newData[field].push('');
                                       }
-                                      
+
                                       const inputValue = e.target.value;
                                       console.log(`Input for ${field}: "${inputValue}"`);
-                                      
+
                                       // Smart value parsing - automatically detect type
                                       let parsedValue;
                                       if (inputValue.trim() === '') {
@@ -1116,12 +1118,12 @@ json.dumps({
                                         // Return number if it's a valid number, otherwise return original (with spaces)
                                         parsedValue = isNaN(num) ? inputValue : num;
                                       }
-                                      
+
                                       console.log(`Parsed value for ${field}:`, parsedValue);
                                       newData[field][rowIndex] = parsedValue;
                                       updateTestCase(testIndex, { data: newData });
                                     }}
-                                    className={`w-full px-2 py-1 text-xs border-none focus:outline-none ${isSystemField ? 'focus:bg-purple-50' : 'focus:bg-blue-50'}`}
+                                    className={`w-full px-2 py-1 text-xs border-none bg-transparent text-content-primary focus:outline-none ${isSystemField ? 'focus:bg-purple-500/10' : 'focus:bg-blue-500/10'}`}
                                     placeholder={`${field} value (e.g., "1,1" for lists)`}
                                   />
                                 </div>
@@ -1139,7 +1141,7 @@ json.dumps({
                                     });
                                     updateTestCase(testIndex, { data: newData });
                                   }}
-                                  className="p-0.5 text-red-500 hover:text-red-700 text-xs"
+                                  className="p-0.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs"
                                   title="Delete row"
                                 >
                                   ×
@@ -1151,7 +1153,7 @@ json.dumps({
                         </div>
                       </div>
 
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-content-tertiary">
                         Rows: {(() => {
                           const regularFields = editedFunc.customFields || editedFunc.fields;
                           const systemFields = editedFunc.enabledSystemFields || [];
@@ -1170,12 +1172,12 @@ json.dumps({
                       {/* Code Editor */}
                       {getActiveTab(testCase.id) === 'code' && (
                         <div className="space-y-2">
-                          <div className="border border-gray-300 rounded-md overflow-hidden">
+                          <div className="border border-border-secondary rounded-md overflow-hidden">
                             <CodeMirror
                               value={testDataCode[testCase.id] || ''}
                               onChange={(value) => setTestDataCode(prev => ({ ...prev, [testCase.id]: value }))}
                               extensions={[python()]}
-                              theme="light"
+                              theme={theme === 'dark' ? 'dark' : 'light'}
                               height="200px"
                               basicSetup={{
                                 lineNumbers: true,
@@ -1197,7 +1199,7 @@ json.dumps({
                             <button
                               onClick={() => executeTestDataCode(testCase.id, testDataCode[testCase.id] || '')}
                               disabled={codeExecutionResults[testCase.id]?.loading}
-                              className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                              className="px-3 py-1 text-xs bg-green-500/10 text-green-600 dark:text-green-400 rounded hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                             >
                               {codeExecutionResults[testCase.id]?.loading ? (
                                 <>
@@ -1212,20 +1214,20 @@ json.dumps({
                               )}
                             </button>
 
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-content-tertiary">
                               Returns a pandas DataFrame with test data
                             </div>
                           </div>
 
                           {/* Code Execution Results */}
                           {codeExecutionResults[testCase.id]?.error && (
-                            <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                            <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-600 dark:text-red-400">
                               <strong>Error:</strong> {codeExecutionResults[testCase.id].error}
                             </div>
                           )}
 
                           {codeExecutionResults[testCase.id]?.data && (
-                            <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+                            <div className="p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-600 dark:text-green-400">
                               <strong>Success:</strong> Generated data with {Object.keys(codeExecutionResults[testCase.id].data).length} fields and {Object.values(codeExecutionResults[testCase.id].data)[0]?.length || 0} rows
                             </div>
                           )}
@@ -1239,14 +1241,14 @@ json.dumps({
                       const expectedResult = testCase.expectedResult;
 
                       // Determine the color based on whether test passed its expectation
-                      let bgColor = 'bg-blue-50 text-blue-700'; // Loading
+                      let bgColor = 'bg-blue-500/10 text-blue-600 dark:text-blue-400'; // Loading
                       if (!result.loading) {
                         if (result.passed) {
                           // Test met expectations - always green (even for warnings)
-                          bgColor = 'bg-green-100 text-green-700';
+                          bgColor = 'bg-green-500/10 text-green-600 dark:text-green-400';
                         } else {
                           // Test didn't meet expectations - always red
-                          bgColor = 'bg-red-100 text-red-700';
+                          bgColor = 'bg-red-500/10 text-red-600 dark:text-red-400';
                         }
                       }
 
@@ -1314,16 +1316,16 @@ json.dumps({
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+        <div className="px-6 py-4 border-t border-border flex justify-end space-x-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+            className="px-4 py-2 border border-border-secondary text-content-secondary rounded-md hover:bg-surface-secondary"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-medical-600 text-white rounded-md hover:bg-medical-700"
+            className="px-4 py-2 bg-brand-600 text-white rounded-md hover:bg-brand-700"
           >
             Save Changes
           </button>

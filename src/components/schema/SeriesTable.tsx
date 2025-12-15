@@ -96,9 +96,9 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
 
   if (allFieldTags.size === 0) {
     return (
-      <div className="border border-gray-200 rounded-md p-4 text-center">
-        <p className="text-gray-500 text-xs">No series-level fields defined</p>
-        <p className="text-xs text-gray-400 mt-1">
+      <div className="border border-border rounded-md p-4 text-center">
+        <p className="text-content-tertiary text-xs">No series-level fields defined</p>
+        <p className="text-xs text-content-muted mt-1">
           Convert acquisition-level fields to series-level to create varying values
         </p>
       </div>
@@ -130,25 +130,25 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   });
 
   return (
-    <div className="border border-gray-200 rounded-md overflow-hidden">
+    <div className="border border-border rounded-md overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-surface-secondary">
             <tr>
-              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 min-w-[140px]">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider sticky left-0 bg-surface-secondary z-10 min-w-[140px]">
                 Series
               </th>
               {allFields.map((field) => (
                 <th
                   key={field.tag}
-                  className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]"
+                  className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider min-w-[120px]"
                   onMouseEnter={() => setHoveredHeader(field.tag)}
                   onMouseLeave={() => setHoveredHeader(null)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium truncate">{field.keyword || field.name}</p>
-                      <p className="text-xs font-normal text-gray-400 font-mono">{field.tag}</p>
+                      <p className="text-xs font-normal text-content-muted font-mono">{field.tag}</p>
                     </div>
                     {isEditMode && (
                       <div className={`flex items-center ml-1 ${
@@ -156,7 +156,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       } transition-opacity`}>
                         <button
                           onClick={() => onFieldConvert(field.tag)}
-                          className="p-0.5 text-gray-400 hover:text-medical-600 transition-colors"
+                          className="p-0.5 text-content-muted hover:text-brand-600 transition-colors"
                           title="Convert to acquisition field"
                         >
                           <ArrowLeftRight className="h-3 w-3" />
@@ -167,34 +167,34 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 </th>
               ))}
               {isComplianceMode && (
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
                   Status
                 </th>
               )}
               {isEditMode && (
-                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                <th className="px-2 py-1.5 text-right text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
                   Actions
                 </th>
               )}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-surface-primary divide-y divide-border">
             {displaySeries.map((ser, seriesIndex) => (
               <tr
                 key={seriesIndex}
-                className={`${seriesIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
-                  isEditMode ? 'hover:bg-blue-50 transition-colors' : ''
+                className={`${seriesIndex % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
+                  isEditMode ? 'hover:bg-surface-hover transition-colors' : ''
                 }`}
                 onMouseEnter={() => setHoveredRow(seriesIndex)}
                 onMouseLeave={() => setHoveredRow(null)}
               >
-                <td className="px-2 py-1.5 whitespace-nowrap font-medium text-gray-900 sticky left-0 bg-inherit min-w-[140px]">
+                <td className="px-2 py-1.5 whitespace-nowrap font-medium text-content-primary sticky left-0 bg-inherit min-w-[140px]">
                   {isEditMode && onSeriesNameUpdate ? (
                     <input
                       type="text"
                       value={ser.name}
                       onChange={(e) => onSeriesNameUpdate(seriesIndex, e.target.value)}
-                      className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-medical-500 rounded px-1 py-0.5 -mx-1 -my-0.5 text-xs w-full"
+                      className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-brand-500 rounded px-1 py-0.5 -mx-1 -my-0.5 text-xs w-full text-content-primary"
                       onBlur={(e) => {
                         if (!e.target.value.trim()) {
                           onSeriesNameUpdate(seriesIndex, `Series ${String(seriesIndex + 1).padStart(2, '0')}`);
@@ -220,7 +220,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''
                     }`}>
                       <div
-                        className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
+                        className={`${isEditMode ? 'cursor-pointer hover:bg-brand-500/10 rounded px-1 -mx-1' : ''}`}
                         onClick={() => {
                           if (isEditMode) {
                             // If field doesn't exist in this series, we'll handle creating it
@@ -235,11 +235,11 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <p className="text-xs text-gray-900 break-words">
+                            <p className="text-xs text-content-primary break-words">
                               {seriesField ? formatSeriesFieldValue(seriesField.value, seriesField.validationRule) : '-'}
                             </p>
                             {isEditMode && seriesField && (
-                              <p className="text-xs text-gray-500 mt-0.5">
+                              <p className="text-xs text-content-tertiary mt-0.5">
                                 {formatFieldTypeInfo(
                                   inferDataTypeFromValue(seriesField.value),
                                   seriesField.validationRule
@@ -298,7 +298,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                     } transition-opacity`}>
                       <button
                         onClick={() => onSeriesDelete(seriesIndex)}
-                        className="p-0.5 text-gray-600 hover:text-red-600 transition-colors"
+                        className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"
                         title="Delete series"
                         disabled={false}
                       >
@@ -315,10 +315,10 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
 
       {/* Add Series Button */}
       {isEditMode && (
-        <div className="bg-gray-50 px-2 py-1.5 border-t border-gray-200">
+        <div className="bg-surface-secondary px-2 py-1.5 border-t border-border">
           <button
             onClick={onSeriesAdd}
-            className="inline-flex items-center px-2 py-1 text-xs text-medical-600 hover:text-medical-700 hover:bg-medical-50 rounded transition-colors"
+            className="inline-flex items-center px-2 py-1 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 hover:bg-brand-500/10 rounded transition-colors"
           >
             <Plus className="h-3 w-3 mr-1" />
             Add Series

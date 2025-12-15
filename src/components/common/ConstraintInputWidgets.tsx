@@ -46,7 +46,7 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
     case 'exact':
       return (
         <div className={className}>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-content-primary mb-2">
             Expected Value
           </label>
           <input
@@ -55,8 +55,8 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
             onChange={(e) => updateRule({ value: e.target.value })}
             disabled={disabled}
             placeholder="Enter exact value to match"
-            className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+            className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+              disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
             }`}
           />
         </div>
@@ -67,7 +67,7 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
         <div className={className}>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 Expected Value
               </label>
               <input
@@ -76,13 +76,13 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
                 onChange={(e) => updateRule({ value: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                 disabled={disabled}
                 placeholder="2000"
-                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+                  disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
                 }`}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 Tolerance (±)
               </label>
               <input
@@ -93,14 +93,14 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
                 placeholder="50"
                 min="0"
                 step="0.1"
-                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+                  disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
                 }`}
               />
             </div>
           </div>
           {value.value !== undefined && value.value !== null && (
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-content-secondary">
               Range: {(value.value as number) - (value.tolerance ?? 0)} to {(value.value as number) + (value.tolerance ?? 0)}
             </p>
           )}
@@ -110,7 +110,7 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
     case 'contains':
       return (
         <div className={className}>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-content-primary mb-2">
             Substring to Find
           </label>
           <input
@@ -119,11 +119,11 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
             onChange={(e) => updateRule({ contains: e.target.value })}
             disabled={disabled}
             placeholder="BOLD"
-            className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+            className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+              disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
             }`}
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-content-tertiary">
             Field value must contain this substring (case-insensitive)
           </p>
         </div>
@@ -134,7 +134,7 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
         <div className={className}>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 Minimum Value
               </label>
               <input
@@ -143,13 +143,13 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
                 onChange={(e) => updateRule({ min: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                 disabled={disabled}
                 placeholder="8"
-                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+                  disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
                 }`}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 Maximum Value
               </label>
               <input
@@ -158,14 +158,14 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
                 onChange={(e) => updateRule({ max: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                 disabled={disabled}
                 placeholder="12"
-                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+                  disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
                 }`}
               />
             </div>
           </div>
           {(value.min !== undefined && value.min !== null) || (value.max !== undefined && value.max !== null) ? (
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-content-secondary">
               Valid range: {value.min ?? '-∞'} to {value.max ?? '∞'}
             </p>
           ) : null}
@@ -175,7 +175,7 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
     case 'contains_any':
       return (
         <div className={className}>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-content-primary mb-2">
             Values to Search For
           </label>
           <input
@@ -188,17 +188,17 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
             }}
             disabled={disabled}
             placeholder="T1, t1, T1-weighted"
-            className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+            className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+              disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
             }`}
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-content-tertiary">
             Enter comma-separated values. For strings: field must contain any of these substrings. For lists: field must contain any of these elements.
           </p>
           {value.contains_any && value.contains_any.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {value.contains_any.map((val, index) => (
-                <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                <span key={index} className="px-2 py-1 bg-blue-500/10 text-blue-700 dark:text-blue-300 text-xs rounded">
                   {String(val)}
                 </span>
               ))}
@@ -210,7 +210,7 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
     case 'contains_all':
       return (
         <div className={className}>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-content-primary mb-2">
             Required Elements
           </label>
           <input
@@ -223,17 +223,17 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
             }}
             disabled={disabled}
             placeholder="NORMAL, PRIMARY"
-            className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+            className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+              disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
             }`}
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-content-tertiary">
             Enter comma-separated values. List field must contain all of these elements (order doesn't matter).
           </p>
           {value.contains_all && value.contains_all.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {value.contains_all.map((val, index) => (
-                <span key={index} className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                <span key={index} className="px-2 py-1 bg-green-500/10 text-green-700 dark:text-green-300 text-xs rounded">
                   {String(val)}
                 </span>
               ))}

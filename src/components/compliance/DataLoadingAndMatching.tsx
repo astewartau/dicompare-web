@@ -93,9 +93,9 @@ const SchemaAcquisitionDisplay = React.memo<{
   // Only show loading when we don't have schema and we're not processing
   if (isLoading && !isDataProcessing) {
     return (
-      <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600 mx-auto mb-2"></div>
-        <span className="text-sm text-gray-600">Loading schema...</span>
+      <div className="border border-border-secondary rounded-lg bg-surface-primary shadow-sm h-fit p-4 text-center">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600 mx-auto mb-2"></div>
+        <span className="text-sm text-content-secondary">Loading schema...</span>
       </div>
     );
   }
@@ -103,17 +103,17 @@ const SchemaAcquisitionDisplay = React.memo<{
   // Error state when not processing
   if (!isDataProcessing) {
     return (
-      <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
-        <span className="text-sm text-red-600">Failed to load schema</span>
+      <div className="border border-border-secondary rounded-lg bg-surface-primary shadow-sm h-fit p-4 text-center">
+        <span className="text-sm text-status-error">Failed to load schema</span>
       </div>
     );
   }
 
   // During processing without schema - minimal loading
   return (
-    <div className="border border-gray-300 rounded-lg bg-white shadow-sm h-fit p-4 text-center">
-      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-600 mx-auto mb-2"></div>
-      <span className="text-sm text-gray-600">Loading schema...</span>
+    <div className="border border-border-secondary rounded-lg bg-surface-primary shadow-sm h-fit p-4 text-center">
+      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600 mx-auto mb-2"></div>
+      <span className="text-sm text-content-secondary">Loading schema...</span>
     </div>
   );
 }, (prevProps, nextProps) => {
@@ -1001,28 +1001,28 @@ const DataLoadingAndMatching: React.FC = () => {
         onClick={() => setSelectedAcquisitionId(acquisition.id)}
         className={`border rounded-lg p-4 cursor-pointer transition-all ${
           isSelected
-            ? 'border-medical-500 bg-medical-50 shadow-md'
-            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+            ? 'border-brand-500 bg-brand-50 shadow-md'
+            : 'border-border hover:border-border-secondary hover:bg-surface-secondary'
         }`}
       >
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center space-x-2">
-              <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
-              <h3 className="text-sm font-medium text-gray-900 truncate">
+              <FileText className="h-4 w-4 text-content-tertiary flex-shrink-0" />
+              <h3 className="text-sm font-medium text-content-primary truncate">
                 {acquisition.protocolName || 'Untitled Acquisition'}
               </h3>
               {hasNoPairing && (
-                <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" title="No schema assigned" />
+                <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0" title="No schema assigned" />
               )}
             </div>
-            <p className="text-xs text-gray-600 mt-1 truncate">
+            <p className="text-xs text-content-secondary mt-1 truncate">
               {acquisition.seriesDescription || 'No description'}
             </p>
-            <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+            <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
               <span>{acquisition.totalFiles} files</span>
               {pairing && (
-                <span className="text-green-600 flex items-center">
+                <span className="text-status-success flex items-center">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Paired
                 </span>
@@ -1043,18 +1043,18 @@ const DataLoadingAndMatching: React.FC = () => {
         onClick={() => setSelectedAcquisitionId(ADD_NEW_ID)}
         className={`border rounded-lg p-4 cursor-pointer transition-all ${
           isSelected
-            ? 'border-medical-500 bg-medical-50 shadow-md'
-            : 'border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+            ? 'border-brand-500 bg-brand-50 shadow-md'
+            : 'border-dashed border-border-secondary hover:border-content-muted hover:bg-surface-secondary'
         }`}
       >
         <div className="flex items-center space-x-2">
-          <Plus className="h-4 w-4 text-medical-500 flex-shrink-0" />
-          <h3 className="text-sm font-medium text-gray-900">
+          <Plus className="h-4 w-4 text-brand-500 flex-shrink-0" />
+          <h3 className="text-sm font-medium text-content-primary">
             Load DICOMs
           </h3>
         </div>
-        <p className="text-xs text-gray-600 mt-1">
-          
+        <p className="text-xs text-content-secondary mt-1">
+
         </p>
       </div>
     );
@@ -1065,15 +1065,15 @@ const DataLoadingAndMatching: React.FC = () => {
     const pairing = getAcquisitionPairing(acquisition.id);
 
     return (
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+      <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
         {/* Header with Attach Schema button */}
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-4 border-b border-border">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-xl font-semibold text-gray-900">{acquisition.protocolName}</h3>
-              <p className="text-sm text-gray-600 mt-1">{acquisition.seriesDescription || 'No description'}</p>
+              <h3 className="text-xl font-semibold text-content-primary">{acquisition.protocolName}</h3>
+              <p className="text-sm text-content-secondary mt-1">{acquisition.seriesDescription || 'No description'}</p>
               {pairing && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-content-tertiary mt-1">
                   Schema: {pairing.schema.name} v{pairing.schema.version}
                 </p>
               )}
@@ -1082,7 +1082,7 @@ const DataLoadingAndMatching: React.FC = () => {
               {pairing ? (
                 <button
                   onClick={() => unpairAcquisition(acquisition.id)}
-                  className="inline-flex items-center px-3 py-2 border border-red-300 text-red-700 text-sm rounded-lg hover:bg-red-50"
+                  className="inline-flex items-center px-3 py-2 border border-status-error/30 text-status-error text-sm rounded-lg hover:bg-status-error-bg"
                 >
                   <X className="h-4 w-4 mr-2" />
                   Detach Schema
@@ -1090,7 +1090,7 @@ const DataLoadingAndMatching: React.FC = () => {
               ) : (
                 <button
                   onClick={() => setShowSchemaSelectionModal(true)}
-                  className="inline-flex items-center px-3 py-2 border border-medical-600 text-medical-600 text-sm rounded-lg hover:bg-medical-50"
+                  className="inline-flex items-center px-3 py-2 border border-brand-600 text-brand-600 text-sm rounded-lg hover:bg-brand-50"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Attach Schema
@@ -1098,7 +1098,7 @@ const DataLoadingAndMatching: React.FC = () => {
               )}
               <button
                 onClick={() => handleDeleteAcquisition(acquisition.id)}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+                className="inline-flex items-center px-3 py-2 border border-border-secondary text-content-secondary text-sm rounded-lg hover:bg-surface-secondary"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete
@@ -1123,12 +1123,12 @@ const DataLoadingAndMatching: React.FC = () => {
 
   // Upload area component
   const renderUploadArea = (isExtra: boolean = false) => (
-    <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-6">
+    <div className="border border-border rounded-lg bg-surface-primary shadow-sm p-6">
       <div
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
           isDragOver
-            ? 'border-medical-500 bg-medical-50'
-            : 'border-gray-300 hover:border-medical-400'
+            ? 'border-brand-500 bg-brand-50'
+            : 'border-border-secondary hover:border-brand-500'
         }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -1136,19 +1136,19 @@ const DataLoadingAndMatching: React.FC = () => {
       >
         {isProcessing ? (
           <>
-            <Loader className="h-12 w-12 text-medical-600 mx-auto mb-4 animate-spin" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Processing DICOM Files</h3>
-            <p className="text-gray-600 mb-4">{progress?.currentOperation}</p>
+            <Loader className="h-12 w-12 text-brand-600 mx-auto mb-4 animate-spin" />
+            <h3 className="text-lg font-semibold text-content-primary mb-2">Processing DICOM Files</h3>
+            <p className="text-content-secondary mb-4">{progress?.currentOperation}</p>
 
             {progress && (
               <div className="space-y-3 mb-4">
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-surface-secondary rounded-full h-2">
                   <div
-                    className="bg-medical-600 h-2 rounded-full transition-all duration-500"
+                    className="bg-brand-600 h-2 rounded-full transition-all duration-500"
                     style={{ width: `${progress.percentage}%` }}
                   />
                 </div>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-content-secondary">
                   {Math.round(progress.percentage)}% complete
                 </p>
               </div>
@@ -1156,11 +1156,11 @@ const DataLoadingAndMatching: React.FC = () => {
           </>
         ) : (
           <>
-            <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <Upload className="h-12 w-12 text-content-muted mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-content-primary mb-2">
               {isExtra ? 'Upload More DICOM Files' : 'Load Data for Compliance Testing'}
             </h3>
-            <p className="text-gray-600 mb-4">
+            <p className="text-content-secondary mb-4">
               Drag and drop DICOM files (or .zip), Siemens .pro files, or select a schema to generate test data
             </p>
 
@@ -1176,17 +1176,17 @@ const DataLoadingAndMatching: React.FC = () => {
             <div className="flex items-center justify-center gap-3">
               <label
                 htmlFor={isExtra ? "file-upload-extra" : "file-upload"}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-medical-600 hover:bg-medical-700 cursor-pointer"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer"
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Browse Files
               </label>
 
-              <span className="text-gray-500 text-sm">or</span>
+              <span className="text-content-tertiary text-sm">or</span>
 
               <button
                 onClick={() => setShowSchemaAsDataModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-medical-600 text-medical-600 text-sm font-medium rounded-md hover:bg-medical-50"
+                className="inline-flex items-center px-4 py-2 border border-brand-600 text-brand-600 text-sm font-medium rounded-md hover:bg-brand-50"
               >
                 <Database className="h-4 w-4 mr-2" />
                 Generate Example Data
@@ -1203,12 +1203,12 @@ const DataLoadingAndMatching: React.FC = () => {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Load and Validate DICOM Data</h2>
-            <p className="text-gray-600">
-              
+            <h2 className="text-3xl font-bold text-content-primary mb-2">Load and Validate DICOM Data</h2>
+            <p className="text-content-secondary">
+
             </p>
             {(apiError || schemaError) && (
-              <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              <div className="mt-4 p-3 bg-status-error-bg border border-status-error/30 text-status-error rounded">
                 {apiError || schemaError}
               </div>
             )}
@@ -1217,7 +1217,7 @@ const DataLoadingAndMatching: React.FC = () => {
           {loadedData.length > 0 && (
             <button
               onClick={clearData}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
             >
               Clear Data
             </button>
@@ -1229,11 +1229,11 @@ const DataLoadingAndMatching: React.FC = () => {
       <div className="grid grid-cols-12 gap-6 min-h-[600px]">
         {/* Left Panel - Acquisition Selector */}
         <div className="col-span-12 md:col-span-3">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">Acquisitions</h3>
-              <p className="text-sm text-gray-600">Select to view or load more data</p>
+            <div className="px-4 py-3 border-b border-border">
+              <h3 className="text-lg font-medium text-content-primary">Acquisitions</h3>
+              <p className="text-sm text-content-secondary">Select to view or load more data</p>
             </div>
 
             {/* Acquisition List */}
@@ -1257,11 +1257,11 @@ const DataLoadingAndMatching: React.FC = () => {
             renderCombinedView(selectedAcquisition)
           ) : (
             /* Fallback */
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 h-full flex items-center justify-center">
+            <div className="bg-surface-primary rounded-lg border border-border shadow-sm p-6 h-full flex items-center justify-center">
               <div className="text-center">
-                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Acquisition Selected</h3>
-                <p className="text-gray-600">Select an acquisition from the left panel</p>
+                <FileText className="h-12 w-12 text-content-muted mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-content-primary mb-2">No Acquisition Selected</h3>
+                <p className="text-content-secondary">Select an acquisition from the left panel</p>
               </div>
             </div>
           )}
@@ -1285,18 +1285,18 @@ const DataLoadingAndMatching: React.FC = () => {
       {/* Schema Selection Modal */}
       {showSchemaSelectionModal && selectedAcquisition && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
+          <div className="bg-surface-primary rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-border">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-gray-900">Select Schema</h3>
+                <h3 className="text-lg font-medium text-content-primary">Select Schema</h3>
                 <button
                   onClick={() => setShowSchemaSelectionModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-content-muted hover:text-content-secondary"
                 >
                   <X className="w-6 h-6" />
                 </button>
               </div>
-              <p className="text-gray-600 mt-2">
+              <p className="text-content-secondary mt-2">
                 Select a schema and acquisition to validate against
               </p>
             </div>
@@ -1322,17 +1322,17 @@ const DataLoadingAndMatching: React.FC = () => {
       {/* Schema as Data Source Modal */}
       {showSchemaAsDataModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="bg-surface-primary rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Select Schema to Generate Test Data</h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <h2 className="text-xl font-semibold text-content-primary">Select Schema to Generate Test Data</h2>
+                <p className="text-sm text-content-secondary mt-1">
                   Choose a schema to generate compliant DICOM files for testing
                 </p>
               </div>
               <button
                 onClick={() => setShowSchemaAsDataModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-content-muted hover:text-content-secondary"
               >
                 <X className="h-6 w-6" />
               </button>
@@ -1382,7 +1382,7 @@ const DataLoadingAndMatching: React.FC = () => {
         <button
           onClick={handleContinue}
           disabled={getPairedCount() === 0}
-          className="px-6 py-3 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className="px-6 py-3 bg-brand-600 text-content-inverted rounded-lg hover:bg-brand-700 disabled:bg-surface-secondary disabled:text-content-muted disabled:cursor-not-allowed"
         >
           Export Compliance Report
           {getPairedCount() > 0 && (
@@ -1396,20 +1396,20 @@ const DataLoadingAndMatching: React.FC = () => {
       {/* Schema Validation Error Modal */}
       {schemaValidationError && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+          <div className="bg-surface-primary rounded-lg p-6 w-full max-w-md mx-4">
             <div className="flex items-start mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                <span className="text-red-600 text-xl">!</span>
+              <div className="flex-shrink-0 w-10 h-10 bg-status-error-bg rounded-full flex items-center justify-center">
+                <span className="text-status-error text-xl">!</span>
               </div>
               <div className="ml-4">
-                <h3 className="text-lg font-semibold text-gray-900">Invalid Schema File</h3>
-                <p className="mt-2 text-sm text-gray-600">{schemaValidationError}</p>
+                <h3 className="text-lg font-semibold text-content-primary">Invalid Schema File</h3>
+                <p className="mt-2 text-sm text-content-secondary">{schemaValidationError}</p>
               </div>
             </div>
             <div className="flex justify-end">
               <button
                 onClick={() => setSchemaValidationError(null)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                className="px-4 py-2 bg-surface-secondary text-content-primary rounded-md hover:bg-border-secondary"
               >
                 OK
               </button>

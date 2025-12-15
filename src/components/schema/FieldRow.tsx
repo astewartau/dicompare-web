@@ -30,26 +30,26 @@ const FieldRow: React.FC<FieldRowProps> = ({
 
   return (
     <tr
-      className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
-        isEditMode ? 'hover:bg-blue-50 transition-colors' : ''
+      className={`${index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
+        isEditMode ? 'hover:bg-surface-hover transition-colors' : ''
       }`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       <td className="px-3 py-2 whitespace-nowrap">
         <div>
-          <p className="text-sm font-medium text-gray-900">{field.keyword || field.name}</p>
-          <p className="text-xs text-gray-500">{field.tag}</p>
+          <p className="text-sm font-medium text-content-primary">{field.keyword || field.name}</p>
+          <p className="text-xs text-content-tertiary">{field.tag}</p>
         </div>
       </td>
       <td className="px-3 py-2">
         <div
-          className={`${isEditMode ? 'cursor-pointer hover:bg-blue-100 rounded px-1 -mx-1' : ''}`}
+          className={`${isEditMode ? 'cursor-pointer hover:bg-brand-100 rounded px-1 -mx-1' : ''}`}
           onClick={() => isEditMode && onEdit(field)}
         >
-          <p className="text-sm text-gray-900">{formatConstraintValue(field.value, field.validationRule)}</p>
+          <p className="text-sm text-content-primary">{formatConstraintValue(field.value, field.validationRule)}</p>
           {isEditMode && (
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-content-tertiary mt-0.5">
               {formatFieldTypeInfo(
                 field.dataType || inferDataTypeFromValue(field.value),
                 field.validationRule
@@ -65,14 +65,14 @@ const FieldRow: React.FC<FieldRowProps> = ({
           } transition-opacity`}>
             <button
               onClick={() => onConvert(field.tag)}
-              className="p-1 text-gray-600 hover:text-medical-600 transition-colors"
+              className="p-1 text-content-secondary hover:text-brand-600 transition-colors"
               title="Convert to series field"
             >
               <ArrowRightLeft className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => onDelete(field.tag)}
-              className="p-1 text-gray-600 hover:text-red-600 transition-colors"
+              className="p-1 text-content-secondary hover:text-status-error transition-colors"
               title="Delete field"
             >
               <Trash2 className="h-3.5 w-3.5" />

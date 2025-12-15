@@ -81,26 +81,26 @@ const SchemaStartPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">Schema Builder - Choose Your Starting Point</h2>
-        <p className="text-gray-600">
+        <h2 className="text-3xl font-bold text-content-primary mb-4">Schema Builder - Choose Your Starting Point</h2>
+        <p className="text-content-secondary">
           Start by selecting an existing schema to edit, or create a new schema from scratch.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Create New Schema Card */}
-        <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 h-fit">
+        <div className="bg-surface-primary rounded-lg shadow-md p-6 border border-border h-fit">
           <div className="text-center">
-            <div className="w-16 h-16 bg-medical-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Plus className="h-8 w-8 text-medical-600" />
+            <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Plus className="h-8 w-8 text-brand-600" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">Create New Schema</h3>
-            <p className="text-gray-600 mb-6">
+            <h3 className="text-xl font-semibold text-content-primary mb-3">Create New Schema</h3>
+            <p className="text-content-secondary mb-6">
               Start building a new validation schema from scratch. Upload DICOM files, create acquisitions manually, or import from existing schemas.
             </p>
             <button
               onClick={handleCreateNew}
-              className="inline-flex items-center px-6 py-3 bg-medical-600 text-white rounded-lg hover:bg-medical-700 transition-colors"
+              className="inline-flex items-center px-6 py-3 bg-brand-600 text-content-inverted rounded-lg hover:bg-brand-700 transition-colors"
             >
               <Plus className="h-5 w-5 mr-2" />
               Create New Schema
@@ -111,13 +111,13 @@ const SchemaStartPage: React.FC = () => {
 
         {/* Start from Existing Schema Card */}
         <div>
-          <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 mb-4">
+          <div className="bg-surface-primary rounded-lg shadow-md p-6 border border-border mb-4">
             <div className="text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Edit className="h-8 w-8 text-blue-600" />
+              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Edit className="h-8 w-8 text-brand-600" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Start from Existing</h3>
-              <p className="text-gray-600">
+              <h3 className="text-xl font-semibold text-content-primary mb-3">Start from Existing</h3>
+              <p className="text-content-secondary">
                 Use an existing schema as your starting template. You can save as a new schema or update the original.
               </p>
             </div>
@@ -152,20 +152,20 @@ const SchemaStartPage: React.FC = () => {
       {/* Validation Error Modal */}
       {validationError && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+          <div className="bg-surface-primary rounded-lg p-6 w-full max-w-md mx-4">
             <div className="flex items-start mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                <span className="text-red-600 text-xl">!</span>
+              <div className="flex-shrink-0 w-10 h-10 bg-status-error-bg rounded-full flex items-center justify-center">
+                <span className="text-status-error text-xl">!</span>
               </div>
               <div className="ml-4">
-                <h3 className="text-lg font-semibold text-gray-900">Invalid Schema File</h3>
-                <p className="mt-2 text-sm text-gray-600">{validationError}</p>
+                <h3 className="text-lg font-semibold text-content-primary">Invalid Schema File</h3>
+                <p className="mt-2 text-sm text-content-secondary">{validationError}</p>
               </div>
             </div>
             <div className="flex justify-end">
               <button
                 onClick={() => setValidationError(null)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                className="px-4 py-2 bg-surface-secondary text-content-primary rounded-md hover:bg-border-secondary"
               >
                 OK
               </button>

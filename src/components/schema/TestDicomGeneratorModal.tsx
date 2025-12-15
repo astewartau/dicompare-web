@@ -8,6 +8,7 @@ import { dicompareAPI } from '../../services/DicompareAPI';
 import { pyodideManager } from '../../services/PyodideManager';
 import { getFieldByKeyword } from '../../services/dicomFieldService';
 import { extractValidationFieldValues, generateTestDataFromSchema, generateValueFromField } from '../../utils/testDataGeneration';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface TestDicomGeneratorModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
   schemaId,
   getSchemaContent
 }) => {
+  const { theme } = useTheme();
   const [step, setStep] = useState<'analyzing' | 'editing' | 'generating'>('analyzing');
   const [analysisResult, setAnalysisResult] = useState<{
     fields: DicomField[];
@@ -570,18 +572,18 @@ output
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+      <div className="bg-surface-primary rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Generate Test DICOMs</h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <h2 className="text-lg font-semibold text-content-primary">Generate Test DICOMs</h2>
+            <p className="text-sm text-content-secondary mt-1">
               Create compliant DICOM files from schema: {acquisition.protocolName}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-content-tertiary hover:text-content-secondary"
           >
             <X className="h-6 w-6" />
           </button>
@@ -592,8 +594,8 @@ output
           {step === 'analyzing' && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-medical-600" />
-                <p className="text-gray-600">Analyzing schema for DICOM generation...</p>
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-brand-600" />
+                <p className="text-content-secondary">Analyzing schema for DICOM generation...</p>
               </div>
             </div>
           )}
@@ -602,10 +604,10 @@ output
             <div className="p-6 space-y-6">
               {/* Validation Function Success Message */}
               {analysisResult.validationFunctionsWithTests > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
                   <div className="flex items-center">
-                    <CheckCircle className="h-5 w-5 text-green-600 mr-2 flex-shrink-0" />
-                    <p className="text-sm text-green-800">
+                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mr-2 flex-shrink-0" />
+                    <p className="text-sm text-green-700 dark:text-green-300">
                       <strong>{analysisResult.validationFunctionsWithTests}</strong> validation function{analysisResult.validationFunctionsWithTests !== 1 ? 's have' : ' has'} passing test cases. Field values extracted and applied.
                     </p>
                   </div>
@@ -628,14 +630,14 @@ output
                 }, {} as Record<string, Array<{ existingValue: any; testValue: any; validationName: string }>>);
 
                 return (
-                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
                     <div className="flex items-start">
-                      <AlertTriangle className="h-5 w-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
+                      <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 mr-2 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <h3 className="font-medium text-orange-900 mb-2">
+                        <h3 className="font-medium text-orange-800 dark:text-orange-300 mb-2">
                           Field Value Conflicts Detected
                         </h3>
-                        <p className="text-sm text-orange-800 mb-3">
+                        <p className="text-sm text-orange-700 dark:text-orange-400 mb-3">
                           The following fields have different values in the schema vs. validation test cases. Choose which value to use for each field:
                         </p>
                         <div className="space-y-3">
@@ -645,8 +647,8 @@ output
                             const schemaValue = conflicts[0].existingValue;
 
                             return (
-                              <div key={fieldName} className="bg-white border border-orange-200 rounded p-3 text-sm">
-                                <div className="font-medium text-orange-900 mb-2">
+                              <div key={fieldName} className="bg-surface-primary border border-orange-500/30 rounded p-3 text-sm">
+                                <div className="font-medium text-orange-800 dark:text-orange-300 mb-2">
                                   {fieldName}
                                 </div>
                                 <div className="space-y-2">
@@ -655,16 +657,16 @@ output
                                     onClick={() => handleConflictResolution(fieldName, 'schema', schemaValue)}
                                     className={`w-full text-left p-2 rounded border transition-colors ${
                                       resolution === 'schema'
-                                        ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200'
-                                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                                        ? 'bg-blue-500/10 border-blue-500/30 ring-2 ring-blue-500/20'
+                                        : 'bg-surface-secondary border-border hover:bg-surface-hover'
                                     }`}
                                   >
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <span className="text-gray-600">Schema value: </span>
-                                        <code className="bg-orange-100 px-1 rounded">{JSON.stringify(schemaValue)}</code>
+                                        <span className="text-content-secondary">Schema value: </span>
+                                        <code className="bg-orange-500/20 px-1 rounded text-orange-700 dark:text-orange-300">{JSON.stringify(schemaValue)}</code>
                                       </div>
-                                      {resolution === 'schema' && <span className="text-blue-600 font-medium">✓ Using</span>}
+                                      {resolution === 'schema' && <span className="text-blue-600 dark:text-blue-400 font-medium">✓ Using</span>}
                                     </div>
                                   </button>
                                   {/* Test value options - one per validation function */}
@@ -676,18 +678,18 @@ output
                                         onClick={() => handleConflictResolution(fieldName, testKey, conflict.testValue)}
                                         className={`w-full text-left p-2 rounded border transition-colors ${
                                           resolution === testKey
-                                            ? 'bg-green-50 border-green-300 ring-2 ring-green-200'
-                                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                                            ? 'bg-green-500/10 border-green-500/30 ring-2 ring-green-500/20'
+                                            : 'bg-surface-secondary border-border hover:bg-surface-hover'
                                         }`}
                                       >
                                         <div className="flex items-center justify-between">
                                           <div>
-                                            <span className="text-gray-600">Test value </span>
-                                            <span className="text-gray-500 text-xs">(from "{conflict.validationName}")</span>
-                                            <span className="text-gray-600">: </span>
-                                            <code className="bg-green-100 px-1 rounded">{JSON.stringify(conflict.testValue)}</code>
+                                            <span className="text-content-secondary">Test value </span>
+                                            <span className="text-content-tertiary text-xs">(from "{conflict.validationName}")</span>
+                                            <span className="text-content-secondary">: </span>
+                                            <code className="bg-green-500/20 px-1 rounded text-green-700 dark:text-green-300">{JSON.stringify(conflict.testValue)}</code>
                                           </div>
-                                          {resolution === testKey && <span className="text-green-600 font-medium">✓ Using</span>}
+                                          {resolution === testKey && <span className="text-green-600 dark:text-green-400 font-medium">✓ Using</span>}
                                         </div>
                                       </button>
                                     );
@@ -700,7 +702,7 @@ output
                       </div>
                       <button
                         onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('schemaConflicts'))}
-                        className="ml-2 text-orange-600 hover:text-orange-800"
+                        className="ml-2 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300"
                         title="Dismiss warning"
                       >
                         <X className="h-4 w-4" />
@@ -722,28 +724,28 @@ output
                 });
 
                 return remainingWarnings.length > 0 && !dismissedWarnings.has('fieldConflicts') && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
                     <div className="flex items-start">
-                      <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                      <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <h3 className="font-medium text-yellow-900 mb-2">
+                        <h3 className="font-medium text-yellow-800 dark:text-yellow-300 mb-2">
                           Conflicting Validation Test Values
                         </h3>
-                        <p className="text-sm text-yellow-800 mb-2">
+                        <p className="text-sm text-yellow-700 dark:text-yellow-400 mb-2">
                           Multiple validation functions use the same fields with different test values. The generated test data may not pass all validations:
                         </p>
-                        <ul className="text-sm text-yellow-800 list-disc list-inside space-y-1">
+                        <ul className="text-sm text-yellow-700 dark:text-yellow-400 list-disc list-inside space-y-1">
                           {remainingWarnings.map((warning, idx) => (
                             <li key={idx}>{warning}</li>
                           ))}
                         </ul>
-                        <p className="text-xs text-yellow-700 mt-2">
+                        <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-2">
                           <strong>Note:</strong> Automatically combining conflicting validation constraints is non-trivial. You may need to manually adjust the test data to satisfy all validations.
                         </p>
                       </div>
                       <button
                         onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('fieldConflicts'))}
-                        className="ml-2 text-yellow-600 hover:text-yellow-800"
+                        className="ml-2 text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-300"
                         title="Dismiss warning"
                       >
                         <X className="h-4 w-4" />
@@ -755,28 +757,28 @@ output
 
               {/* Validation Function Warnings */}
               {analysisResult.validationFunctionWarnings.length > 0 && !dismissedWarnings.has('noPassingTests') && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
                   <div className="flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <h3 className="font-medium text-yellow-900 mb-2">
+                      <h3 className="font-medium text-yellow-800 dark:text-yellow-300 mb-2">
                         Validation Functions Without Passing Tests
                       </h3>
-                      <p className="text-sm text-yellow-800 mb-2">
+                      <p className="text-sm text-yellow-700 dark:text-yellow-400 mb-2">
                         The following validation functions don't have passing test cases, so their field requirements cannot be auto-generated:
                       </p>
-                      <ul className="text-sm text-yellow-800 list-disc list-inside space-y-1">
+                      <ul className="text-sm text-yellow-700 dark:text-yellow-400 list-disc list-inside space-y-1">
                         {analysisResult.validationFunctionWarnings.map((warning, idx) => (
                           <li key={idx}>{warning}</li>
                         ))}
                       </ul>
-                      <p className="text-xs text-yellow-700 mt-2">
+                      <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-2">
                         Add passing test cases to these validation functions to automatically populate their field values.
                       </p>
                     </div>
                     <button
                       onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('noPassingTests'))}
-                      className="ml-2 text-yellow-600 hover:text-yellow-800"
+                      className="ml-2 text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-300"
                       title="Dismiss warning"
                     >
                       <X className="h-4 w-4" />
@@ -787,28 +789,28 @@ output
 
               {/* Unhandled Fields Warning */}
               {analysisResult.fieldCategorization && analysisResult.fieldCategorization.unhandledFieldWarnings.length > 0 && !dismissedWarnings.has('unhandledFields') && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
                   <div className="flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
+                    <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 mr-2 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <h3 className="font-medium text-orange-900 mb-2">
+                      <h3 className="font-medium text-orange-800 dark:text-orange-300 mb-2">
                         Fields Cannot Be Encoded in DICOMs
                       </h3>
-                      <p className="text-sm text-orange-800 mb-2">
+                      <p className="text-sm text-orange-700 dark:text-orange-400 mb-2">
                         The following fields have no standard DICOM tag or special encoding method. Generated DICOMs will NOT include these fields and may fail validation:
                       </p>
-                      <ul className="list-disc list-inside text-sm text-orange-700 space-y-1">
+                      <ul className="list-disc list-inside text-sm text-orange-600 dark:text-orange-400 space-y-1">
                         {analysisResult.fieldCategorization.unhandledFieldWarnings.map((warning, idx) => (
                           <li key={idx}>{warning}</li>
                         ))}
                       </ul>
-                      <div className="mt-3 text-xs text-orange-700 bg-orange-100 p-2 rounded">
+                      <div className="mt-3 text-xs text-orange-600 dark:text-orange-400 bg-orange-500/10 p-2 rounded">
                         <strong>Summary:</strong> {analysisResult.fieldCategorization.standardFields} standard DICOM fields, {analysisResult.fieldCategorization.handledFields} handled special fields (e.g., MultibandFactor), {analysisResult.fieldCategorization.unhandledFields} unhandled fields
                       </div>
                     </div>
                     <button
                       onClick={() => setDismissedWarnings(new Set(dismissedWarnings).add('unhandledFields'))}
-                      className="ml-2 text-orange-600 hover:text-orange-800"
+                      className="ml-2 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -823,8 +825,8 @@ output
                     onClick={() => setActiveTab('table')}
                     className={`px-3 py-1 text-sm font-medium rounded-t-md border-b-2 flex items-center space-x-1 ${
                       activeTab === 'table'
-                        ? 'text-blue-600 border-blue-600 bg-blue-50'
-                        : 'text-gray-500 border-transparent hover:text-gray-700'
+                        ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-500/10'
+                        : 'text-content-tertiary border-transparent hover:text-content-secondary'
                     }`}
                   >
                     <Table className="h-4 w-4" />
@@ -834,8 +836,8 @@ output
                     onClick={() => setActiveTab('code')}
                     className={`px-3 py-1 text-sm font-medium rounded-t-md border-b-2 flex items-center space-x-1 ${
                       activeTab === 'code'
-                        ? 'text-green-600 border-green-600 bg-green-50'
-                        : 'text-gray-500 border-transparent hover:text-gray-700'
+                        ? 'text-green-600 dark:text-green-400 border-green-600 dark:border-green-400 bg-green-500/10'
+                        : 'text-content-tertiary border-transparent hover:text-content-secondary'
                     }`}
                   >
                     <Code className="h-4 w-4" />
@@ -846,7 +848,7 @@ output
                 {activeTab === 'table' && (
                   <button
                     onClick={addRow}
-                    className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                    className="px-3 py-1 text-sm bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-500/20"
                   >
                     + Add Row
                   </button>
@@ -855,19 +857,19 @@ output
 
               {/* Table Editor */}
               {activeTab === 'table' && (
-                <div className="border border-gray-300 rounded-lg overflow-hidden">
+                <div className="border border-border-secondary rounded-lg overflow-hidden">
                   <div className="overflow-x-auto max-h-96 overflow-y-auto">
                     <div className="min-w-max">
                       {/* Header - Row numbers as columns */}
-                      <div className="bg-gray-50 border-b border-gray-300 flex sticky top-0 z-20">
-                        <div className="w-48 px-2 py-2 text-sm font-medium text-gray-700 border-r border-gray-300 sticky left-0 bg-gray-50 z-30">Field Name</div>
+                      <div className="bg-surface-secondary border-b border-border-secondary flex sticky top-0 z-20">
+                        <div className="w-48 px-2 py-2 text-sm font-medium text-content-secondary border-r border-border-secondary sticky left-0 bg-surface-secondary z-30">Field Name</div>
                         {Array.from({ length: maxRows }, (_, rowIndex) => (
-                          <div key={rowIndex} className="w-40 flex-shrink-0 px-2 py-2 text-sm font-medium text-gray-700 border-r border-gray-300 last:border-r-0 flex items-center justify-between">
+                          <div key={rowIndex} className="w-40 flex-shrink-0 px-2 py-2 text-sm font-medium text-content-secondary border-r border-border-secondary last:border-r-0 flex items-center justify-between">
                             <span>DICOM {rowIndex + 1}</span>
                             {testData.length > 1 && (
                               <button
                                 onClick={() => removeRow(rowIndex)}
-                                className="p-1 text-red-500 hover:text-red-700 text-xs"
+                                className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs"
                                 title="Delete row"
                               >
                                 ×
@@ -879,12 +881,12 @@ output
 
                       {/* Rows - Each field becomes a row */}
                       {fieldNames.map((fieldName) => (
-                        <div key={fieldName} className="flex border-b border-gray-200 last:border-b-0">
-                          <div className="w-48 px-2 py-2 text-sm font-medium text-gray-700 border-r border-gray-300 bg-gray-50 flex items-center sticky left-0 z-10">
+                        <div key={fieldName} className="flex border-b border-border last:border-b-0">
+                          <div className="w-48 px-2 py-2 text-sm font-medium text-content-secondary border-r border-border-secondary bg-surface-secondary flex items-center sticky left-0 z-10">
                             {fieldName}
                           </div>
                           {Array.from({ length: maxRows }, (_, rowIndex) => (
-                            <div key={rowIndex} className="w-40 flex-shrink-0 border-r border-gray-300 last:border-r-0 bg-white">
+                            <div key={rowIndex} className="w-40 flex-shrink-0 border-r border-border-secondary last:border-r-0 bg-surface-primary">
                               <input
                                 type="text"
                                 value={(() => {
@@ -894,7 +896,7 @@ output
                                   return String(value);
                                 })()}
                                 onChange={(e) => updateTestDataValue(rowIndex, fieldName, e.target.value)}
-                                className="w-full px-2 py-2 text-sm border-none focus:outline-none focus:bg-blue-50"
+                                className="w-full px-2 py-2 text-sm border-none bg-transparent text-content-primary focus:outline-none focus:bg-blue-500/10"
                                 placeholder={`${fieldName} value`}
                               />
                             </div>
@@ -904,9 +906,9 @@ output
                     </div>
                   </div>
 
-                  <div className="px-2 py-1 text-xs text-gray-500 bg-gray-50 border-t flex items-center justify-between">
+                  <div className="px-2 py-1 text-xs text-content-tertiary bg-surface-secondary border-t border-border flex items-center justify-between">
                     <span>Rows: {maxRows} | Each row will generate one DICOM file</span>
-                    <span className="text-xs text-gray-400">(Table transposed: fields as rows, data as columns)</span>
+                    <span className="text-xs text-content-muted">(Table transposed: fields as rows, data as columns)</span>
                   </div>
                 </div>
               )}
@@ -914,7 +916,7 @@ output
               {/* Code View */}
               {activeTab === 'code' && (
                 <div className="space-y-3">
-                  <div className="border border-gray-300 rounded-lg overflow-hidden">
+                  <div className="border border-border-secondary rounded-lg overflow-hidden">
                     <CodeMirror
                       value={codeTemplate}
                       onChange={(value) => {
@@ -922,7 +924,7 @@ output
                         setCodeExecutionResult(null); // Clear results when code changes
                       }}
                       extensions={[python()]}
-                      theme="light"
+                      theme={theme === 'dark' ? 'dark' : 'light'}
                       height="300px"
                       basicSetup={{
                         lineNumbers: true,
@@ -957,20 +959,20 @@ output
                         </>
                       )}
                     </button>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-content-tertiary">
                       Returns a dictionary with test data. Click run to update the table.
                     </div>
                   </div>
 
                   {/* Code Execution Results */}
                   {codeExecutionResult?.error && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-600 dark:text-red-400">
                       <strong>Error:</strong> {codeExecutionResult.error}
                     </div>
                   )}
 
                   {codeExecutionResult?.success && (
-                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                    <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-sm text-green-600 dark:text-green-400">
                       <strong>Success!</strong> Generated {testData.length} DICOM{testData.length !== 1 ? 's' : ''} with {Object.keys(testData[0] || {}).length} fields. Switch to Table Editor to view.
                     </div>
                   )}
@@ -982,9 +984,9 @@ output
           {step === 'generating' && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-medical-600" />
-                <p className="text-gray-600">Generating DICOM files...</p>
-                <p className="text-sm text-gray-500 mt-2">This may take a moment...</p>
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-brand-600" />
+                <p className="text-content-secondary">Generating DICOM files...</p>
+                <p className="text-sm text-content-tertiary mt-2">This may take a moment...</p>
               </div>
             </div>
           )}
@@ -992,10 +994,10 @@ output
 
         {/* Footer */}
         {step === 'editing' && (
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+          <div className="px-6 py-4 border-t border-border flex items-center justify-between">
             <div>
               {error && (
-                <div className="text-sm text-red-600">
+                <div className="text-sm text-red-600 dark:text-red-400">
                   {error}
                 </div>
               )}
@@ -1003,14 +1005,14 @@ output
             <div className="flex space-x-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={generateDicoms}
                 disabled={isGenerating || testData.length === 0}
-                className="px-4 py-2 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-2"
+                className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 <Download className="h-4 w-4" />
                 <span>Generate & Download DICOMs</span>

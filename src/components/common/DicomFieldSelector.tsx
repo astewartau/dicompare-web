@@ -172,50 +172,50 @@ const DicomFieldSelector = ({
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
+            className="w-full px-4 py-2 border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 pr-10 placeholder:text-content-tertiary"
           />
           {isLoading && (
             <div className="absolute right-3 top-2.5">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-brand-600"></div>
             </div>
           )}
         </div>
 
         {/* Suggestions Dropdown */}
         {isDropdownOpen && suggestions.length > 0 && (
-          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-64 overflow-y-auto">
+          <div className="absolute z-20 w-full mt-1 bg-surface-primary border border-border rounded-md shadow-lg max-h-64 overflow-y-auto">
             {suggestions.map((field, index) => {
               const normalizedTag = field.tag.replace(/[()]/g, '');
-              
+
               return (
                 <div
                   key={field.tag}
                   onClick={() => handleFieldSelect(field)}
-                  className={`px-4 py-3 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                    index === selectedSuggestionIndex 
-                      ? 'bg-blue-50 border-blue-200' 
-                      : 'hover:bg-gray-50'
+                  className={`px-4 py-3 cursor-pointer border-b border-border last:border-b-0 ${
+                    index === selectedSuggestionIndex
+                      ? 'bg-blue-500/10 border-blue-500/20'
+                      : 'hover:bg-surface-hover'
                   } ${selectedFields.includes(normalizedTag) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <div className="font-medium text-gray-900">{field.name}</div>
+                      <div className="font-medium text-content-primary">{field.name}</div>
                       <div className="flex items-center space-x-2 mt-1">
-                        <div className="text-sm text-blue-600 font-mono">{normalizedTag}</div>
+                        <div className="text-sm text-blue-600 dark:text-blue-400 font-mono">{normalizedTag}</div>
                         {field.keyword && (
-                          <div className="text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                          <div className="text-xs text-content-secondary bg-surface-secondary px-1.5 py-0.5 rounded">
                             {field.keyword}
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+                      <div className="flex items-center space-x-2 text-xs text-content-tertiary mt-1">
                         <span>VR: {field.valueRepresentation || field.vr}</span>
                         {field.valueMultiplicity && (
                           <span>VM: {field.valueMultiplicity}</span>
                         )}
                       </div>
                       {field.description && (
-                        <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                        <div className="text-xs text-content-tertiary mt-1 line-clamp-2">
                           {field.description}
                         </div>
                       )}
@@ -224,12 +224,12 @@ const DicomFieldSelector = ({
                 </div>
               );
             })}
-            
+
             {/* Manual Entry Option */}
-            <div className="px-4 py-2 border-t border-gray-200 bg-gray-50">
+            <div className="px-4 py-2 border-t border-border bg-surface-secondary">
               <button
                 onClick={() => setShowManualEntry(true)}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
               >
                 + Add custom field tag manually
               </button>
@@ -239,12 +239,12 @@ const DicomFieldSelector = ({
 
         {/* No Results */}
         {isDropdownOpen && !isLoading && searchTerm.length > 0 && suggestions.length === 0 && (
-          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
-            <div className="px-4 py-3 text-gray-500 text-center">
+          <div className="absolute z-20 w-full mt-1 bg-surface-primary border border-border rounded-md shadow-lg">
+            <div className="px-4 py-3 text-content-secondary text-center">
               No fields found for "{searchTerm}"
               <button
                 onClick={() => setShowManualEntry(true)}
-                className="block w-full text-blue-600 hover:text-blue-800 mt-2"
+                className="block w-full text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 mt-2"
               >
                 Add as custom field tag
               </button>
@@ -295,12 +295,12 @@ const SelectedFieldTag = ({ fieldTag, onRemove }: { fieldTag: string; onRemove: 
   }, [fieldTag]);
 
   return (
-    <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+    <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/10 text-blue-700 dark:text-blue-300 rounded-full text-sm">
       <span className="font-medium">{displayName}</span>
-      <span className="text-blue-600 font-mono text-xs">({fieldTag})</span>
+      <span className="text-blue-600 dark:text-blue-400 font-mono text-xs">({fieldTag})</span>
       <button
         onClick={onRemove}
-        className="ml-1 text-blue-600 hover:text-blue-800 focus:outline-none p-0.5 rounded-full hover:bg-blue-200"
+        className="ml-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 focus:outline-none p-0.5 rounded-full hover:bg-blue-500/20"
         aria-label={`Remove ${displayName}`}
       >
         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -337,12 +337,12 @@ const ManualEntryModal = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-96">
-        <h3 className="text-lg font-semibold mb-4">Add Custom DICOM Field Tag</h3>
-        
+      <div className="bg-surface-primary rounded-lg p-6 w-96">
+        <h3 className="text-lg font-semibold text-content-primary mb-4">Add Custom DICOM Field Tag</h3>
+
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="fieldTag" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="fieldTag" className="block text-sm font-medium text-content-secondary mb-1">
               DICOM Tag (format: XXXX,XXXX)
             </label>
             <input
@@ -351,12 +351,12 @@ const ManualEntryModal = ({
               value={value}
               onChange={(e) => setValue(e.target.value.toUpperCase())}
               placeholder="0018,0080"
-              className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 font-mono ${
-                value && !isValid ? 'border-red-300 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
+              className={`w-full px-3 py-2 border rounded-md bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 font-mono ${
+                value && !isValid ? 'border-red-500/50 focus:border-red-500' : 'border-border-secondary focus:border-brand-500'
               }`}
             />
             {value && !isValid && (
-              <p className="mt-1 text-sm text-red-600">
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">
                 Please enter a valid DICOM tag in format XXXX,XXXX (e.g., 0018,0080)
               </p>
             )}
@@ -366,7 +366,7 @@ const ManualEntryModal = ({
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              className="px-4 py-2 text-content-secondary hover:text-content-primary"
             >
               Cancel
             </button>
@@ -375,8 +375,8 @@ const ManualEntryModal = ({
               disabled={!isValid}
               className={`px-4 py-2 rounded-md ${
                 isValid
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ? 'bg-brand-600 text-white hover:bg-brand-700'
+                  : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
               }`}
             >
               Add Field

@@ -79,7 +79,7 @@ const ValidationConstraintSelector: React.FC<ValidationConstraintSelectorProps> 
   return (
     <div className={`${className}`}>
       {!hideLabel && (
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-content-primary mb-2">
           Validation Constraint
         </label>
       )}
@@ -87,8 +87,8 @@ const ValidationConstraintSelector: React.FC<ValidationConstraintSelectorProps> 
         value={value}
         onChange={(e) => onChange(e.target.value as ValidationConstraint)}
         disabled={disabled}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-          disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+        className={`w-full px-3 py-2 border border-border-secondary rounded-md focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-content-primary ${
+          disabled ? 'bg-surface-secondary cursor-not-allowed' : 'bg-surface-primary'
         }`}
       >
         {availableOptions.map((option) => (
@@ -97,15 +97,15 @@ const ValidationConstraintSelector: React.FC<ValidationConstraintSelectorProps> 
           </option>
         ))}
       </select>
-      
+
       {selectedOption && (
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-content-tertiary">
           {selectedOption.description}
         </p>
       )}
 
       {dataType && availableOptions.length < CONSTRAINT_OPTIONS.length && (
-        <p className="mt-1 text-xs text-amber-600">
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
           Some constraints are not available for {dataType} data type
         </p>
       )}
