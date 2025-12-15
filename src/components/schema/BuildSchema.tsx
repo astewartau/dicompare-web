@@ -183,53 +183,6 @@ const BuildSchema: React.FC = () => {
     return Array.from(fieldMap.values());
   };
 
-  const getIncompleteFields = () => {
-    const incompleteFields = new Set<string>();
-
-    acquisitions.forEach(acquisition => {
-      // Check acquisition-level fields
-      acquisition.acquisitionFields.forEach(field => {
-        if (!isFieldValueValid(field)) {
-          incompleteFields.add(`${acquisition.id}-${field.tag}`);
-        }
-      });
-
-      // Get series field definitions from the series data
-      const seriesFieldDefs = getSeriesFieldDefinitions(acquisition);
-
-      // Check series field values only if there are series-level fields
-      if (seriesFieldDefs.length > 0) {
-        // Ensure we check at least 2 series (matching SeriesTable display logic)
-        const minSeriesCount = Math.max(2, acquisition.series?.length || 0);
-
-        for (let seriesIndex = 0; seriesIndex < minSeriesCount; seriesIndex++) {
-          const series = acquisition.series?.[seriesIndex];
-
-          seriesFieldDefs.forEach(fieldDef => {
-            let fieldValue = null;
-
-            // Handle both array format (from loaded schemas) and object format (from processed data)
-            if (Array.isArray(series?.fields)) {
-              fieldValue = series.fields.find(f => f.tag === fieldDef.tag);
-            } else if (series?.fields && typeof series.fields === 'object') {
-              fieldValue = series.fields[fieldDef.tag];
-            }
-
-            // If the field doesn't exist in this series, it's incomplete
-            if (!fieldValue || !isFieldValueValid(fieldValue)) {
-              incompleteFields.add(`${acquisition.id}-series-${seriesIndex}-${fieldDef.tag}`);
-            }
-          });
-        }
-      }
-    });
-
-    return incompleteFields;
-  };
-
-  const incompleteFields = getIncompleteFields();
-  const hasIncompleteFields = incompleteFields.size > 0;
-
   // Helper to check if a specific acquisition has incomplete fields
   const getAcquisitionIncompleteFields = (acquisitionId: string) => {
     const acquisitionIncomplete = new Set<string>();
@@ -249,7 +202,7 @@ const BuildSchema: React.FC = () => {
 
     // Check series field values only if there are series-level fields
     if (seriesFieldDefs.length > 0) {
-      const minSeriesCount = Math.max(2, acquisition.series?.length || 0);
+      const minSeriesCount = Math.max(1, acquisition.series?.length || 0);
 
       for (let seriesIndex = 0; seriesIndex < minSeriesCount; seriesIndex++) {
         const series = acquisition.series?.[seriesIndex];
@@ -264,7 +217,8 @@ const BuildSchema: React.FC = () => {
             fieldValue = series.fields[fieldDef.tag];
           }
 
-          if (!fieldValue || !isFieldValueValid(fieldValue)) {
+          // Use == null to check for null/undefined without catching falsy values like 0
+          if (fieldValue == null || !isFieldValueValid(fieldValue)) {
             acquisitionIncomplete.add(`${acquisition.id}-series-${seriesIndex}-${fieldDef.tag}`);
           }
         });
@@ -273,6 +227,18 @@ const BuildSchema: React.FC = () => {
 
     return acquisitionIncomplete;
   };
+
+  const getIncompleteFields = () => {
+    const incompleteFields = new Set<string>();
+    acquisitions.forEach(acquisition => {
+      const acquisitionIncomplete = getAcquisitionIncompleteFields(acquisition.id);
+      acquisitionIncomplete.forEach(field => incompleteFields.add(field));
+    });
+    return incompleteFields;
+  };
+
+  const incompleteFields = getIncompleteFields();
+  const hasIncompleteFields = incompleteFields.size > 0;
 
   const selectedAcquisition = selectedAcquisitionId && selectedAcquisitionId !== ADD_NEW_ID
     ? acquisitions.find(a => a.id === selectedAcquisitionId)

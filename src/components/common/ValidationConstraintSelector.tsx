@@ -103,12 +103,6 @@ const ValidationConstraintSelector: React.FC<ValidationConstraintSelectorProps> 
           {selectedOption.description}
         </p>
       )}
-
-      {dataType && availableOptions.length < CONSTRAINT_OPTIONS.length && (
-        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-          Some constraints are not available for {dataType} data type
-        </p>
-      )}
     </div>
   );
 };
