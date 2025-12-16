@@ -570,17 +570,17 @@
           "id": "custom_1758075459044",
           "name": "Diffusion Directions",
           "description": "Checks expected number of diffusion gradient directions",
-          "implementation": "# Custom validation logic\n# Access field data with value[\"FieldName\"]\n# Raise ValidationError for failures\n# Function should not return anything\n\nn_expected = 100\nn_actual = value[\"DiffusionGradientDirectionSequence\"].nunique()\n\nif n_actual != n_expected:\n    raise ValueError(f\"Expected {n_expected} distinct diffusion gradient directions, but found {n_actual}.\")\n",
+          "implementation": "# Custom validation logic\n# Access field data with value[\"FieldName\"]\n# Raise ValidationError for failures\n# Function should not return anything\n\nn_expected = 100\nn_actual = value[\"DiffusionGradientOrientation\"].nunique()\n\nif n_actual != n_expected:\n    raise ValueError(f\"Expected {n_expected} distinct diffusion gradient directions, but found {n_actual}.\")\n",
           "parameters": {},
           "fields": [
-            "DiffusionGradientDirectionSequence"
+            "DiffusionGradientOrientation"
           ],
           "testCases": [
             {
               "id": "test_diffusion_directions_pass",
               "name": "100 unique directions",
               "data": {
-                "DiffusionGradientDirectionSequence": [
+                "DiffusionGradientOrientation": [
                   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
                   11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                   21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
@@ -600,7 +600,7 @@
               "id": "test_diffusion_directions_fail_too_few",
               "name": "Only 50 directions",
               "data": {
-                "DiffusionGradientDirectionSequence": [
+                "DiffusionGradientOrientation": [
                   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
                   11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                   21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
