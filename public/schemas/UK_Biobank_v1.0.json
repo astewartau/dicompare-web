@@ -616,19 +616,19 @@
         {
           "id": "custom_1758079469072",
           "name": "B-value Distribution Validation",
-          "description": "Validate b-value shell distribution",
-          "implementation": "b_values = value[\"DiffusionBValue\"]\nb0_count = sum(1 for b in b_values if b < 50)  # b≈0 images\nb1000_count = sum(1 for b in b_values if 900 <= b <= 1100)  # b≈1000 shell\nb2000_count = sum(1 for b in b_values if 1900 <= b <= 2100)  # b≈2000 shell\n\nif b0_count < 8 or b0_count > 12:\n  raise ValueError(f\"Expected ~10 b=0 images, found {b0_count}\")\n\nif b1000_count < 45 or b1000_count > 55:\n  raise ValueError(f\"Expected ~50 b=1000 images, found {b1000_count}\")\n\nif b2000_count < 45 or b2000_count > 55:\n  raise ValueError(f\"Expected ~50 b=2000 images, found {b2000_count}\")",
+          "description": "Validate b-value shell distribution. UK Biobank spec: 10x b=0, 50x b=1000, 50x b=2000. Tolerances allow for variation in actual acquisitions (including PA series for distortion correction).",
+          "implementation": "b_values = value[\"DiffusionBValue\"]\nb0_count = sum(1 for b in b_values if b < 50)  # b≈0 images\nb1000_count = sum(1 for b in b_values if 900 <= b <= 1100)  # b≈1000 shell\nb2000_count = sum(1 for b in b_values if 1900 <= b <= 2100)  # b≈2000 shell\n\n# Minimum counts based on UK Biobank spec (10 b0, 50 b1000, 50 b2000)\n# Allow higher counts since data may include PA series for distortion correction\nif b0_count < 8:\n  raise ValueError(f\"Expected at least 8 b≈0 images (spec: 10), found {b0_count}\")\n\nif b1000_count < 45:\n  raise ValueError(f\"Expected at least 45 b≈1000 images (spec: 50), found {b1000_count}\")\n\nif b2000_count < 45:\n  raise ValueError(f\"Expected at least 45 b≈2000 images (spec: 50), found {b2000_count}\")",
           "parameters": {},
           "fields": [
             "DiffusionBValue"
           ],
           "testCases": [
             {
-              "id": "test_bvalue_distribution_pass",
-              "name": "Valid b-value distribution",
+              "id": "test_bvalue_distribution_pass_spec",
+              "name": "Matches UK Biobank spec",
               "data": {
                 "DiffusionBValue": [
-                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
                   1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
                   1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
                   1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
@@ -642,14 +642,35 @@
                 ]
               },
               "expectedResult": "pass",
-              "description": "Valid distribution: 10 b=0, 50 b=1000, 50 b=2000"
+              "description": "Matches UK Biobank spec: 10 b≈0, 50 b=1000, 50 b=2000"
+            },
+            {
+              "id": "test_bvalue_distribution_pass_with_pa",
+              "name": "With PA series (higher counts)",
+              "data": {
+                "DiffusionBValue": [
+                  5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+                  2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "Higher b≈0 count (15) acceptable when PA series included"
             },
             {
               "id": "test_bvalue_distribution_fail_b0",
               "name": "Too few b=0 images",
               "data": {
                 "DiffusionBValue": [
-                  0, 0, 0, 0, 0,
+                  5, 5, 5,
                   1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
                   1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
                   1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
@@ -663,14 +684,14 @@
                 ]
               },
               "expectedResult": "fail",
-              "description": "Only 5 b=0 images instead of expected 8-12"
+              "description": "Only 3 b≈0 images, minimum is 8"
             },
             {
               "id": "test_bvalue_distribution_fail_b1000",
               "name": "Too few b=1000 images",
               "data": {
                 "DiffusionBValue": [
-                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
                   1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
                   1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
                   2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
@@ -681,7 +702,7 @@
                 ]
               },
               "expectedResult": "fail",
-              "description": "Only 20 b=1000 images instead of expected 45-55"
+              "description": "Only 20 b=1000 images, minimum is 45"
             }
           ]
         }
