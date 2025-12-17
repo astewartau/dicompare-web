@@ -1,13 +1,15 @@
 {
   "version": "1.0",
   "name": "UK Biobank",
-  "description": "Auto-generated validation template",
+  "description": "UK Biobank Brain Imaging Protocol validation schema. The UK Biobank is a large-scale biomedical database and research resource containing genetic, lifestyle, and health information from 500,000 UK participants. The brain imaging component, which began in 2014, aims to scan 100,000 participants using a standardized protocol across multiple Siemens Skyra 3T scanners. This schema validates DICOM compliance with the published UK Biobank brain MRI acquisition parameters.",
   "created": "2025-09-17T05:13:11.521Z",
   "authors": [
     "Ashley Stewart"
   ],
   "acquisitions": {
     "T1 structural brain images": {
+      "description": "High-resolution 3D T1-weighted structural brain imaging using MPRAGE",
+      "detailed_description": "## 3D T1-Weighted Structural Brain Imaging (MPRAGE)\n\n### Overview\nHigh-resolution T1-weighted anatomical imaging providing excellent gray matter/white matter contrast for morphometric analysis, volumetric measurements, and anatomical reference.\n\n### UK Biobank Data Field\n- **Field ID:** [20216](https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20216)\n\n### Acquisition Parameters\n| Parameter | Value |\n|-----------|-------|\n| Resolution | 1×1×1 mm isotropic |\n| Field of View | 208×256×256 matrix |\n| Scan Duration | 5 minutes |\n| Sequence | 3D MPRAGE |\n| Orientation | Sagittal |\n| Parallel Imaging | iPAT=2 (GRAPPA) |\n| TR | 2000 ms |\n| TE | 2.01 ms |\n| TI | 880 ms |\n| Flip Angle | 8° |\n\n### Technical Notes\n- **Prescan Normalize:** Enabled for intensity correction\n- **Sequence Variant:** Magnetization prepared with inversion recovery (IR)\n- **Output:** Two series typically produced - with and without NORM (intensity normalization)\n\n### Clinical/Research Applications\n- Brain volumetrics and morphometry\n- Cortical thickness analysis\n- Tissue segmentation (GM/WM/CSF)\n- Anatomical reference for co-registration\n- Voxel-based morphometry (VBM)\n\n### Resources\n- [UK Biobank Brain Imaging Documentation](https://biobank.ctsu.ox.ac.uk/crystal/crystal/docs/brain_mri.pdf)\n- [UK Biobank Brain Imaging Protocol](https://www.fmrib.ox.ac.uk/ukbiobank/protocol/)\n- [Miller et al. Nature Neuroscience 2016](https://doi.org/10.1038/nn.4393)",
       "fields": [
         {
           "field": "SeriesDescription",
@@ -204,6 +206,8 @@
       ]
     },
     "Functional brain images - task": {
+      "description": "Task-based functional MRI using multiband EPI during Hariri faces/shapes emotional processing task",
+      "detailed_description": "## Task-Based Functional MRI (Hariri Emotional Processing Task)\n\n### Overview\nBlood oxygen level-dependent (BOLD) functional imaging acquired during the Hariri faces/shapes emotional processing paradigm, designed to probe amygdala reactivity and emotional processing circuits.\n\n### UK Biobank Data Field\n- **Field ID:** [20217](https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20217) (DICOM), [20249](https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20249) (NIFTI)\n\n### Acquisition Parameters\n| Parameter | Value |\n|-----------|-------|\n| Resolution | 2.4×2.4×2.4 mm isotropic |\n| Field of View | 88×88×64 matrix (210 mm) |\n| Scan Duration | 4 minutes (332 timepoints) |\n| Sequence | Gradient Echo EPI |\n| TR | 735 ms |\n| TE | 39 ms |\n| Flip Angle | 52° |\n| Multiband Factor | 8 |\n| Parallel Imaging | None (no iPAT) |\n| Fat Saturation | Enabled |\n\n### Task Design\nThe Hariri faces/shapes task involves:\n- **Faces blocks:** Matching emotional faces (fear, anger)\n- **Shapes blocks:** Control condition matching geometric shapes\n- **Purpose:** Elicits robust amygdala activation for emotional processing assessment\n\n### Technical Notes\n- **CMRR Multiband:** Uses Center for Magnetic Resonance Research multiband sequence\n- **Single-Band Reference (SBRef):** Separate reference scan acquired with identical geometry but enhanced tissue contrast for motion correction and alignment\n- **High Temporal Resolution:** Sub-second TR enables improved temporal sampling\n\n### Clinical/Research Applications\n- Amygdala reactivity studies\n- Emotional processing research\n- Psychiatric disorder biomarkers\n- Brain-behavior correlations\n\n### Resources\n- [UK Biobank Brain Imaging Documentation](https://biobank.ctsu.ox.ac.uk/crystal/crystal/docs/brain_mri.pdf)\n- [Hariri et al. Science 2002](https://doi.org/10.1126/science.1071829)\n- [UK Biobank Brain Imaging Protocol](https://www.fmrib.ox.ac.uk/ukbiobank/protocol/)",
       "fields": [
         {
           "field": "SequenceName",
@@ -402,6 +406,8 @@
       ]
     },
     "Multiband diffusion brain images": {
+      "description": "High angular resolution diffusion imaging (HARDI) with multiband acceleration for white matter microstructure",
+      "detailed_description": "## Multiband Diffusion-Weighted Imaging (HARDI)\n\n### Overview\nHigh angular resolution diffusion imaging (HARDI) using multiband acceleration, designed for comprehensive white matter microstructure characterization including diffusion tensor imaging (DTI) and higher-order diffusion models.\n\n### UK Biobank Data Field\n- **Field ID:** [20218](https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20218)\n\n### Acquisition Parameters\n| Parameter | Value |\n|-----------|-------|\n| Resolution | 2×2×2 mm isotropic |\n| Field of View | 104×104×72 matrix |\n| Scan Duration | 7 minutes (incl. 36s reversed phase-encode) |\n| Sequence | Spin Echo EPI |\n| TR | 3600 ms |\n| TE | 92 ms |\n| Flip Angle | 78° |\n| Multiband Factor | 3 |\n| Parallel Imaging | None (no iPAT) |\n| Fat Saturation | Enabled |\n\n### Diffusion Scheme\n| b-value (s/mm²) | Directions | Purpose |\n|-----------------|------------|----------|\n| 0 | 10 | Reference (non-diffusion weighted) |\n| 1000 | 50 | Standard DTI shell |\n| 2000 | 50 | Higher b-value for NODDI/DKI |\n\n- **Total unique directions:** 100 (all directions distinct across shells)\n- **Diffusion preparation:** Monopolar Stejskal-Tanner (higher SNR, shorter TE)\n\n### Distortion Correction\n- **Phase-encoding reversed data:** 36 seconds of reversed phase-encode (PA) acquisition\n- **Purpose:** Enables TOPUP/FSL distortion correction for EPI susceptibility artifacts\n- **Eddy current correction:** Applied in processed NIFTI data\n\n### Technical Notes\n- **Monopolar vs Bipolar:** Monopolar preparation chosen for SNR advantage despite stronger eddy currents (corrected in post-processing)\n- **Multi-shell design:** Enables advanced diffusion models (NODDI, DKI, CHARMED)\n\n### Clinical/Research Applications\n- White matter tract integrity (FA, MD, RD, AD)\n- Tractography and connectomics\n- Neurite orientation dispersion (NODDI)\n- Diffusion kurtosis imaging (DKI)\n- White matter hyperintensity characterization\n\n### Resources\n- [UK Biobank Brain Imaging Documentation](https://biobank.ctsu.ox.ac.uk/crystal/crystal/docs/brain_mri.pdf)\n- [UK Biobank Brain Imaging Protocol](https://www.fmrib.ox.ac.uk/ukbiobank/protocol/)\n- [Alfaro-Almagro et al. NeuroImage 2018](https://doi.org/10.1016/j.neuroimage.2017.10.034)",
       "fields": [
         {
           "field": "SequenceVariant",
@@ -443,16 +449,6 @@
             2.01923,
             2.01923
           ]
-        },
-        {
-          "field": "Rows",
-          "tag": "0028,0010",
-          "value": 936
-        },
-        {
-          "field": "Columns",
-          "tag": "0028,0011",
-          "value": 936
         },
         {
           "field": "AcquisitionMatrix",
@@ -551,20 +547,99 @@
           "value": "N"
         },
         {
-          "field": "ImageType",
-          "tag": "0008,0008",
-          "value": [
-            "ORIGINAL",
-            "PRIMARY",
-            "DIFFUSION",
-            "NONE",
-            "MB",
-            "ND",
-            "MOSAIC"
+          "field": "SequenceName",
+          "tag": "0018,0024",
+          "contains_any": ["ep_b", "epse2d"]
+        }
+      ],
+      "series": [
+        {
+          "name": "Main Diffusion AP",
+          "fields": [
+            {
+              "field": "SeriesDescription",
+              "tag": "0008,103E",
+              "value": "diff_AP_MPopt_MB3_50b1000_50b2000_8b0_lowflip"
+            },
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "DIFFUSION",
+                "NONE",
+                "MB",
+                "ND",
+                "MOSAIC"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Main Diffusion AP SBRef",
+          "fields": [
+            {
+              "field": "SeriesDescription",
+              "tag": "0008,103E",
+              "value": "diff_AP_MPopt_MB3_50b1000_50b2000_8b0_lowflip_SBRef"
+            },
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "ND",
+                "MOSAIC"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Distortion Correction PA",
+          "fields": [
+            {
+              "field": "SeriesDescription",
+              "tag": "0008,103E",
+              "value": "diff_PA_MPopt_MB3_3b0_lowflip"
+            },
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "DIFFUSION",
+                "NONE",
+                "MB",
+                "ND"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Distortion Correction PA SBRef",
+          "fields": [
+            {
+              "field": "SeriesDescription",
+              "tag": "0008,103E",
+              "value": "diff_PA_MPopt_MB3_3b0_lowflip_SBRef"
+            },
+            {
+              "field": "ImageType",
+              "tag": "0008,0008",
+              "value": [
+                "ORIGINAL",
+                "PRIMARY",
+                "M",
+                "ND"
+              ]
+            }
           ]
         }
       ],
-      "series": [],
       "rules": [
         {
           "id": "custom_1758075459044",
@@ -733,6 +808,8 @@
       ]
     },
     "Susceptibility weighted brain images": {
+      "description": "Dual-echo susceptibility-weighted imaging for iron, microbleeds, and venous visualization",
+      "detailed_description": "## Susceptibility-Weighted Imaging (SWI)\n\n### Overview\nDual-echo gradient echo acquisition optimized for susceptibility contrast, enabling visualization of venous structures, microbleeds, iron deposition, and calcifications. Also suitable for quantitative susceptibility mapping (QSM).\n\n### UK Biobank Data Field\n- **Field ID:** [20219](https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20219)\n\n### Acquisition Parameters\n| Parameter | Value |\n|-----------|-------|\n| Resolution | 0.8×0.8×3 mm |\n| Field of View | 256×288×48 matrix |\n| Scan Duration | 2.5 minutes |\n| Sequence | 3D Gradient Echo |\n| Orientation | Axial |\n| TR | 27 ms |\n| TE₁ | 9.42 ms |\n| TE₂ | 20 ms (19.7 ms) |\n| Flip Angle | 15° |\n| Parallel Imaging | iPAT=2 (GRAPPA) |\n| Partial Fourier | 7/8 |\n\n### Output Series\nFor each echo time, separate magnitude and phase images are produced:\n- **Magnitude images:** For SWI minimum intensity projection (mIP)\n- **Phase images:** For QSM reconstruction and phase-based analysis\n\n### Technical Notes\n- **Dual-echo acquisition:** Enables T2* mapping and improved QSM\n- **Prescan Normalize:** Enabled for intensity correction\n- **Coil combination:** Early data (Oct 2015) saved per-coil; later combined on scanner\n- **High in-plane resolution:** 0.8 mm for detailed venous visualization\n\n### Clinical/Research Applications\n- Cerebral microbleed detection\n- Iron deposition quantification (basal ganglia, substantia nigra)\n- Quantitative susceptibility mapping (QSM)\n- Venous anomaly detection\n- Calcification vs hemorrhage differentiation\n- Neurodegenerative disease biomarkers\n\n### Resources\n- [UK Biobank Brain Imaging Documentation](https://biobank.ctsu.ox.ac.uk/crystal/crystal/docs/brain_mri.pdf)\n- [UK Biobank Brain Imaging Protocol](https://www.fmrib.ox.ac.uk/ukbiobank/protocol/)\n- [QSM Consensus Guidelines](https://doi.org/10.1002/mrm.30006)",
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1000,6 +1077,8 @@
       ]
     },
     "T2 FLAIR structural brain images": {
+      "description": "3D T2-weighted FLAIR imaging for white matter lesion detection",
+      "detailed_description": "## 3D T2-Weighted FLAIR Structural Imaging\n\n### Overview\nFluid-attenuated inversion recovery (FLAIR) imaging with CSF signal suppression, optimized for white matter lesion detection and characterization. Essential for identifying white matter hyperintensities (WMH) associated with aging and cerebrovascular disease.\n\n### UK Biobank Data Field\n- **Field ID:** [20220](https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20220) (DICOM), [20253](https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20253) (NIFTI)\n\n### Acquisition Parameters\n| Parameter | Value |\n|-----------|-------|\n| Resolution | 1.05×1×1 mm |\n| Field of View | 192×256×256 matrix |\n| Scan Duration | 6 minutes |\n| Sequence | 3D SPACE (Turbo Spin Echo) |\n| Orientation | Sagittal |\n| TR | 5000 ms |\n| TE | 395 ms |\n| TI | 1800 ms |\n| Flip Angle | 120° |\n| Parallel Imaging | iPAT=2 (GRAPPA) |\n| Partial Fourier | 7/8 |\n| Fat Saturation | Enabled |\n\n### Technical Notes\n- **SPACE sequence:** Siemens 3D turbo spin echo with variable flip angle refocusing\n- **Elliptical k-space scanning:** Reduces scan time while maintaining image quality\n- **Prescan Normalize:** Enabled for intensity correction\n- **CSF suppression:** Long TI (1800 ms) nulls CSF signal for improved lesion conspicuity\n\n### Clinical/Research Applications\n- White matter hyperintensity (WMH) quantification\n- Fazekas scoring of white matter lesions\n- Multiple sclerosis lesion detection\n- Cerebral small vessel disease assessment\n- Periventricular vs deep white matter lesion differentiation\n\n### Resources\n- [UK Biobank Brain Imaging Documentation](https://biobank.ctsu.ox.ac.uk/crystal/crystal/docs/brain_mri.pdf)\n- [UK Biobank Brain Imaging Protocol](https://www.fmrib.ox.ac.uk/ukbiobank/protocol/)\n- [Wardlaw et al. Lancet Neurology 2013](https://doi.org/10.1016/S1474-4422(13)70124-8)",
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1199,6 +1278,8 @@
       ]
     },
     "Functional brain images - resting": {
+      "description": "Resting-state functional MRI using multiband EPI for functional connectivity analysis",
+      "detailed_description": "## Resting-State Functional MRI\n\n### Overview\nBlood oxygen level-dependent (BOLD) functional imaging acquired during eyes-open rest, designed for functional connectivity analysis and identification of resting-state brain networks.\n\n### UK Biobank Data Field\n- **Field ID:** [20225](https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20225) (NIFTI), DICOM also available\n\n### Acquisition Parameters\n| Parameter | Value |\n|-----------|-------|\n| Resolution | 2.4×2.4×2.4 mm isotropic |\n| Field of View | 88×88×64 matrix (210 mm) |\n| Scan Duration | 6 minutes (490 timepoints) |\n| Sequence | Gradient Echo EPI |\n| TR | 735 ms |\n| TE | 39 ms |\n| Flip Angle | 52° |\n| Multiband Factor | 8 |\n| Parallel Imaging | None (no iPAT) |\n| Fat Saturation | Enabled |\n\n### Resting-State Protocol\n- **Eyes:** Open (fixation cross displayed)\n- **Duration:** 6 minutes continuous acquisition\n- **Instructions:** Participants asked to remain still and awake\n\n### Technical Notes\n- **CMRR Multiband:** Uses Center for Magnetic Resonance Research multiband sequence\n- **Single-Band Reference (SBRef):** Separate reference scan for motion correction and alignment\n- **High Temporal Resolution:** Sub-second TR (735 ms) enables improved temporal sampling and physiological noise characterization\n- **490 volumes:** Provides robust statistics for connectivity estimation\n\n### Clinical/Research Applications\n- Resting-state network identification (DMN, salience, executive, etc.)\n- Functional connectivity analysis\n- Independent component analysis (ICA)\n- Graph theory / connectomics\n- Brain-behavior correlations\n- Biomarkers for neurological/psychiatric conditions\n\n### Resources\n- [UK Biobank Brain Imaging Documentation](https://biobank.ctsu.ox.ac.uk/crystal/crystal/docs/brain_mri.pdf)\n- [UK Biobank Brain Imaging Protocol](https://www.fmrib.ox.ac.uk/ukbiobank/protocol/)\n- [Smith et al. PNAS 2009](https://doi.org/10.1073/pnas.0905267106)",
       "fields": [
         {
           "field": "SequenceName",
