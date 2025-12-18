@@ -370,17 +370,19 @@ const BuildSchema: React.FC = () => {
     if (!files || files.length === 0) return;
 
     const file = files[0];
+    const fileName = file.name.toLowerCase();
 
     // Validate file extension
-    if (!file.name.toLowerCase().endsWith('.pro')) {
-      setUploadStatus('Please select a Siemens protocol file (.pro)');
+    if (!fileName.endsWith('.pro') && !fileName.endsWith('.exar1')) {
+      setUploadStatus('Please select a Siemens protocol file (.pro or .exar1)');
       setTimeout(() => setUploadStatus(''), 3000);
       return;
     }
 
+    const isExarFile = fileName.endsWith('.exar1');
     setIsUploading(true);
     setUploadProgress(0);
-    setUploadStatus('Processing Siemens protocol file...');
+    setUploadStatus(`Processing Siemens ${isExarFile ? 'exam archive' : 'protocol'} file...`);
 
     try {
       setUploadProgress(30);
@@ -396,30 +398,49 @@ const BuildSchema: React.FC = () => {
         setIsUploading(false);
         return;
       }
-      
-      // Process via API
-      const acquisition = await dicompareAPI.loadProFile(new Uint8Array(fileContent), file.name);
-      
-      // Add validation rules and round values for fields
-      const processedAcquisition = {
-        ...acquisition,
-        acquisitionFields: acquisition.acquisitionFields.map(field => processFieldForUI(field, 'pro'))
-      };
-      
-      setAcquisitions(prev => [...prev, processedAcquisition]);
 
-      // Auto-select the newly created acquisition
-      setSelectedAcquisitionId(processedAcquisition.id);
+      // Process via API - .exar1 returns multiple acquisitions, .pro returns one
+      if (isExarFile) {
+        const acquisitions = await dicompareAPI.loadExarFile(new Uint8Array(fileContent), file.name);
+
+        // Add validation rules and round values for fields
+        const processedAcquisitions = acquisitions.map(acquisition => ({
+          ...acquisition,
+          acquisitionFields: acquisition.acquisitionFields.map(field => processFieldForUI(field, 'pro'))
+        }));
+
+        setAcquisitions(prev => [...prev, ...processedAcquisitions]);
+
+        // Auto-select the first newly created acquisition
+        if (processedAcquisitions.length > 0) {
+          setSelectedAcquisitionId(processedAcquisitions[0].id);
+        }
+
+        console.log(`✅ Exam archive file uploaded successfully: ${acquisitions.length} protocol(s)`);
+      } else {
+        const acquisition = await dicompareAPI.loadProFile(new Uint8Array(fileContent), file.name);
+
+        // Add validation rules and round values for fields
+        const processedAcquisition = {
+          ...acquisition,
+          acquisitionFields: acquisition.acquisitionFields.map(field => processFieldForUI(field, 'pro'))
+        };
+
+        setAcquisitions(prev => [...prev, processedAcquisition]);
+
+        // Auto-select the newly created acquisition
+        setSelectedAcquisitionId(processedAcquisition.id);
+
+        console.log('✅ Protocol file uploaded successfully');
+      }
 
       setUploadProgress(100);
 
-      console.log('✅ Protocol file uploaded successfully');
-      
     } catch (error) {
       console.error('❌ Protocol file upload failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setUploadStatus(`Upload failed: ${errorMessage}`);
-      
+
       setTimeout(() => {
         setUploadStatus('');
       }, 5000);
@@ -478,9 +499,15 @@ const BuildSchema: React.FC = () => {
     }
     
     if (files.length > 0) {
-      // Separate .pro files from DICOM files
-      const proFiles = files.filter(file => file.name.toLowerCase().endsWith('.pro'));
-      const dicomFiles = files.filter(file => !file.name.toLowerCase().endsWith('.pro'));
+      // Separate protocol files (.pro, .exar1) from DICOM files
+      const proFiles = files.filter(file => {
+        const name = file.name.toLowerCase();
+        return name.endsWith('.pro') || name.endsWith('.exar1');
+      });
+      const dicomFiles = files.filter(file => {
+        const name = file.name.toLowerCase();
+        return !name.endsWith('.pro') && !name.endsWith('.exar1');
+      });
       
       // Handle .pro files first
       for (const proFile of proFiles) {
@@ -516,8 +543,14 @@ const BuildSchema: React.FC = () => {
     } else {
       // Fallback to original behavior
       const allFiles = Array.from(e.dataTransfer.files);
-      const proFiles = allFiles.filter(file => file.name.toLowerCase().endsWith('.pro'));
-      const dicomFiles = allFiles.filter(file => !file.name.toLowerCase().endsWith('.pro'));
+      const proFiles = allFiles.filter(file => {
+        const name = file.name.toLowerCase();
+        return name.endsWith('.pro') || name.endsWith('.exar1');
+      });
+      const dicomFiles = allFiles.filter(file => {
+        const name = file.name.toLowerCase();
+        return !name.endsWith('.pro') && !name.endsWith('.exar1');
+      });
       
       // Handle .pro files
       for (const proFile of proFiles) {
@@ -868,10 +901,10 @@ const BuildSchema: React.FC = () => {
             <div className="text-center">
               <Upload className="h-6 w-6 text-purple-500 mx-auto mb-2" />
               <h4 className="text-sm font-medium text-content-primary mb-1">Siemens Protocol</h4>
-              <p className="text-xs text-content-secondary mb-3">Upload .pro protocol files</p>
+              <p className="text-xs text-content-secondary mb-3">Upload .pro or .exar1 files</p>
               <input
                 type="file"
-                accept=".pro"
+                accept=".pro,.exar1"
                 className="hidden"
                 id={isAdditional ? "protocol-upload-extra" : "protocol-upload"}
                 onChange={(e) => handleProFileUpload(e.target.files)}

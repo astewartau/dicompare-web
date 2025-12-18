@@ -2318,6 +2318,85 @@ json.dumps(pro_data)
   }
 
   /**
+   * Load Siemens exam archive file (.exar1) and convert to acquisition format
+   * .exar1 files are SQLite databases containing protocol data
+   */
+  async loadExarFile(fileContent: Uint8Array, fileName: string): Promise<UIAcquisition[]> {
+    await this.ensureInitialized();
+
+    try {
+      console.log(`Processing Siemens exam archive file: ${fileName}`);
+
+      // Convert Uint8Array to base64 for Python transfer (binary file)
+      // Use chunked approach to avoid "too many function arguments" error
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < fileContent.length; i += chunkSize) {
+        const chunk = fileContent.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+      }
+      const base64Content = btoa(binary);
+
+      // Call dicompare.load_exar_file function
+      const result = await pyodideManager.runPython(`
+import json
+import base64
+import dicompare
+import tempfile
+import os
+
+# Decode base64 content back to bytes
+file_bytes = base64.b64decode('${base64Content}')
+
+# Create a temporary file path for the content
+with tempfile.NamedTemporaryFile(mode='wb', suffix='.exar1', delete=False) as tmp_file:
+    tmp_file.write(file_bytes)
+    tmp_file_path = tmp_file.name
+
+print(f"🚀 Loading .exar1 file: {tmp_file_path}")
+
+# Load the exar file - returns list of protocol dictionaries
+protocols = dicompare.load_exar_file(tmp_file_path)
+print(f"✅ Successfully loaded {len(protocols)} protocol(s) from .exar1 file")
+
+# Clean up temporary file
+os.unlink(tmp_file_path)
+
+# Return the data as JSON
+json.dumps(protocols)
+      `);
+
+      console.log('Raw result from Python:', result);
+      const protocols = JSON.parse(result);
+      console.log(`Parsed .exar1 file: ${protocols.length} protocol(s)`);
+
+      // Convert each protocol to UIAcquisition format
+      const acquisitions: UIAcquisition[] = [];
+      for (const proData of protocols) {
+        // Use the flat format parser since load_exar_file returns dictionaries
+        const acquisition = await this.parseFlatFormatData(proData, fileName);
+
+        // Update acquisition ID to be unique per protocol
+        const protocolName = proData.ProtocolName || proData.tProtocolName || `Protocol_${acquisitions.length + 1}`;
+        acquisition.id = `exar_${Date.now()}_${acquisitions.length}`;
+        acquisition.protocolName = protocolName;
+        acquisition.metadata = {
+          ...acquisition.metadata,
+          source: 'siemens_exar',
+          originalFileName: fileName
+        };
+
+        acquisitions.push(acquisition);
+      }
+
+      return acquisitions;
+    } catch (error) {
+      console.error('Failed to load .exar1 file:', error);
+      throw new Error(`Failed to load Siemens exam archive file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Parse new schema format data from load_pro_file_schema_format
    */
   private async parseSchemaFormatData(schemaData: any, fileName: string): Promise<UIAcquisition> {

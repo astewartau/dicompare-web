@@ -417,8 +417,9 @@ const DataLoadingAndMatching: React.FC = () => {
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files) return;
 
-    // Check if this is a .pro file - route to special handler
-    if (files.length === 1 && files[0].name.toLowerCase().endsWith('.pro')) {
+    // Check if this is a protocol file (.pro or .exar1) - route to special handler
+    const fileName = files[0].name.toLowerCase();
+    if (files.length === 1 && (fileName.endsWith('.pro') || fileName.endsWith('.exar1'))) {
       await handleProFile(files[0]);
       return;
     }
@@ -502,13 +503,16 @@ const DataLoadingAndMatching: React.FC = () => {
     setProgress(null);
   }, [loadedData]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle .pro file upload - generates DICOMs and then processes them
+  // Handle protocol file upload (.pro or .exar1) - generates DICOMs and then processes them
   const handleProFile = useCallback(async (proFile: File) => {
+    const isExarFile = proFile.name.toLowerCase().endsWith('.exar1');
+    const fileType = isExarFile ? 'exam archive' : 'protocol';
+
     setIsProcessing(true);
     setProgress({
       currentFile: 0,
       totalFiles: 1,
-      currentOperation: 'Parsing Siemens protocol file...',
+      currentOperation: `Parsing Siemens ${fileType} file...`,
       percentage: 0
     });
 
@@ -518,128 +522,149 @@ const DataLoadingAndMatching: React.FC = () => {
       const arrayBuffer = await proFile.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      // Step 2: Parse .pro file to acquisition/schema
+      // Step 2: Parse protocol file to acquisition(s)
       setProgress(prev => ({ ...prev!, currentOperation: 'Reading protocol fields...', percentage: 10 }));
-      const acquisition = await dicompareAPI.loadProFile(uint8Array, proFile.name);
 
-      // Step 3: Generate test data from the acquisition using shared utility
-      setProgress(prev => ({ ...prev!, currentOperation: 'Generating test data...', percentage: 30 }));
-
-      // Build all fields list (acquisition + series)
-      const allFields = [...(acquisition.acquisitionFields || [])];
-
-      // Add series fields (handle object format from .pro files)
-      const seriesFieldMap = new Map<string, any>();
-      (acquisition.series || []).forEach(series => {
-        if (typeof series.fields === 'object' && !Array.isArray(series.fields)) {
-          Object.entries(series.fields).forEach(([tag, fieldData]: [string, any]) => {
-            if (!seriesFieldMap.has(tag)) {
-              seriesFieldMap.set(tag, {
-                tag: tag,
-                name: fieldData.name || fieldData.field || tag,
-                value: fieldData.value,
-                level: 'series',
-                ...fieldData
-              });
-            }
-          });
-        }
-      });
-      allFields.push(...Array.from(seriesFieldMap.values()));
-
-      // Extract validation field values from validation functions
-      const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
-        acquisition.validationFunctions || [],
-        allFields,
-        acquisition.series || []
-      );
-
-      // Ensure ProtocolName field exists if not in schema
-      // Use acquisition name as fallback for ProtocolName DICOM field
-      const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
-      if (!hasProtocolName && acquisition.protocolName) {
-        const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
-        if (protocolNameFieldDef) {
-          // Clean acquisition name for use as ProtocolName (lowercase, underscores, no special chars)
-          const cleanedName = acquisition.protocolName
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '_')
-            .replace(/^_+|_+$/g, '');
-
-          allFields.push({
-            name: protocolNameFieldDef.keyword,
-            tag: protocolNameFieldDef.tag,
-            vr: protocolNameFieldDef.vr,
-            level: 'acquisition',
-            value: cleanedName,
-            dataType: 'String'
-          });
-        }
+      // .exar1 returns multiple acquisitions, .pro returns one
+      let acquisitions: Acquisition[];
+      if (isExarFile) {
+        acquisitions = await dicompareAPI.loadExarFile(uint8Array, proFile.name);
+        console.log(`📦 Loaded ${acquisitions.length} protocol(s) from .exar1 file`);
+      } else {
+        const acquisition = await dicompareAPI.loadProFile(uint8Array, proFile.name);
+        acquisitions = [acquisition];
       }
 
-      // Generate test data using shared utility
-      const testData = generateTestDataFromSchema(
-        allFields,
-        acquisition.series || [],
-        validationFieldValues,
-        maxValidationRows
-      );
+      // Process each acquisition
+      const allDicomFiles: File[] = [];
+      const totalAcquisitions = acquisitions.length;
 
-      // Add fields from testData that aren't in allFields (from validation tests)
-      const existingFieldNames = new Set(allFields.map(f => f.name));
-      const testDataFieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
+      for (let acqIndex = 0; acqIndex < acquisitions.length; acqIndex++) {
+        const acquisition = acquisitions[acqIndex];
+        const baseProgress = 10 + (acqIndex / totalAcquisitions) * 60;
 
-      for (const fieldName of testDataFieldNames) {
-        if (!existingFieldNames.has(fieldName)) {
-          // This field came from validation tests - look up its DICOM tag
-          const fieldDef = await getFieldByKeyword(fieldName);
-          if (fieldDef) {
+        setProgress(prev => ({
+          ...prev!,
+          currentOperation: `Processing ${acquisition.protocolName} (${acqIndex + 1}/${totalAcquisitions})...`,
+          percentage: baseProgress
+        }));
+
+        // Build all fields list (acquisition + series)
+        const allFields = [...(acquisition.acquisitionFields || [])];
+
+        // Add series fields (handle object format from protocol files)
+        const seriesFieldMap = new Map<string, any>();
+        (acquisition.series || []).forEach(series => {
+          if (typeof series.fields === 'object' && !Array.isArray(series.fields)) {
+            Object.entries(series.fields).forEach(([tag, fieldData]: [string, any]) => {
+              if (!seriesFieldMap.has(tag)) {
+                seriesFieldMap.set(tag, {
+                  tag: tag,
+                  name: fieldData.name || fieldData.field || tag,
+                  value: fieldData.value,
+                  level: 'series',
+                  ...fieldData
+                });
+              }
+            });
+          }
+        });
+        allFields.push(...Array.from(seriesFieldMap.values()));
+
+        // Extract validation field values from validation functions
+        const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
+          acquisition.validationFunctions || [],
+          allFields,
+          acquisition.series || []
+        );
+
+        // Ensure ProtocolName field exists if not in schema
+        const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
+        if (!hasProtocolName && acquisition.protocolName) {
+          const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
+          if (protocolNameFieldDef) {
+            const cleanedName = acquisition.protocolName
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '_')
+              .replace(/^_+|_+$/g, '');
+
             allFields.push({
-              name: fieldName,
-              tag: fieldDef.tag.replace(/[()]/g, ''),
-              vr: fieldDef.vr || '',
+              name: protocolNameFieldDef.keyword,
+              tag: protocolNameFieldDef.tag,
+              vr: protocolNameFieldDef.vr,
               level: 'acquisition',
-              dataType: inferDataTypeFromValue(testData[0][fieldName]),
-              value: testData[0][fieldName]
-            } as any);
+              value: cleanedName,
+              dataType: 'String'
+            });
           }
         }
-      }
 
-      // Step 4: Generate DICOMs from the test data
-      setProgress(prev => ({ ...prev!, currentOperation: 'Generating DICOM files...', percentage: 50 }));
-      const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(
-        acquisition,
-        testData,
-        allFields
-      );
+        // Generate test data using shared utility
+        const testData = generateTestDataFromSchema(
+          allFields,
+          acquisition.series || [],
+          validationFieldValues,
+          maxValidationRows
+        );
 
-      // Step 5: Unzip in-memory
-      setProgress(prev => ({ ...prev!, currentOperation: 'Extracting DICOM files...', percentage: 70 }));
-      const zip = await JSZip.loadAsync(zipBlob);
-      const dicomFiles: File[] = [];
+        // Add fields from testData that aren't in allFields (from validation tests)
+        const existingFieldNames = new Set(allFields.map(f => f.name));
+        const testDataFieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
 
-      for (const [filename, zipEntry] of Object.entries(zip.files)) {
-        if (!zipEntry.dir && filename.endsWith('.dcm')) {
-          const blob = await zipEntry.async('blob');
-          dicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
+        for (const fieldName of testDataFieldNames) {
+          if (!existingFieldNames.has(fieldName)) {
+            const fieldDef = await getFieldByKeyword(fieldName);
+            if (fieldDef) {
+              allFields.push({
+                name: fieldName,
+                tag: fieldDef.tag.replace(/[()]/g, ''),
+                vr: fieldDef.vr || '',
+                level: 'acquisition',
+                dataType: inferDataTypeFromValue(testData[0][fieldName]),
+                value: testData[0][fieldName]
+              } as any);
+            }
+          }
         }
+
+        // Generate DICOMs from the test data
+        setProgress(prev => ({
+          ...prev!,
+          currentOperation: `Generating DICOMs for ${acquisition.protocolName}...`,
+          percentage: baseProgress + 20
+        }));
+        const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(
+          acquisition,
+          testData,
+          allFields
+        );
+
+        // Unzip in-memory and collect DICOM files
+        const zip = await JSZip.loadAsync(zipBlob);
+
+        for (const [filename, zipEntry] of Object.entries(zip.files)) {
+          if (!zipEntry.dir && filename.endsWith('.dcm')) {
+            const blob = await zipEntry.async('blob');
+            allDicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
+          }
+        }
+
+        console.log(`✅ Generated DICOMs for ${acquisition.protocolName}`);
       }
 
-      console.log(`✅ Generated ${dicomFiles.length} DICOM files from .pro file`);
+      console.log(`✅ Generated ${allDicomFiles.length} total DICOM files from ${fileType} file`);
 
-      // Step 6: Convert to FileList and process through existing DICOM pipeline
+      // Process all generated DICOMs through existing pipeline
       setProgress(prev => ({ ...prev!, currentOperation: 'Processing generated DICOMs...', percentage: 80 }));
 
       const fileList = new DataTransfer();
-      dicomFiles.forEach(file => fileList.items.add(file));
+      allDicomFiles.forEach(file => fileList.items.add(file));
 
-      // Process the generated DICOMs using existing pipeline
       await handleFileUpload(fileList.files);
 
     } catch (error) {
-      console.error('Failed to process .pro file:', error);
-      setApiError(`Failed to process .pro file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(`Failed to process ${fileType} file:`, error);
+      setApiError(`Failed to process ${fileType} file: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsProcessing(false);
       setProgress(null);
     }
@@ -1161,14 +1186,14 @@ const DataLoadingAndMatching: React.FC = () => {
               {isExtra ? 'Upload More DICOM Files' : 'Load Data for Compliance Testing'}
             </h3>
             <p className="text-content-secondary mb-4">
-              Drag and drop DICOM files (or .zip), Siemens .pro files, or select a schema to generate test data
+              Drag and drop DICOM files (or .zip), Siemens protocol files (.pro, .exar1), or select a schema to generate test data
             </p>
 
             <input
               type="file"
               multiple
               webkitdirectory=""
-              accept=".dcm,.dicom,.zip,.pro"
+              accept=".dcm,.dicom,.zip,.pro,.exar1"
               className="hidden"
               id={isExtra ? "file-upload-extra" : "file-upload"}
               onChange={(e) => handleFileUpload(e.target.files)}

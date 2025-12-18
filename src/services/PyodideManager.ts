@@ -57,7 +57,8 @@ class PyodideManager {
     console.log('📦 Installing real dicompare package...');
 
     // Install the real dicompare wheel from local CORS server
-    await pyodide.loadPackage(['micropip']);
+    // Note: sqlite3 is unvendored in Pyodide and must be loaded explicitly
+    await pyodide.loadPackage(['micropip', 'sqlite3']);
 
     // Auto-detect environment: use local package in development, PyPI in production
     const isDevelopment = window.location.hostname === 'localhost' ||
@@ -65,8 +66,8 @@ class PyodideManager {
                           import.meta.env.DEV;
 
     const packageSource = isDevelopment
-      ? 'http://localhost:8000/dist/dicompare-0.1.41-py3-none-any.whl'
-      : 'dicompare==0.1.41';
+      ? 'http://localhost:8000/dist/dicompare-0.1.42-py3-none-any.whl'
+      : 'dicompare==0.1.42';
 
     console.log(`📦 Installing dicompare from ${isDevelopment ? 'local development server' : 'PyPI'}...`);
 
