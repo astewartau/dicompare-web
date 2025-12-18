@@ -111,7 +111,7 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
       
       return metadata;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to upload schema';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load schema';
       setError(errorMessage);
       throw new Error(errorMessage);
     }

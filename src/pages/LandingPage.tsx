@@ -46,7 +46,7 @@ const LandingPage: React.FC = () => {
               <Blocks className="h-10 w-10 text-brand-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-content-primary mb-3">Schema Builder</h3>
               <p className="text-content-secondary text-sm">
-                Use reference DICOMs to build a schema for your study.
+                Use reference files to build a schema for your study.
               </p>
             </Link>
 

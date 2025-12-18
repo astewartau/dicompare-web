@@ -819,7 +819,7 @@ const BuildSchema: React.FC = () => {
           </h3>
         </div>
         <p className="text-xs text-content-secondary mt-1">
-          Upload files or create acquisition manually
+          Load files or create acquisition manually
         </p>
       </div>
     );
@@ -872,7 +872,7 @@ const BuildSchema: React.FC = () => {
             <div className="text-center">
               <Upload className="h-6 w-6 text-blue-500 mx-auto mb-2" />
               <h4 className="text-sm font-medium text-content-primary mb-1">DICOM Files</h4>
-              <p className="text-xs text-content-secondary mb-3">Upload DICOM files, zip archives, or folders</p>
+              <p className="text-xs text-content-secondary mb-3">Load DICOM files, zip archives, or folders</p>
               <input
                 type="file"
                 multiple
@@ -901,7 +901,7 @@ const BuildSchema: React.FC = () => {
             <div className="text-center">
               <Upload className="h-6 w-6 text-purple-500 mx-auto mb-2" />
               <h4 className="text-sm font-medium text-content-primary mb-1">Siemens Protocol</h4>
-              <p className="text-xs text-content-secondary mb-3">Upload .pro or .exar1 files</p>
+              <p className="text-xs text-content-secondary mb-3">Load .pro or .exar1 files</p>
               <input
                 type="file"
                 accept=".pro,.exar1"
@@ -1016,7 +1016,7 @@ const BuildSchema: React.FC = () => {
                   'Review and modify the loaded schema acquisitions and configure which DICOM fields to include.' :
                   'Review detected acquisitions and configure which DICOM fields to include in your validation schema.'
               ) : (
-                'Upload DICOM files to automatically extract metadata and create acquisition schemas, or manually add acquisitions.'
+                'Upload reference files to automatically extract metadata and create acquisition schemas, or manually add acquisitions.'
               )}
             </p>
           </div>

@@ -94,7 +94,7 @@ export const SchemaManager: React.FC = () => {
           <div>
             <h2 className="text-xl font-semibold text-gray-900">Schema Manager</h2>
             <p className="text-gray-600 mt-1">
-              Manage your uploaded validation schemas ({schemas.length} total, {formatFileSize(cacheSize)})
+              Manage your loaded validation schemas ({schemas.length} total, {formatFileSize(cacheSize)})
             </p>
           </div>
           <div className="flex space-x-2">
@@ -102,7 +102,7 @@ export const SchemaManager: React.FC = () => {
               onClick={() => setShowUploadModal(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
             >
-              Upload Schema
+              Load Schema
             </button>
             <button
               onClick={refreshSchemas}
@@ -149,7 +149,7 @@ export const SchemaManager: React.FC = () => {
                 onClick={() => setShowUploadModal(true)}
                 className="block mx-auto mt-2 text-blue-600 hover:text-blue-800"
               >
-                Upload your first schema
+                Load your first schema
               </button>
             )}
           </div>

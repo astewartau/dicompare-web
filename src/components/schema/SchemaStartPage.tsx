@@ -96,7 +96,7 @@ const SchemaStartPage: React.FC = () => {
             </div>
             <h3 className="text-xl font-semibold text-content-primary mb-3">Create New Schema</h3>
             <p className="text-content-secondary mb-6">
-              Start building a new validation schema from scratch. Upload DICOM files, create acquisitions manually, or import from existing schemas.
+              Start building a new schema from scratch or from existing DICOM files or protocols.
             </p>
             <button
               onClick={handleCreateNew}

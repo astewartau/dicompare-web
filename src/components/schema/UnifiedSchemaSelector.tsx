@@ -452,7 +452,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
           <p className="text-sm text-content-tertiary text-center py-8">
             {activeTab === 'library'
               ? 'No library schemas available.'
-              : 'No custom schemas. Upload a schema to get started.'}
+              : 'No custom schemas. Load a schema to get started.'}
           </p>
         )}
       </div>
