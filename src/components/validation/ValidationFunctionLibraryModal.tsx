@@ -53,18 +53,32 @@ interface ValidationFunctionLibraryModalProps {
 // Dynamic validation function loading (extracted from PythonSchemaBuilder)
 const loadValidationFunctions = async (): Promise<ValidationFunction[]> => {
   const functionFiles = [
+    // Echo Timing
     'validate_echo_count.json',
+    'validate_exact_echo_count.json',
     'uniform_echo_spacing.json',
     'validate_first_echo.json',
+    'validate_echo_times.json',
+    // Image Type
     'validate_image_type.json',
     'validate_image_slices.json',
-    'validate_mra_type.json',
+    'validate_magnitude_phase_pairs.json',
+    // RF
     'validate_repetition_time.json',
     'validate_flip_angle.json',
-    'validate_echo_times.json',
+    // Geometry
     'validate_voxel_shape.json',
     'validate_pixel_spacing.json',
-    'validate_pixel_bandwidth.json'
+    'validate_pixel_bandwidth.json',
+    'validate_slice_count.json',
+    'validate_phase_encoding_polarity.json',
+    // Diffusion
+    'validate_diffusion_directions.json',
+    'validate_bvalue_shells.json',
+    // fMRI
+    'validate_temporal_positions.json',
+    // MRA
+    'validate_mra_type.json'
   ];
 
   const functions: ValidationFunction[] = [];
