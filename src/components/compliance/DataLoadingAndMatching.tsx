@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Database, Loader, CheckCircle, Plus, X, Trash2, FileText, AlertTriangle } from 'lucide-react';
+import { Upload, Database, Loader, CheckCircle, Plus, X, Trash2, FileText, AlertTriangle, Copy } from 'lucide-react';
 import { Acquisition, ProcessingProgress } from '../../types';
 import { dicompareAPI } from '../../services/DicompareAPI';
-import { processUploadedFiles } from '../../utils/fileUploadUtils';
+import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo } from '../../utils/fileUploadUtils';
 import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { SchemaUploadModal } from '../schema/SchemaUploadModal';
 import { schemaCacheManager } from '../../services/SchemaCacheManager';
@@ -159,6 +159,12 @@ const DataLoadingAndMatching: React.FC = () => {
   const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
   const [showSchemaSelectionModal, setShowSchemaSelectionModal] = useState(false);
   const [showSchemaAsDataModal, setShowSchemaAsDataModal] = useState(false);
+  const [sizeWarning, setSizeWarning] = useState<{ show: boolean; info: FileSizeInfo | null; files: FileList | null }>({
+    show: false,
+    info: null,
+    files: null
+  });
+  const [dicomAnalysisError, setDicomAnalysisError] = useState<string | null>(null);
   const ADD_NEW_ID = '__add_new__';
 
   // Auto-select logic
@@ -413,17 +419,8 @@ const DataLoadingAndMatching: React.FC = () => {
 
   const getPairedCount = () => schemaPairings.size;
 
-  // File upload logic (unchanged)
-  const handleFileUpload = useCallback(async (files: FileList | null) => {
-    if (!files) return;
-
-    // Check if this is a protocol file (.pro or .exar1) - route to special handler
-    const fileName = files[0].name.toLowerCase();
-    if (files.length === 1 && (fileName.endsWith('.pro') || fileName.endsWith('.exar1'))) {
-      await handleProFile(files[0]);
-      return;
-    }
-
+  // Core file processing logic - called after size check passes or user chooses to proceed anyway
+  const processFiles = useCallback(async (files: FileList, skipSizeCheck: boolean = false) => {
     setIsProcessing(true);
     setProgress({
       currentFile: 0,
@@ -439,12 +436,15 @@ const DataLoadingAndMatching: React.FC = () => {
         percentage: prev?.percentage || 0
       }));
 
-      const fileObjects = await processUploadedFiles(files, (fileProgress) => {
-        setProgress(prev => ({
-          ...prev!,
-          currentOperation: `Reading file ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.fileName}`,
-          percentage: (fileProgress.current / fileProgress.total) * 25
-        }));
+      const fileObjects = await processUploadedFiles(files, {
+        onProgress: (fileProgress) => {
+          setProgress(prev => ({
+            ...prev!,
+            currentOperation: `Reading file ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.fileName}`,
+            percentage: (fileProgress.current / fileProgress.total) * 25
+          }));
+        },
+        skipSizeCheck
       });
 
       const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
@@ -494,14 +494,57 @@ const DataLoadingAndMatching: React.FC = () => {
       }
 
       setApiError(null);
+      setDicomAnalysisError(null);
     } catch (error) {
       console.error('Failed to load DICOM data:', error);
-      setApiError(`Failed to process DICOM data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setDicomAnalysisError(errorMessage);
     }
 
     setIsProcessing(false);
     setProgress(null);
-  }, [loadedData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadedData]);
+
+  // Main file upload handler - checks size first and shows warning if needed
+  const handleFileUpload = useCallback(async (files: FileList | null) => {
+    if (!files) return;
+
+    // Check if this is a protocol file (.pro or .exar1) - route to special handler
+    const fileName = files[0].name.toLowerCase();
+    if (files.length === 1 && (fileName.endsWith('.pro') || fileName.endsWith('.exar1'))) {
+      await handleProFile(files[0]);
+      return;
+    }
+
+    // Check file size before processing
+    setProgress({
+      currentFile: 0,
+      totalFiles: files.length,
+      currentOperation: 'Checking file sizes...',
+      percentage: 0
+    });
+    const sizeInfo = await checkFileSizeLimit(files);
+    setProgress(null);
+
+    if (sizeInfo.exceedsLimit) {
+      // Show warning modal and let user decide
+      setSizeWarning({ show: true, info: sizeInfo, files });
+      return;
+    }
+
+    // Size is OK, proceed with processing
+    await processFiles(files, false);
+  }, [processFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle "try anyway" from size warning modal
+  const handleProceedAnyway = useCallback(async () => {
+    const files = sizeWarning.files;
+    setSizeWarning({ show: false, info: null, files: null });
+
+    if (files) {
+      await processFiles(files, true);
+    }
+  }, [sizeWarning.files, processFiles]);
 
   // Handle protocol file upload (.pro or .exar1) - generates DICOMs and then processes them
   const handleProFile = useCallback(async (proFile: File) => {
@@ -664,7 +707,7 @@ const DataLoadingAndMatching: React.FC = () => {
 
     } catch (error) {
       console.error(`Failed to process ${fileType} file:`, error);
-      setApiError(`Failed to process ${fileType} file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setDicomAnalysisError(`Failed to process ${fileType} file: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsProcessing(false);
       setProgress(null);
     }
@@ -803,7 +846,7 @@ const DataLoadingAndMatching: React.FC = () => {
 
     } catch (error) {
       console.error('Failed to process schema as data:', error);
-      setApiError(`Failed to generate DICOMs from schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setDicomAnalysisError(`Failed to generate DICOMs from schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsProcessing(false);
       setProgress(null);
     }
@@ -1437,6 +1480,76 @@ const DataLoadingAndMatching: React.FC = () => {
                 className="px-4 py-2 bg-surface-secondary text-content-primary rounded-md hover:bg-border-secondary"
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DICOM Analysis Error Modal */}
+      {dicomAnalysisError && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-primary rounded-lg p-6 w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="flex items-start mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-status-error-bg rounded-full flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-status-error" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-content-primary">DICOM Analysis Failed</h3>
+                <p className="mt-1 text-sm text-content-tertiary">An error occurred while processing the DICOM files.</p>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 mb-4 relative">
+              <button
+                onClick={() => navigator.clipboard.writeText(dicomAnalysisError)}
+                className="absolute top-2 right-2 p-1.5 bg-surface-primary rounded border border-border-secondary hover:bg-surface-secondary text-content-tertiary hover:text-content-secondary"
+                title="Copy error to clipboard"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+              <pre className="bg-surface-secondary rounded p-3 pr-10 text-xs text-content-secondary font-mono whitespace-pre-wrap break-words overflow-y-auto max-h-[40vh]">
+                {dicomAnalysisError}
+              </pre>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setDicomAnalysisError(null)}
+                className="px-4 py-2 bg-surface-secondary text-content-primary rounded-md hover:bg-border-secondary"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Size Warning Modal */}
+      {sizeWarning.show && sizeWarning.info && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-surface-primary rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center mb-4">
+              <AlertTriangle className="h-6 w-6 text-status-warning mr-3" />
+              <h3 className="text-lg font-medium text-content-primary">Large Dataset Warning</h3>
+            </div>
+            <p className="text-content-secondary mb-4">
+              This dataset is <span className="font-semibold">{sizeWarning.info.totalGB.toFixed(1)} GB</span> ({sizeWarning.info.fileCount.toLocaleString()} files),
+              which exceeds the recommended ~2 GB limit for browser processing.
+            </p>
+            <p className="text-content-tertiary text-sm mb-6">
+              Processing may fail due to browser memory limits. For large datasets, consider using the desktop Python package instead.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setSizeWarning({ show: false, info: null, files: null })}
+                className="px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleProceedAnyway}
+                className="px-4 py-2 bg-status-warning text-content-inverted rounded-lg hover:opacity-90"
+              >
+                Try Anyway
               </button>
             </div>
           </div>
