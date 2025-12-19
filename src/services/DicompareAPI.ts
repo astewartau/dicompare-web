@@ -2397,6 +2397,206 @@ json.dumps(protocols)
   }
 
   /**
+   * Load Philips ExamCard file (.ExamCard) and convert to acquisition format
+   * ExamCard files are SOAP-XML formatted files with embedded binary parameter data
+   */
+  async loadExamCardFile(fileContent: Uint8Array, fileName: string): Promise<UIAcquisition[]> {
+    await this.ensureInitialized();
+
+    try {
+      console.log(`Processing Philips ExamCard file: ${fileName}`);
+
+      // Convert Uint8Array to base64 for safe Python transfer
+      // Use Array.from to properly convert TypedArray, then chunk for btoa
+      const bytes = Array.from(fileContent);
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.slice(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
+      }
+      const base64Content = btoa(binary);
+
+      console.log(`Base64 encoded ExamCard file: ${base64Content.length} chars`);
+
+      // Pass the base64 content via Pyodide globals to avoid string interpolation issues
+      await pyodideManager.setGlobal('_examcard_base64', base64Content);
+
+      // Call dicompare.load_examcard_file_schema_format function
+      const result = await pyodideManager.runPython(`
+import json
+import base64
+import dicompare
+import tempfile
+import os
+
+# Get base64 content from globals (passed from JavaScript)
+examcard_base64 = _examcard_base64
+
+# Decode base64 content back to bytes
+file_bytes = base64.b64decode(examcard_base64)
+
+# Create a temporary file path for the content
+with tempfile.NamedTemporaryFile(mode='wb', suffix='.ExamCard', delete=False) as tmp_file:
+    tmp_file.write(file_bytes)
+    tmp_file_path = tmp_file.name
+
+print(f"🚀 Loading ExamCard file: {tmp_file_path}")
+
+# Load all scans from the ExamCard file using schema format
+try:
+    scans = dicompare.load_examcard_file_schema_format(tmp_file_path)
+    print(f"✅ Successfully loaded {len(scans)} scan(s) from ExamCard file")
+except Exception as e:
+    print(f"⚠️ Schema format failed ({e}), trying all_scans...")
+    scans = dicompare.load_examcard_file_all_scans(tmp_file_path)
+    print(f"✅ Loaded {len(scans)} scan(s) using all_scans format")
+
+# Clean up temporary file
+os.unlink(tmp_file_path)
+
+# Return the data as JSON
+json.dumps(scans)
+      `);
+
+      console.log('Raw result from Python:', result);
+      const scans = JSON.parse(result);
+      console.log(`Parsed ExamCard file: ${scans.length} scan(s)`);
+
+      // Convert each scan to UIAcquisition format
+      const acquisitions: UIAcquisition[] = [];
+      for (const scanData of scans) {
+        // Check if it's schema format or flat format
+        const isSchemaFormat = scanData.hasOwnProperty('acquisition_info') &&
+                              scanData.hasOwnProperty('fields') &&
+                              scanData.hasOwnProperty('series');
+
+        let acquisition: UIAcquisition;
+        if (isSchemaFormat) {
+          acquisition = await this.parseSchemaFormatData(scanData, fileName);
+        } else {
+          acquisition = await this.parseFlatFormatData(scanData, fileName);
+        }
+
+        // Update acquisition ID to be unique per scan
+        const protocolName = scanData.acquisition_info?.protocol_name ||
+                            scanData.ProtocolName ||
+                            scanData.ScanName ||
+                            `Scan_${acquisitions.length + 1}`;
+        acquisition.id = `examcard_${Date.now()}_${acquisitions.length}`;
+        acquisition.protocolName = protocolName;
+        acquisition.metadata = {
+          ...acquisition.metadata,
+          source: 'philips_examcard',
+          originalFileName: fileName
+        };
+
+        acquisitions.push(acquisition);
+      }
+
+      return acquisitions;
+    } catch (error) {
+      console.error('Failed to load ExamCard file:', error);
+      throw new Error(`Failed to load Philips ExamCard file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Load GE LxProtocol file and convert to acquisition format
+   * LxProtocol files are simple Tcl-like text files with 'set KEY "VALUE"' pairs
+   */
+  async loadLxProtocolFile(fileContent: Uint8Array, fileName: string): Promise<UIAcquisition[]> {
+    await this.ensureInitialized();
+
+    try {
+      console.log(`Processing GE LxProtocol file: ${fileName}`);
+
+      // Convert Uint8Array to text string (LxProtocol files are plain text)
+      const textDecoder = new TextDecoder('utf-8');
+      const textContent = textDecoder.decode(fileContent);
+
+      console.log(`LxProtocol file content length: ${textContent.length} chars`);
+
+      // Pass the content via Pyodide globals
+      await pyodideManager.setGlobal('_lxprotocol_content', textContent);
+
+      // Call dicompare.load_lxprotocol_file_schema_format function
+      const result = await pyodideManager.runPython(`
+import json
+import dicompare
+import tempfile
+import os
+
+# Get content from globals (passed from JavaScript)
+lxprotocol_content = _lxprotocol_content
+
+# Create a temporary file for the content
+with tempfile.NamedTemporaryFile(mode='w', suffix='', delete=False) as tmp_file:
+    tmp_file.write(lxprotocol_content)
+    tmp_file_path = tmp_file.name
+
+print(f"🚀 Loading LxProtocol file: {tmp_file_path}")
+
+# Load scans from the LxProtocol file using schema format
+try:
+    scans = dicompare.load_lxprotocol_file_schema_format(tmp_file_path)
+    print(f"✅ Successfully loaded {len(scans)} scan(s) from LxProtocol file")
+except Exception as e:
+    print(f"⚠️ Schema format failed ({e}), trying flat format...")
+    scan = dicompare.load_lxprotocol_file(tmp_file_path)
+    scans = [scan]
+    print(f"✅ Loaded scan using flat format")
+
+# Clean up temporary file
+os.unlink(tmp_file_path)
+
+# Return the data as JSON
+json.dumps(scans)
+      `);
+
+      console.log('Raw result from Python:', result);
+      const scans = JSON.parse(result);
+      console.log(`Parsed LxProtocol file: ${scans.length} scan(s)`);
+
+      // Convert each scan to UIAcquisition format
+      const acquisitions: UIAcquisition[] = [];
+      for (const scanData of scans) {
+        // Check if it's schema format or flat format
+        const isSchemaFormat = scanData.hasOwnProperty('acquisition_info') &&
+                              scanData.hasOwnProperty('fields') &&
+                              scanData.hasOwnProperty('series');
+
+        let acquisition: UIAcquisition;
+        if (isSchemaFormat) {
+          acquisition = await this.parseSchemaFormatData(scanData, fileName);
+        } else {
+          acquisition = await this.parseFlatFormatData(scanData, fileName);
+        }
+
+        // Update acquisition ID to be unique per scan
+        const protocolName = scanData.acquisition_info?.protocol_name ||
+                            scanData.ProtocolName ||
+                            scanData.ScanName ||
+                            `Scan_${acquisitions.length + 1}`;
+        acquisition.id = `lxprotocol_${Date.now()}_${acquisitions.length}`;
+        acquisition.protocolName = protocolName;
+        acquisition.metadata = {
+          ...acquisition.metadata,
+          source: 'ge_lxprotocol',
+          originalFileName: fileName
+        };
+
+        acquisitions.push(acquisition);
+      }
+
+      return acquisitions;
+    } catch (error) {
+      console.error('Failed to load LxProtocol file:', error);
+      throw new Error(`Failed to load GE LxProtocol file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Parse new schema format data from load_pro_file_schema_format
    */
   private async parseSchemaFormatData(schemaData: any, fileName: string): Promise<UIAcquisition> {

@@ -66,8 +66,8 @@ class PyodideManager {
                           import.meta.env.DEV;
 
     const packageSource = isDevelopment
-      ? 'http://localhost:8000/dist/dicompare-0.1.42-py3-none-any.whl'
-      : 'dicompare==0.1.42';
+      ? 'http://localhost:8000/dist/dicompare-0.1.43-py3-none-any.whl'
+      : 'dicompare==0.1.43';
 
     console.log(`📦 Installing dicompare from ${isDevelopment ? 'local development server' : 'PyPI'}...`);
 
@@ -99,6 +99,11 @@ print("✅ Successfully imported real dicompare modules")
   async runPython(code: string): Promise<any> {
     const pyodide = await this.initialize();
     return pyodide.runPython(code);
+  }
+
+  async setGlobal(name: string, value: any): Promise<void> {
+    const pyodide = await this.initialize();
+    pyodide.globals.set(name, value);
   }
 
   async loadPackage(packages: string | string[]): Promise<void> {

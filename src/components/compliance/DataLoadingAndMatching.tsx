@@ -509,9 +509,9 @@ const DataLoadingAndMatching: React.FC = () => {
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files) return;
 
-    // Check if this is a protocol file (.pro or .exar1) - route to special handler
+    // Check if this is a protocol file (.pro, .exar1, .ExamCard, or LxProtocol) - route to special handler
     const fileName = files[0].name.toLowerCase();
-    if (files.length === 1 && (fileName.endsWith('.pro') || fileName.endsWith('.exar1'))) {
+    if (files.length === 1 && (fileName.endsWith('.pro') || fileName.endsWith('.exar1') || fileName.endsWith('.examcard') || fileName === 'lxprotocol')) {
       await handleProFile(files[0]);
       return;
     }
@@ -546,16 +546,19 @@ const DataLoadingAndMatching: React.FC = () => {
     }
   }, [sizeWarning.files, processFiles]);
 
-  // Handle protocol file upload (.pro or .exar1) - generates DICOMs and then processes them
+  // Handle protocol file upload (.pro, .exar1, .ExamCard, or LxProtocol) - generates DICOMs and then processes them
   const handleProFile = useCallback(async (proFile: File) => {
-    const isExarFile = proFile.name.toLowerCase().endsWith('.exar1');
-    const fileType = isExarFile ? 'exam archive' : 'protocol';
+    const fileName = proFile.name.toLowerCase();
+    const isExarFile = fileName.endsWith('.exar1');
+    const isExamCard = fileName.endsWith('.examcard');
+    const isLxProtocol = fileName === 'lxprotocol';
+    const fileType = isLxProtocol ? 'GE LxProtocol' : isExamCard ? 'Philips ExamCard' : isExarFile ? 'Siemens exam archive' : 'Siemens protocol';
 
     setIsProcessing(true);
     setProgress({
       currentFile: 0,
       totalFiles: 1,
-      currentOperation: `Parsing Siemens ${fileType} file...`,
+      currentOperation: `Parsing ${fileType} file...`,
       percentage: 0
     });
 
@@ -568,9 +571,15 @@ const DataLoadingAndMatching: React.FC = () => {
       // Step 2: Parse protocol file to acquisition(s)
       setProgress(prev => ({ ...prev!, currentOperation: 'Reading protocol fields...', percentage: 10 }));
 
-      // .exar1 returns multiple acquisitions, .pro returns one
+      // .exar1, .ExamCard, and LxProtocol return multiple acquisitions, .pro returns one
       let acquisitions: Acquisition[];
-      if (isExarFile) {
+      if (isLxProtocol) {
+        acquisitions = await dicompareAPI.loadLxProtocolFile(uint8Array, proFile.name);
+        console.log(`📦 Loaded ${acquisitions.length} scan(s) from GE LxProtocol file`);
+      } else if (isExamCard) {
+        acquisitions = await dicompareAPI.loadExamCardFile(uint8Array, proFile.name);
+        console.log(`📦 Loaded ${acquisitions.length} scan(s) from ExamCard file`);
+      } else if (isExarFile) {
         acquisitions = await dicompareAPI.loadExarFile(uint8Array, proFile.name);
         console.log(`📦 Loaded ${acquisitions.length} protocol(s) from .exar1 file`);
       } else {
@@ -1229,14 +1238,14 @@ const DataLoadingAndMatching: React.FC = () => {
               {isExtra ? 'Upload More DICOM Files' : 'Load Data for Compliance Testing'}
             </h3>
             <p className="text-content-secondary mb-4">
-              Drag and drop DICOM files (or .zip), Siemens protocol files (.pro, .exar1), or select a schema to generate test data
+              Drag and drop DICOM files (or .zip), protocol files (.pro, .exar1, .ExamCard, LxProtocol), or select a schema to generate test data
             </p>
 
             <input
               type="file"
               multiple
               webkitdirectory=""
-              accept=".dcm,.dicom,.zip,.pro,.exar1"
+              accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
               className="hidden"
               id={isExtra ? "file-upload-extra" : "file-upload"}
               onChange={(e) => handleFileUpload(e.target.files)}

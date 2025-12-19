@@ -373,16 +373,19 @@ const BuildSchema: React.FC = () => {
     const fileName = file.name.toLowerCase();
 
     // Validate file extension
-    if (!fileName.endsWith('.pro') && !fileName.endsWith('.exar1')) {
-      setUploadStatus('Please select a Siemens protocol file (.pro or .exar1)');
+    // LxProtocol files have no extension - check if parent folder or filename suggests it
+    const isLxProtocol = fileName === 'lxprotocol' || fileName.endsWith('/lxprotocol');
+    if (!fileName.endsWith('.pro') && !fileName.endsWith('.exar1') && !fileName.endsWith('.examcard') && !isLxProtocol) {
+      setUploadStatus('Please select a protocol file (.pro, .exar1, .ExamCard, or LxProtocol)');
       setTimeout(() => setUploadStatus(''), 3000);
       return;
     }
 
     const isExarFile = fileName.endsWith('.exar1');
+    const isExamCard = fileName.endsWith('.examcard');
     setIsUploading(true);
     setUploadProgress(0);
-    setUploadStatus(`Processing Siemens ${isExarFile ? 'exam archive' : 'protocol'} file...`);
+    setUploadStatus(`Processing ${isLxProtocol ? 'GE LxProtocol' : isExamCard ? 'Philips ExamCard' : isExarFile ? 'Siemens exam archive' : 'Siemens protocol'} file...`);
 
     try {
       setUploadProgress(30);
@@ -399,8 +402,42 @@ const BuildSchema: React.FC = () => {
         return;
       }
 
-      // Process via API - .exar1 returns multiple acquisitions, .pro returns one
-      if (isExarFile) {
+      // Process via API - .exar1, .ExamCard, and LxProtocol return multiple acquisitions, .pro returns one
+      if (isLxProtocol) {
+        const acquisitions = await dicompareAPI.loadLxProtocolFile(new Uint8Array(fileContent), file.name);
+
+        // Add validation rules and round values for fields
+        const processedAcquisitions = acquisitions.map(acquisition => ({
+          ...acquisition,
+          acquisitionFields: acquisition.acquisitionFields.map(field => processFieldForUI(field, 'lxprotocol'))
+        }));
+
+        setAcquisitions(prev => [...prev, ...processedAcquisitions]);
+
+        // Auto-select the first newly created acquisition
+        if (processedAcquisitions.length > 0) {
+          setSelectedAcquisitionId(processedAcquisitions[0].id);
+        }
+
+        console.log(`✅ LxProtocol file uploaded successfully: ${acquisitions.length} scan(s)`);
+      } else if (isExamCard) {
+        const acquisitions = await dicompareAPI.loadExamCardFile(new Uint8Array(fileContent), file.name);
+
+        // Add validation rules and round values for fields
+        const processedAcquisitions = acquisitions.map(acquisition => ({
+          ...acquisition,
+          acquisitionFields: acquisition.acquisitionFields.map(field => processFieldForUI(field, 'examcard'))
+        }));
+
+        setAcquisitions(prev => [...prev, ...processedAcquisitions]);
+
+        // Auto-select the first newly created acquisition
+        if (processedAcquisitions.length > 0) {
+          setSelectedAcquisitionId(processedAcquisitions[0].id);
+        }
+
+        console.log(`✅ ExamCard file uploaded successfully: ${acquisitions.length} scan(s)`);
+      } else if (isExarFile) {
         const acquisitions = await dicompareAPI.loadExarFile(new Uint8Array(fileContent), file.name);
 
         // Add validation rules and round values for fields
@@ -499,17 +536,17 @@ const BuildSchema: React.FC = () => {
     }
     
     if (files.length > 0) {
-      // Separate protocol files (.pro, .exar1) from DICOM files
+      // Separate protocol files (.pro, .exar1, .ExamCard, LxProtocol) from DICOM files
       const proFiles = files.filter(file => {
         const name = file.name.toLowerCase();
-        return name.endsWith('.pro') || name.endsWith('.exar1');
+        return name.endsWith('.pro') || name.endsWith('.exar1') || name.endsWith('.examcard') || name === 'lxprotocol';
       });
       const dicomFiles = files.filter(file => {
         const name = file.name.toLowerCase();
-        return !name.endsWith('.pro') && !name.endsWith('.exar1');
+        return !name.endsWith('.pro') && !name.endsWith('.exar1') && !name.endsWith('.examcard') && name !== 'lxprotocol';
       });
-      
-      // Handle .pro files first
+
+      // Handle protocol files first
       for (const proFile of proFiles) {
         const proFileList = {
           length: 1,
@@ -545,14 +582,14 @@ const BuildSchema: React.FC = () => {
       const allFiles = Array.from(e.dataTransfer.files);
       const proFiles = allFiles.filter(file => {
         const name = file.name.toLowerCase();
-        return name.endsWith('.pro') || name.endsWith('.exar1');
+        return name.endsWith('.pro') || name.endsWith('.exar1') || name.endsWith('.examcard');
       });
       const dicomFiles = allFiles.filter(file => {
         const name = file.name.toLowerCase();
-        return !name.endsWith('.pro') && !name.endsWith('.exar1');
+        return !name.endsWith('.pro') && !name.endsWith('.exar1') && !name.endsWith('.examcard');
       });
-      
-      // Handle .pro files
+
+      // Handle protocol files
       for (const proFile of proFiles) {
         const proFileList = {
           length: 1,
@@ -900,11 +937,11 @@ const BuildSchema: React.FC = () => {
           <div className="border border-purple-500/20 rounded-lg p-4 bg-purple-500/5 hover:bg-purple-500/10 transition-colors">
             <div className="text-center">
               <Upload className="h-6 w-6 text-purple-500 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-content-primary mb-1">Siemens Protocol</h4>
-              <p className="text-xs text-content-secondary mb-3">Load .pro or .exar1 files</p>
+              <h4 className="text-sm font-medium text-content-primary mb-1">Protocol Files</h4>
+              <p className="text-xs text-content-secondary mb-3">Siemens (.pro, .exar1), Philips (.ExamCard), or GE (LxProtocol)</p>
               <input
                 type="file"
-                accept=".pro,.exar1"
+                accept=".pro,.exar1,.ExamCard,.examcard,LxProtocol"
                 className="hidden"
                 id={isAdditional ? "protocol-upload-extra" : "protocol-upload"}
                 onChange={(e) => handleProFileUpload(e.target.files)}
