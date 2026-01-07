@@ -10,6 +10,7 @@ export interface SchemaMetadata {
   isValid: boolean;
   description?: string;
   acquisitionCount?: number;
+  tags?: string[];
 }
 
 export interface ParsedSchema {
@@ -76,4 +77,5 @@ export interface SchemaTemplate {
   format: 'json' | 'python';
   version?: string;
   authors?: string[];
+  tags?: string[];
 }

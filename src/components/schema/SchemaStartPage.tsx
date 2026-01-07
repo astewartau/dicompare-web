@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, ChevronRight } from 'lucide-react';
+import { Plus, Edit, ChevronRight, Loader2, X } from 'lucide-react';
 import { useSchemaService } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
+import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import UnifiedSchemaSelector from './UnifiedSchemaSelector';
 import { SchemaUploadModal } from './SchemaUploadModal';
 import { schemaCacheManager } from '../../services/SchemaCacheManager';
+import { AcquisitionSelection } from '../../types';
+import { convertRawAcquisitionToContext } from '../../utils/schemaToAcquisition';
 
 const SchemaStartPage: React.FC = () => {
   const navigate = useNavigate();
   const { librarySchemas, uploadedSchemas, getSchemaContent } = useSchemaService();
   const { setEditingSchema, setOriginSchema } = useSchemaContext();
+  const { setAcquisitions } = useAcquisitions();
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Multi-select state
+  const [selectedAcquisitions, setSelectedAcquisitions] = useState<AcquisitionSelection[]>([]);
+  const [isCreatingSchema, setIsCreatingSchema] = useState(false);
+  const [showExistingModal, setShowExistingModal] = useState(false);
 
   const handleCreateNew = () => {
     setEditingSchema(null);
@@ -77,6 +86,85 @@ const SchemaStartPage: React.FC = () => {
     }
   };
 
+  // Toggle acquisition selection
+  const handleAcquisitionToggle = (selection: AcquisitionSelection) => {
+    setSelectedAcquisitions(prev => {
+      const exists = prev.some(
+        s => s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex
+      );
+      return exists
+        ? prev.filter(s => !(s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex))
+        : [...prev, selection];
+    });
+  };
+
+  // Create schema from selected acquisitions
+  const handleCreateFromSelected = async () => {
+    if (selectedAcquisitions.length === 0) return;
+
+    setIsCreatingSchema(true);
+    try {
+      const acquisitions: any[] = [];
+
+      // Group selections by schemaId for efficient loading
+      const selectionsBySchema = new Map<string, AcquisitionSelection[]>();
+      for (const sel of selectedAcquisitions) {
+        if (!selectionsBySchema.has(sel.schemaId)) {
+          selectionsBySchema.set(sel.schemaId, []);
+        }
+        selectionsBySchema.get(sel.schemaId)!.push(sel);
+      }
+
+      // Extract each acquisition
+      for (const [schemaId, selections] of selectionsBySchema) {
+        const schemaContent = await getSchemaContent(schemaId);
+        if (!schemaContent) {
+          console.warn(`Failed to load schema content for ${schemaId}`);
+          continue;
+        }
+
+        const parsedSchema = JSON.parse(schemaContent);
+        const acquisitionKeys = Object.keys(parsedSchema.acquisitions || {});
+
+        for (const sel of selections) {
+          if (sel.acquisitionIndex < acquisitionKeys.length) {
+            const acquisitionName = acquisitionKeys[sel.acquisitionIndex];
+            const targetAcquisition = parsedSchema.acquisitions[acquisitionName];
+
+            if (targetAcquisition) {
+              const newAcquisition = convertRawAcquisitionToContext(
+                acquisitionName,
+                targetAcquisition,
+                schemaId,
+                targetAcquisition.tags
+              );
+              acquisitions.push(newAcquisition);
+            }
+          }
+        }
+      }
+
+      if (acquisitions.length === 0) {
+        throw new Error('No valid acquisitions could be extracted');
+      }
+
+      // Set acquisitions in context
+      setAcquisitions(acquisitions);
+
+      // Clear origin/editing schema since we're creating fresh from multiple sources
+      setEditingSchema(null);
+      setOriginSchema(null);
+
+      // Navigate to build step
+      navigate('/schema-builder/build-schema');
+
+    } catch (error) {
+      console.error('Failed to create from selected:', error);
+      alert(`Failed to create schema from selections: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCreatingSchema(false);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -110,28 +198,24 @@ const SchemaStartPage: React.FC = () => {
         </div>
 
         {/* Start from Existing Schema Card */}
-        <div>
-          <div className="bg-surface-primary rounded-lg shadow-md p-6 border border-border mb-4">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Edit className="h-8 w-8 text-brand-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-content-primary mb-3">Start from Existing</h3>
-              <p className="text-content-secondary">
-                Use an existing schema as your starting template. You can save as a new schema or update the original.
-              </p>
+        <div className="bg-surface-primary rounded-lg shadow-md p-6 border border-border h-fit">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Edit className="h-8 w-8 text-brand-600" />
             </div>
+            <h3 className="text-xl font-semibold text-content-primary mb-3">Start from Existing</h3>
+            <p className="text-content-secondary mb-6">
+              Select individual acquisitions from existing schemas. Mix and match from multiple schemas to build your new schema.
+            </p>
+            <button
+              onClick={() => setShowExistingModal(true)}
+              className="inline-flex items-center px-6 py-3 bg-brand-600 text-content-inverted rounded-lg hover:bg-brand-700 transition-colors"
+            >
+              <Edit className="h-5 w-5 mr-2" />
+              Browse Existing Schemas
+              <ChevronRight className="h-5 w-5 ml-2" />
+            </button>
           </div>
-
-          <UnifiedSchemaSelector
-            librarySchemas={librarySchemas}
-            uploadedSchemas={uploadedSchemas}
-            selectionMode="schema"
-            onSchemaSelect={handleEditSchema}
-            onSchemaUpload={handleSchemaUpload}
-            expandable={false}
-            getSchemaContent={getSchemaContent}
-          />
         </div>
       </div>
 
@@ -169,6 +253,122 @@ const SchemaStartPage: React.FC = () => {
               >
                 OK
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Start from Existing Modal */}
+      {showExistingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-surface-primary rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <div>
+                <h3 className="text-xl font-semibold text-content-primary">Select Acquisitions</h3>
+                <p className="text-sm text-content-secondary mt-1">
+                  Expand schemas to select individual acquisitions. Mix and match from multiple schemas.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowExistingModal(false)}
+                className="text-content-tertiary hover:text-content-primary p-2"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <UnifiedSchemaSelector
+                librarySchemas={librarySchemas}
+                uploadedSchemas={uploadedSchemas}
+                selectionMode="acquisition"
+                multiSelectMode={true}
+                selectedAcquisitions={selectedAcquisitions}
+                onAcquisitionToggle={handleAcquisitionToggle}
+                onSchemaUpload={handleSchemaUpload}
+                expandable={true}
+                getSchemaContent={getSchemaContent}
+              />
+            </div>
+
+            {/* Modal Footer - Selection Summary */}
+            <div className="border-t border-border p-6">
+              {selectedAcquisitions.length > 0 ? (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 bg-brand-600 text-white rounded-full text-sm font-medium">
+                        {selectedAcquisitions.length}
+                      </span>
+                      <span className="text-content-secondary text-sm">
+                        acquisition{selectedAcquisitions.length !== 1 ? 's' : ''} selected
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedAcquisitions([])}
+                        className="px-3 py-1.5 text-sm text-content-secondary hover:text-content-primary flex items-center gap-1"
+                      >
+                        <X className="h-4 w-4" />
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleCreateFromSelected}
+                        disabled={isCreatingSchema}
+                        className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
+                      >
+                        {isCreatingSchema ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4" />
+                            Create from Selected
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  {/* Show selected acquisitions summary */}
+                  <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                    {selectedAcquisitions.map((sel) => (
+                      <span
+                        key={`${sel.schemaId}-${sel.acquisitionIndex}`}
+                        className="inline-flex items-center px-2 py-1 bg-surface-secondary rounded text-xs text-content-secondary border border-border"
+                      >
+                        <span className="font-medium text-content-primary">{sel.acquisitionName}</span>
+                        <span className="mx-1 text-content-tertiary">from</span>
+                        <span>{sel.schemaName}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAcquisitionToggle(sel);
+                          }}
+                          className="ml-1.5 text-content-tertiary hover:text-content-primary"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <p className="text-content-tertiary text-sm">
+                    Expand schemas and select acquisitions to include in your new schema.
+                  </p>
+                  <button
+                    onClick={() => setShowExistingModal(false)}
+                    className="px-4 py-2 bg-surface-secondary text-content-primary rounded-lg hover:bg-border-secondary"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

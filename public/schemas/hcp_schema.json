@@ -6,6 +6,7 @@
     "Human Connectome Project Consortium",
     "WU-Minn HCP Consortium"
   ],
+  "tags": ["brain"],
   "acquisitions": {
     "HCP_T1w_MPR": {
       "description": "3D T1-weighted MPRAGE structural imaging",

@@ -7,6 +7,7 @@ export interface SchemaAcquisition {
   id: string;
   protocolName: string;
   seriesDescription: string;
+  tags?: string[];
 }
 
 export interface UnifiedSchema extends SchemaTemplate {
@@ -70,7 +71,8 @@ export const useSchemaService = () => {
       const parsed = acquisitionsData.map((acq: any, index: number) => ({
         id: index.toString(),
         protocolName: acq.protocolName,
-        seriesDescription: acq.seriesDescription
+        seriesDescription: acq.seriesDescription,
+        tags: acq.tags
       }));
 
       // Cache the result
@@ -93,6 +95,7 @@ export const useSchemaService = () => {
       format: schema.format,
       version: schema.version,
       authors: schema.authors,
+      tags: schema.tags,
       acquisitions: schemaAcquisitions[schema.id] || [],
       isMultiAcquisition: (schemaAcquisitions[schema.id] || []).length > 1
     }));

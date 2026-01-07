@@ -143,7 +143,7 @@ export const SchemaManager: React.FC = () => {
       <div className="divide-y divide-gray-200">
         {filteredSchemas.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            {searchTerm ? 'No schemas match your search.' : 'No schemas uploaded yet.'}
+            {searchTerm ? 'No schemas match your search.' : 'No schemas loaded yet.'}
             {!searchTerm && (
               <button
                 onClick={() => setShowUploadModal(true)}

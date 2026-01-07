@@ -976,7 +976,8 @@ json.dumps(formatted_result)
               content: '', // Content will be loaded when schema is selected
               format: 'json' as const,
               version: schemaData.version,
-              authors: schemaData.authors || []
+              authors: schemaData.authors || [],
+              tags: schemaData.tags || []
             };
           } catch (error) {
             console.error(`Failed to load schema at ${path}:`, error);

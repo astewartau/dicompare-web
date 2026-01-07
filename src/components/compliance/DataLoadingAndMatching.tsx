@@ -1235,10 +1235,10 @@ const DataLoadingAndMatching: React.FC = () => {
           <>
             <Upload className="h-12 w-12 text-content-muted mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-content-primary mb-2">
-              {isExtra ? 'Upload More DICOM Files' : 'Load Data for Compliance Testing'}
+              {isExtra ? 'Load More DICOM Files' : 'Load Data for Compliance Testing'}
             </h3>
             <p className="text-content-secondary mb-4">
-              Drag and drop DICOM files (or .zip), protocol files (.pro, .exar1, .ExamCard, LxProtocol), or select a schema to generate test data
+              Evaluating compliance requires input data.<br/>Drag and drop DICOMs (folders or .zip), protocols (.pro, .exar1, .ExamCard, LxProtocol), or generate example data to begin.
             </p>
 
             <input
@@ -1404,7 +1404,7 @@ const DataLoadingAndMatching: React.FC = () => {
               <div>
                 <h2 className="text-xl font-semibold text-content-primary">Select Schema to Generate Test Data</h2>
                 <p className="text-sm text-content-secondary mt-1">
-                  Choose a schema to generate compliant DICOM files for testing
+                  Choose a schema to generate DICOM files for testing
                 </p>
               </div>
               <button

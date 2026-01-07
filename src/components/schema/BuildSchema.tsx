@@ -10,9 +10,8 @@ import UnifiedSchemaSelector from './UnifiedSchemaSelector';
 import { processFieldForUI } from '../../utils/fieldProcessing';
 import { roundDicomValue } from '../../utils/valueRounding';
 import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo } from '../../utils/fileUploadUtils';
-import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
+import { convertSchemaToAcquisitions, convertRawAcquisitionToContext } from '../../utils/schemaToAcquisition';
 import { processSchemaFieldForUI } from '../../utils/datatypeInference';
-import { buildValidationRuleFromField } from '../../utils/fieldFormatters';
 
 
 const BuildSchema: React.FC = () => {
@@ -324,7 +323,7 @@ const BuildSchema: React.FC = () => {
       console.log('✅ Analysis complete');
       
     } catch (error) {
-      console.error('❌ Upload failed:', error);
+      console.error('❌ Load failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setDicomAnalysisError(errorMessage);
       setUploadStatus('');
@@ -419,7 +418,7 @@ const BuildSchema: React.FC = () => {
           setSelectedAcquisitionId(processedAcquisitions[0].id);
         }
 
-        console.log(`✅ LxProtocol file uploaded successfully: ${acquisitions.length} scan(s)`);
+        console.log(`✅ LxProtocol file loaded successfully: ${acquisitions.length} scan(s)`);
       } else if (isExamCard) {
         const acquisitions = await dicompareAPI.loadExamCardFile(new Uint8Array(fileContent), file.name);
 
@@ -436,7 +435,7 @@ const BuildSchema: React.FC = () => {
           setSelectedAcquisitionId(processedAcquisitions[0].id);
         }
 
-        console.log(`✅ ExamCard file uploaded successfully: ${acquisitions.length} scan(s)`);
+        console.log(`✅ ExamCard file loaded successfully: ${acquisitions.length} scan(s)`);
       } else if (isExarFile) {
         const acquisitions = await dicompareAPI.loadExarFile(new Uint8Array(fileContent), file.name);
 
@@ -453,7 +452,7 @@ const BuildSchema: React.FC = () => {
           setSelectedAcquisitionId(processedAcquisitions[0].id);
         }
 
-        console.log(`✅ Exam archive file uploaded successfully: ${acquisitions.length} protocol(s)`);
+        console.log(`✅ Exam archive file loaded successfully: ${acquisitions.length} protocol(s)`);
       } else {
         const acquisition = await dicompareAPI.loadProFile(new Uint8Array(fileContent), file.name);
 
@@ -468,15 +467,15 @@ const BuildSchema: React.FC = () => {
         // Auto-select the newly created acquisition
         setSelectedAcquisitionId(processedAcquisition.id);
 
-        console.log('✅ Protocol file uploaded successfully');
+        console.log('✅ Protocol file loaded successfully');
       }
 
       setUploadProgress(100);
 
     } catch (error) {
-      console.error('❌ Protocol file upload failed:', error);
+      console.error('❌ Protocol file load failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setUploadStatus(`Upload failed: ${errorMessage}`);
+      setUploadStatus(`Load failed: ${errorMessage}`);
 
       setTimeout(() => {
         setUploadStatus('');
@@ -680,78 +679,13 @@ const BuildSchema: React.FC = () => {
         throw new Error(`Acquisition at index ${acquisitionIndex} not found in schema`);
       }
 
-      // Convert schema acquisition to builder format
-      const newAcquisition = {
-        id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        protocolName: acquisitionName,
-        seriesDescription: targetAcquisition.description || `Imported from ${schemaId}`,
-        totalFiles: 0,
-        acquisitionFields: [],
-        series: [],
-        validationFunctions: []
-      };
-
-      // Process acquisition-level fields
-      if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
-        newAcquisition.acquisitionFields = targetAcquisition.fields.map(field => {
-          const processedField = processSchemaFieldForUI(field);
-          return {
-            ...processedField,
-            level: 'acquisition'
-          };
-        });
-      }
-
-      // Process series-level fields and instances
-      if (targetAcquisition.series && Array.isArray(targetAcquisition.series)) {
-        const seriesInstances = [];
-
-        targetAcquisition.series.forEach(series => {
-          const seriesFields = [];
-
-          if (series.fields && Array.isArray(series.fields)) {
-            series.fields.forEach(f => {
-              // Create SeriesField objects for the fields array - use direct value format
-              // Build validation rule from schema properties using shared utility
-              const validationRule = buildValidationRuleFromField(f) || { type: 'exact' };
-
-              seriesFields.push({
-                tag: f.tag,
-                name: f.field || f.name,
-                value: f.value,  // Direct value, same as acquisition fields
-                validationRule,
-                fieldType: f.fieldType  // Preserve field type (standard/derived)
-              });
-            });
-          }
-
-          seriesInstances.push({
-            name: series.name,
-            fields: seriesFields
-          });
-        });
-
-        newAcquisition.series = seriesInstances;
-      }
-
-      // Process validation rules
-      if (targetAcquisition.rules && Array.isArray(targetAcquisition.rules)) {
-        newAcquisition.validationFunctions = targetAcquisition.rules.map(rule => ({
-          id: rule.id,
-          name: rule.name,
-          description: rule.description,
-          implementation: rule.implementation,
-          fields: rule.fields || [],
-          category: 'Custom',
-          testCases: rule.testCases || [],
-          customName: rule.name,
-          customDescription: rule.description,
-          customFields: rule.fields || [],
-          customImplementation: rule.implementation,
-          customTestCases: [],
-          enabledSystemFields: []
-        }));
-      }
+      // Convert using shared utility
+      const newAcquisition = convertRawAcquisitionToContext(
+        acquisitionName,
+        targetAcquisition,
+        schemaId,
+        targetAcquisition.tags
+      );
 
       // Add to acquisitions
       setAcquisitions(prev => [...prev, newAcquisition]);
@@ -900,11 +834,11 @@ const BuildSchema: React.FC = () => {
               {isAdditional ? 'Add More Content' : 'Create Acquisitions'}
             </h3>
             <p className="text-sm text-content-secondary mb-6 text-center">
-              {isAdditional ? 'Upload more files, zip archives, or add manual acquisitions' : 'Upload files, zip archives, drag and drop, or create acquisitions manually'}
+              {isAdditional ? 'Load more files, zip archives, or add manual acquisitions' : 'Load files, zip archives, drag and drop, or create acquisitions manually'}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* DICOM Upload Section */}
+          {/* DICOM Loading Section */}
           <div className="border border-blue-500/20 rounded-lg p-4 bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
             <div className="text-center">
               <Upload className="h-6 w-6 text-blue-500 mx-auto mb-2" />
@@ -1053,7 +987,7 @@ const BuildSchema: React.FC = () => {
                   'Review and modify the loaded schema acquisitions and configure which DICOM fields to include.' :
                   'Review detected acquisitions and configure which DICOM fields to include in your validation schema.'
               ) : (
-                'Upload reference files to automatically extract metadata and create acquisition schemas, or manually add acquisitions.'
+                'Load reference files to automatically extract metadata and create acquisition schemas, or manually add acquisitions.'
               )}
             </p>
           </div>

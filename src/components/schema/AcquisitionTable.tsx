@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText } from 'lucide-react';
+import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText, Tag } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import FieldTable from './FieldTable';
 import SeriesTable from './SeriesTable';
 import DicomFieldSelector from '../common/DicomFieldSelector';
+import TagInput from '../common/TagInput';
+import { useTagSuggestions } from '../../hooks/useTagSuggestions';
 import ValidationFunctionLibraryModal from '../validation/ValidationFunctionLibraryModal';
 import ValidationFunctionEditorModal from '../validation/ValidationFunctionEditorModal';
 import FieldConversionModal from './FieldConversionModal';
@@ -98,6 +100,8 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [isPassedExpanded, setIsPassedExpanded] = useState(false);
   const [showTestDicomGenerator, setShowTestDicomGenerator] = useState(false);
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
+  const [showTagsInput, setShowTagsInput] = useState(false);
+  const { allTags } = useTagSuggestions();
 
   const isComplianceMode = mode === 'compliance';
   const isSchemaMode = isComplianceMode || Boolean(schemaId);
@@ -396,6 +400,48 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Tags row - show in edit mode when not in schema mode */}
+        {isEditMode && !isSchemaMode && (
+          <div className="mt-2">
+            {showTagsInput ? (
+              <div className="border border-border-secondary rounded-md p-2 bg-surface-primary">
+                <TagInput
+                  tags={acquisition.tags || []}
+                  onChange={(tags) => onUpdate('tags', tags)}
+                  suggestions={allTags}
+                  placeholder="Add tags (e.g., structural, fMRI)..."
+                />
+                <button
+                  onClick={() => setShowTagsInput(false)}
+                  className="mt-1 text-xs text-content-tertiary hover:text-content-secondary"
+                >
+                  Done editing tags
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowTagsInput(true)}
+                className="flex items-center text-xs text-content-tertiary hover:text-content-secondary transition-colors"
+              >
+                <Tag className="h-3 w-3 mr-1" />
+                {acquisition.tags && acquisition.tags.length > 0 ? (
+                  <span>Tags: {acquisition.tags.join(', ')}</span>
+                ) : (
+                  <span>Add tags...</span>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Display tags in view/schema mode */}
+        {!isEditMode && acquisition.tags && acquisition.tags.length > 0 && (
+          <div className="mt-1 flex items-center text-xs text-content-tertiary">
+            <Tag className="h-3 w-3 mr-1" />
+            <span>{acquisition.tags.join(', ')}</span>
+          </div>
+        )}
 
         {/* Schema info or stats row */}
         <div className="mt-1 text-xs text-content-tertiary">

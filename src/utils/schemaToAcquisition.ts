@@ -1,6 +1,7 @@
 import { UnifiedSchema } from '../hooks/useSchemaService';
 import { Acquisition, DicomField } from '../types';
 import { inferDataTypeFromValue, processSchemaFieldForUI } from './datatypeInference';
+import { buildValidationRuleFromField } from './fieldFormatters';
 
 /**
  * Converts a UnifiedSchema and specific acquisition to a full Acquisition object
@@ -123,4 +124,91 @@ export const convertSchemaToAcquisitions = async (
   }
 
   return acquisitions;
+};
+
+/**
+ * Converts raw schema acquisition data to an Acquisition object ready for AcquisitionContext.
+ * This is the same logic used by handleCopyFromSchema in BuildSchema.tsx.
+ *
+ * @param acquisitionName - The name/key of the acquisition in the schema
+ * @param targetAcquisition - The raw acquisition data from parsed schema JSON
+ * @param schemaId - Optional schema ID for identification purposes
+ * @param tags - Optional tags to include on the acquisition
+ */
+export const convertRawAcquisitionToContext = (
+  acquisitionName: string,
+  targetAcquisition: any,
+  schemaId?: string,
+  tags?: string[]
+): Acquisition => {
+  const newAcquisition: Acquisition = {
+    id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    protocolName: acquisitionName,
+    seriesDescription: targetAcquisition.description || (schemaId ? `Imported from ${schemaId}` : ''),
+    detailedDescription: targetAcquisition.detailed_description || '',
+    totalFiles: 0,
+    acquisitionFields: [],
+    series: [],
+    validationFunctions: [],
+    tags: tags || targetAcquisition.tags || [],
+    metadata: targetAcquisition.metadata || {}
+  };
+
+  // Process acquisition-level fields
+  if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
+    newAcquisition.acquisitionFields = targetAcquisition.fields.map((field: any) => {
+      const processedField = processSchemaFieldForUI(field);
+      return {
+        ...processedField,
+        level: 'acquisition' as const
+      };
+    });
+  }
+
+  // Process series-level fields and instances
+  if (targetAcquisition.series && Array.isArray(targetAcquisition.series)) {
+    newAcquisition.series = targetAcquisition.series.map((series: any) => {
+      const seriesFields: any[] = [];
+
+      if (series.fields && Array.isArray(series.fields)) {
+        series.fields.forEach((f: any) => {
+          const validationRule = buildValidationRuleFromField(f) || { type: 'exact' as const };
+
+          seriesFields.push({
+            tag: f.tag,
+            name: f.field || f.name,
+            value: f.value,
+            validationRule,
+            fieldType: f.fieldType
+          });
+        });
+      }
+
+      return {
+        name: series.name,
+        fields: seriesFields
+      };
+    });
+  }
+
+  // Process validation rules
+  if (targetAcquisition.rules && Array.isArray(targetAcquisition.rules)) {
+    newAcquisition.validationFunctions = targetAcquisition.rules.map((rule: any) => ({
+      id: rule.id,
+      name: rule.name,
+      description: rule.description,
+      implementation: rule.implementation,
+      fields: rule.fields || [],
+      category: 'Custom',
+      testCases: rule.testCases || [],
+      customName: rule.name,
+      customDescription: rule.description,
+      customFields: rule.fields || [],
+      customImplementation: rule.implementation,
+      customTestCases: [],
+      enabledSystemFields: []
+    }));
+  }
+
+  return newAcquisition;
 };

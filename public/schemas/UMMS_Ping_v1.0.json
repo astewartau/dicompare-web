@@ -5,9 +5,13 @@
   "authors": [
     "Christian Haselgrove"
   ],
+  "tags": [
+    "brain"
+  ],
   "acquisitions": {
     "Localizer": {
       "description": "Survey/localizer scan",
+      "tags": ["localizer"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -252,6 +256,7 @@
     },
     "T2w-TSE": {
       "description": "T2-weighted turbo spin echo structural image",
+      "tags": ["structural", "T2-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -496,6 +501,7 @@
     },
     "T1w-MPRAGE": {
       "description": "T1-weighted MPRAGE structural image",
+      "tags": ["structural", "T1-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -740,6 +746,7 @@
     },
     "DWI-ADC": {
       "description": "Apparent diffusion coefficient map",
+      "tags": ["diffusion", "dMRI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -984,6 +991,7 @@
     },
     "DWI-EADC": {
       "description": "Exponential apparent diffusion coefficient map",
+      "tags": ["diffusion", "dMRI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1228,6 +1236,7 @@
     },
     "DWI-FA": {
       "description": "Fractional anisotropy map",
+      "tags": ["diffusion", "dMRI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -2065,6 +2074,7 @@
     },
     "B0-FieldMap-HighRes": {
       "description": "B0 field map for distortion correction (high resolution)",
+      "tags": ["fieldmap"],
       "fields": [
         {
           "field": "SequenceVariant",
@@ -2304,6 +2314,7 @@
     },
     "B0-FieldMap-SENSE": {
       "description": "B0 field map for distortion correction (SENSE accelerated)",
+      "tags": ["fieldmap"],
       "fields": [
         {
           "field": "SequenceVariant",
@@ -2548,6 +2559,7 @@
     },
     "DWI": {
       "description": "Diffusion-weighted imaging",
+      "tags": ["diffusion", "dMRI"],
       "fields": [
         {
           "field": "SequenceVariant",

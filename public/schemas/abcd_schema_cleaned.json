@@ -6,6 +6,7 @@
     "Chloe Hampson",
     "Cleaned by dicompare"
   ],
+  "tags": ["brain"],
   "acquisitions": {
     "ABCD_fMRI_DistortionMap_PA": {
       "description": "fMRI B0 field map - Posterior-Anterior phase encoding",
