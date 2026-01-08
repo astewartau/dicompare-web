@@ -9,7 +9,7 @@ import AcquisitionTable from './AcquisitionTable';
 import UnifiedSchemaSelector from './UnifiedSchemaSelector';
 import { processFieldForUI } from '../../utils/fieldProcessing';
 import { roundDicomValue } from '../../utils/valueRounding';
-import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo } from '../../utils/fileUploadUtils';
+import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo, getAllFilesFromDirectory } from '../../utils/fileUploadUtils';
 import { convertSchemaToAcquisitions, convertRawAcquisitionToContext } from '../../utils/schemaToAcquisition';
 import { processSchemaFieldForUI } from '../../utils/datatypeInference';
 
@@ -611,43 +611,6 @@ const BuildSchema: React.FC = () => {
       }
     }
   }, [handleFileUpload, handleProFileUpload]);
-
-  // Helper function to recursively get all files from a directory
-  const getAllFilesFromDirectory = async (dirEntry: FileSystemDirectoryEntry): Promise<File[]> => {
-    const files: File[] = [];
-    
-    return new Promise((resolve) => {
-      const reader = dirEntry.createReader();
-      
-      const readEntries = () => {
-        reader.readEntries(async (entries) => {
-          if (entries.length === 0) {
-            resolve(files);
-            return;
-          }
-          
-          for (const entry of entries) {
-            if (entry.isFile) {
-              const file = await new Promise<File>((fileResolve) => {
-                (entry as FileSystemFileEntry).file(fileResolve);
-              });
-              files.push(file);
-            } else if (entry.isDirectory) {
-              const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
-              files.push(...subFiles);
-            }
-          }
-          
-          // Continue reading entries (directories might have more entries than fit in one read)
-          readEntries();
-        });
-      };
-      
-      readEntries();
-    });
-  };
-
-
 
   const clearData = () => {
     setAcquisitions([]);

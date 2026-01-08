@@ -24,7 +24,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Acquisition, ProcessingProgress, AcquisitionSelection } from '../../types';
 import { dicompareAPI } from '../../services/DicompareAPI';
-import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo } from '../../utils/fileUploadUtils';
+import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo, getAllFilesFromDirectory } from '../../utils/fileUploadUtils';
 import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { SchemaUploadModal } from '../schema/SchemaUploadModal';
 import { schemaCacheManager } from '../../services/SchemaCacheManager';
@@ -33,10 +33,8 @@ import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import ComplianceReportModal from './ComplianceReportModal';
 import DetailedDescriptionModal from '../schema/DetailedDescriptionModal';
 import CombinedComplianceView from './CombinedComplianceView';
-import { processSchemaFieldForUI, inferDataTypeFromValue } from '../../utils/datatypeInference';
-import { getFieldByKeyword } from '../../services/dicomFieldService';
-import { extractValidationFieldValues, generateTestDataFromSchema } from '../../utils/testDataGeneration';
-import JSZip from 'jszip';
+import { generateDicomsFromAcquisition } from '../../utils/testDataGeneration';
+import { convertSchemaToAcquisition } from '../../utils/schemaToAcquisition';
 
 // ✅ MOVE COMPONENT OUTSIDE TO PREVENT RECREATION!
 const SchemaAcquisitionDisplay = React.memo<{
@@ -470,200 +468,6 @@ const DataLoadingAndMatching: React.FC = () => {
   }, [loadedData, selectedAcquisitionId]);
 
 
-  // Helper function to convert schema to acquisition format for display
-  const convertSchemaToAcquisition = async (binding: SchemaBinding): Promise<Acquisition> => {
-    const { schema, acquisitionId } = binding;
-    console.log('🔧 convertSchemaToAcquisition called with:', { schemaId: schema.id, acquisitionId });
-
-    let acquisitionDescription = schema.description || 'Schema requirements';
-    let acquisitionProtocolName = schema.name; // Default to schema name, override with acquisition name if found
-
-    try {
-      // Get schema content to extract fields
-      const schemaContent = await getSchemaContent(schema.id);
-      console.log('🔧 Got schema content, length:', schemaContent?.length);
-      let schemaFields: any[] = [];
-      let seriesInstances: any[] = [];
-
-      if (schemaContent) {
-        const parsedSchema = JSON.parse(schemaContent);
-        // Extract fields from schema structure - this depends on your schema format
-        if (parsedSchema.acquisitions && typeof parsedSchema.acquisitions === 'object') {
-
-          // Handle acquisitions as an object with named keys (e.g., "QSM", "0")
-          let targetAcquisition = null;
-
-          if (acquisitionId === undefined || acquisitionId === null) {
-            throw new Error(`No acquisitionId provided. Available acquisitions: ${Object.keys(parsedSchema.acquisitions).join(', ')}`);
-          }
-
-          const acquisitionKeys = Object.keys(parsedSchema.acquisitions);
-          const index = parseInt(acquisitionId, 10);
-
-          if (isNaN(index) || index < 0 || index >= acquisitionKeys.length) {
-            throw new Error(`Invalid acquisition index "${acquisitionId}". Must be 0-${acquisitionKeys.length - 1}. Available: ${acquisitionKeys.map((key, i) => `${i}: ${key}`).join(', ')}`);
-          }
-
-          const acquisitionName = acquisitionKeys[index];
-          targetAcquisition = parsedSchema.acquisitions[acquisitionName];
-          acquisitionProtocolName = acquisitionName; // Use the actual acquisition name
-
-          if (targetAcquisition) {
-            // Use acquisition-specific description if available
-            if (targetAcquisition.description) {
-              acquisitionDescription = targetAcquisition.description;
-            }
-
-            // Extract acquisition-level fields
-            if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
-              // Convert schema format fields to DicomField format using processSchemaFieldForUI
-              schemaFields = targetAcquisition.fields.map(f => {
-                const processed = processSchemaFieldForUI(f);
-                return {
-                  ...processed,
-                  level: 'acquisition'
-                };
-              });
-            } else {
-              schemaFields = [
-                ...(targetAcquisition.acquisitionFields || targetAcquisition.acquisition_fields || [])
-              ];
-            }
-
-            // Extract series-level fields and series instances separately
-            if (targetAcquisition.series && Array.isArray(targetAcquisition.series)) {
-              // Collect unique field definitions for seriesFields
-              const fieldMap = new Map();
-
-              targetAcquisition.series.forEach(series => {
-                const seriesData = { name: series.name, fields: [] };
-
-                if (series.fields && Array.isArray(series.fields)) {
-                  series.fields.forEach(f => {
-                    // Process the schema field to get proper validation rule
-                    const processed = processSchemaFieldForUI(f);
-
-                    // Add to unique field definitions
-                    if (!fieldMap.has(f.tag)) {
-                      fieldMap.set(f.tag, {
-                        name: f.field || f.name,
-                        tag: f.tag,
-                        value: '', // No default value for series fields
-                        level: 'series',
-                        dataType: processed.dataType,
-                        validationRule: processed.validationRule
-                      });
-                    }
-
-                    // Add field to this series instance as an array element
-                    seriesData.fields.push({
-                      tag: f.tag,
-                      name: f.field || f.name,
-                      value: processed.value,
-                      dataType: processed.dataType,
-                      validationRule: processed.validationRule
-                    });
-                  });
-                }
-
-                seriesInstances.push(seriesData);
-              });
-
-              const uniqueSeriesFields = Array.from(fieldMap.values());
-              schemaFields = [...schemaFields, ...uniqueSeriesFields];
-            }
-          }
-        } else if (parsedSchema.fields) {
-          schemaFields = parsedSchema.fields;
-        } else {
-          // Maybe it's at the top level?
-          if (parsedSchema.acquisition_fields || parsedSchema.acquisitionFields) {
-            schemaFields = [
-              ...(parsedSchema.acquisition_fields || parsedSchema.acquisitionFields || []),
-              ...(parsedSchema.series_fields || parsedSchema.seriesFields || [])
-            ];
-          }
-        }
-      }
-
-      // Extract validation rules
-      let validationRules = [];
-      if (schemaContent) {
-        const parsedSchema = JSON.parse(schemaContent);
-        if (parsedSchema.acquisitions && typeof parsedSchema.acquisitions === 'object') {
-          let targetAcquisition = null;
-
-          if (acquisitionId === undefined || acquisitionId === null) {
-            throw new Error(`No acquisitionId provided. Available acquisitions: ${Object.keys(parsedSchema.acquisitions).join(', ')}`);
-          }
-
-          const acquisitionKeys = Object.keys(parsedSchema.acquisitions);
-          const index = parseInt(acquisitionId, 10);
-
-          if (isNaN(index) || index < 0 || index >= acquisitionKeys.length) {
-            throw new Error(`Invalid acquisition index "${acquisitionId}". Must be 0-${acquisitionKeys.length - 1}. Available: ${acquisitionKeys.map((key, i) => `${i}: ${key}`).join(', ')}`);
-          }
-
-          const acquisitionName = acquisitionKeys[index];
-          targetAcquisition = parsedSchema.acquisitions[acquisitionName];
-          console.log('✅ Found acquisition by index:', index, '→', acquisitionName);
-
-          if (targetAcquisition && targetAcquisition.rules && Array.isArray(targetAcquisition.rules)) {
-            validationRules = targetAcquisition.rules.map(rule => ({
-              id: rule.id,
-              name: rule.name,
-              description: rule.description,
-              implementation: rule.implementation,
-              fields: rule.fields || [],
-              category: 'Custom',
-              testCases: rule.testCases || []
-            }));
-          }
-        }
-      }
-
-      // Convert to acquisition format
-      return {
-        id: `schema-${schema.id}-${acquisitionId || 'default'}`,
-        protocolName: acquisitionProtocolName,
-        seriesDescription: acquisitionDescription,
-        acquisitionFields: schemaFields.filter(f => !f.level || f.level === 'acquisition') || [],
-        seriesFields: schemaFields.filter(f => f.level === 'series') || [],
-        series: seriesInstances,
-        totalFiles: 0,
-        validationFunctions: (() => {
-          const functions = validationRules.map(rule => ({
-            ...rule,
-            customName: rule.name,
-            customDescription: rule.description,
-            customFields: rule.fields || [],
-            customImplementation: rule.implementation,
-            customTestCases: rule.testCases || [],  // Preserve test cases from schema
-            enabledSystemFields: []
-          }));
-          return functions;
-        })()
-      };
-    } catch (error) {
-      console.error('❌ Failed to convert schema to acquisition:', error);
-      console.error('❌ Error details:', error.message);
-      console.error('❌ Schema ID:', schema.id);
-      console.error('❌ Acquisition ID:', acquisitionId);
-      // Return minimal acquisition if conversion fails
-      return {
-        id: `schema-${schema.id}-${acquisitionId || 'default'}`,
-        protocolName: acquisitionProtocolName,
-        seriesDescription: acquisitionDescription,
-        acquisitionFields: [],
-        seriesFields: [],
-        series: [],
-        totalFiles: 0,
-        validationFunctions: []
-      };
-    }
-  };
-
-
   // Helper to get or load schema acquisition - uses ref for stable callback
   const getSchemaAcquisition = useCallback(async (binding: SchemaBinding): Promise<Acquisition | null> => {
     const key = `${binding.schemaId}-${binding.acquisitionId || 'default'}`;
@@ -673,14 +477,21 @@ const DataLoadingAndMatching: React.FC = () => {
     }
 
     try {
-      const acquisition = await convertSchemaToAcquisition(binding);
-      schemaAcquisitionsRef.current.set(key, acquisition);
+      // Use shared utility for schema conversion
+      const acquisition = await convertSchemaToAcquisition(
+        binding.schema,
+        binding.acquisitionId || '0',
+        getSchemaContent
+      );
+      if (acquisition) {
+        schemaAcquisitionsRef.current.set(key, acquisition);
+      }
       return acquisition;
     } catch (error) {
       console.error('Failed to get schema acquisition:', error);
       return null;
     }
-  }, []);
+  }, [getSchemaContent]);
 
   // Schema pairing helpers
   const pairSchemaWithAcquisition = (acquisitionId: string, schemaId: string, schemaAcquisitionId?: number) => {
@@ -866,19 +677,16 @@ const DataLoadingAndMatching: React.FC = () => {
       let acquisitions: Acquisition[];
       if (isLxProtocol) {
         acquisitions = await dicompareAPI.loadLxProtocolFile(uint8Array, proFile.name);
-        console.log(`📦 Loaded ${acquisitions.length} scan(s) from GE LxProtocol file`);
       } else if (isExamCard) {
         acquisitions = await dicompareAPI.loadExamCardFile(uint8Array, proFile.name);
-        console.log(`📦 Loaded ${acquisitions.length} scan(s) from ExamCard file`);
       } else if (isExarFile) {
         acquisitions = await dicompareAPI.loadExarFile(uint8Array, proFile.name);
-        console.log(`📦 Loaded ${acquisitions.length} protocol(s) from .exar1 file`);
       } else {
         const acquisition = await dicompareAPI.loadProFile(uint8Array, proFile.name);
         acquisitions = [acquisition];
       }
 
-      // Process each acquisition
+      // Generate DICOMs for each acquisition using shared utility
       const allDicomFiles: File[] = [];
       const totalAcquisitions = acquisitions.length;
 
@@ -886,116 +694,16 @@ const DataLoadingAndMatching: React.FC = () => {
         const acquisition = acquisitions[acqIndex];
         const baseProgress = 10 + (acqIndex / totalAcquisitions) * 60;
 
-        setProgress(prev => ({
-          ...prev!,
-          currentOperation: `Processing ${acquisition.protocolName} (${acqIndex + 1}/${totalAcquisitions})...`,
-          percentage: baseProgress
-        }));
-
-        // Build all fields list (acquisition + series)
-        const allFields = [...(acquisition.acquisitionFields || [])];
-
-        // Add series fields (handle object format from protocol files)
-        const seriesFieldMap = new Map<string, any>();
-        (acquisition.series || []).forEach(series => {
-          if (typeof series.fields === 'object' && !Array.isArray(series.fields)) {
-            Object.entries(series.fields).forEach(([tag, fieldData]: [string, any]) => {
-              if (!seriesFieldMap.has(tag)) {
-                seriesFieldMap.set(tag, {
-                  tag: tag,
-                  name: fieldData.name || fieldData.field || tag,
-                  value: fieldData.value,
-                  level: 'series',
-                  ...fieldData
-                });
-              }
-            });
-          }
+        const dicomFiles = await generateDicomsFromAcquisition(acquisition, (message, pct) => {
+          setProgress(prev => ({
+            ...prev!,
+            currentOperation: `${acquisition.protocolName}: ${message}`,
+            percentage: baseProgress + (pct * 0.6 * (1 / totalAcquisitions))
+          }));
         });
-        allFields.push(...Array.from(seriesFieldMap.values()));
 
-        // Extract validation field values from validation functions
-        const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
-          acquisition.validationFunctions || [],
-          allFields,
-          acquisition.series || []
-        );
-
-        // Ensure ProtocolName field exists if not in schema
-        const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
-        if (!hasProtocolName && acquisition.protocolName) {
-          const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
-          if (protocolNameFieldDef) {
-            const cleanedName = acquisition.protocolName
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, '_')
-              .replace(/^_+|_+$/g, '');
-
-            allFields.push({
-              name: protocolNameFieldDef.keyword,
-              tag: protocolNameFieldDef.tag,
-              vr: protocolNameFieldDef.vr,
-              level: 'acquisition',
-              value: cleanedName,
-              dataType: 'String'
-            });
-          }
-        }
-
-        // Generate test data using shared utility
-        const testData = generateTestDataFromSchema(
-          allFields,
-          acquisition.series || [],
-          validationFieldValues,
-          maxValidationRows
-        );
-
-        // Add fields from testData that aren't in allFields (from validation tests)
-        const existingFieldNames = new Set(allFields.map(f => f.name));
-        const testDataFieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
-
-        for (const fieldName of testDataFieldNames) {
-          if (!existingFieldNames.has(fieldName)) {
-            const fieldDef = await getFieldByKeyword(fieldName);
-            if (fieldDef) {
-              allFields.push({
-                name: fieldName,
-                tag: fieldDef.tag.replace(/[()]/g, ''),
-                vr: fieldDef.vr || '',
-                level: 'acquisition',
-                dataType: inferDataTypeFromValue(testData[0][fieldName]),
-                value: testData[0][fieldName]
-              } as any);
-            }
-          }
-        }
-
-        // Generate DICOMs from the test data
-        setProgress(prev => ({
-          ...prev!,
-          currentOperation: `Generating DICOMs for ${acquisition.protocolName}...`,
-          percentage: baseProgress + 20
-        }));
-        const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(
-          acquisition,
-          testData,
-          allFields
-        );
-
-        // Unzip in-memory and collect DICOM files
-        const zip = await JSZip.loadAsync(zipBlob);
-
-        for (const [filename, zipEntry] of Object.entries(zip.files)) {
-          if (!zipEntry.dir && filename.endsWith('.dcm')) {
-            const blob = await zipEntry.async('blob');
-            allDicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
-          }
-        }
-
-        console.log(`✅ Generated DICOMs for ${acquisition.protocolName}`);
+        allDicomFiles.push(...dicomFiles);
       }
-
-      console.log(`✅ Generated ${allDicomFiles.length} total DICOM files from ${fileType} file`);
 
       // Process all generated DICOMs through existing pipeline
       setProgress(prev => ({ ...prev!, currentOperation: 'Processing generated DICOMs...', percentage: 80 }));
@@ -1024,124 +732,33 @@ const DataLoadingAndMatching: React.FC = () => {
     });
 
     try {
-      // Step 1: Load the schema acquisition
+      // Step 1: Load the schema acquisition using shared utility
       setProgress(prev => ({ ...prev!, currentOperation: 'Loading schema acquisition...', percentage: 10 }));
-      const acquisition = await convertSchemaToAcquisition(binding);
+      const acquisition = await convertSchemaToAcquisition(
+        binding.schema,
+        binding.acquisitionId || '0',
+        getSchemaContent
+      );
 
       if (!acquisition) {
         throw new Error('Failed to load schema acquisition');
       }
 
-      // Step 2: Generate test data from the acquisition using shared utility
-      setProgress(prev => ({ ...prev!, currentOperation: 'Generating test data...', percentage: 30 }));
-
-      // Build all fields list (acquisition + series)
-      const allFields = [...(acquisition.acquisitionFields || [])];
-
-      // Add series fields
-      const seriesFieldMap = new Map<string, any>();
-      (acquisition.series || []).forEach(series => {
-        if (Array.isArray(series.fields)) {
-          series.fields.forEach(field => {
-            if (!seriesFieldMap.has(field.tag)) {
-              seriesFieldMap.set(field.tag, {
-                ...field,
-                level: 'series'
-              });
-            }
-          });
-        }
+      // Step 2: Generate DICOMs using shared utility
+      const dicomFiles = await generateDicomsFromAcquisition(acquisition, (message, pct) => {
+        setProgress(prev => ({
+          ...prev!,
+          currentOperation: message,
+          percentage: 10 + (pct * 0.7)
+        }));
       });
-      allFields.push(...Array.from(seriesFieldMap.values()));
 
-      // Extract validation field values from validation functions
-      const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
-        acquisition.validationFunctions || [],
-        allFields,
-        acquisition.series || []
-      );
-
-      // Ensure ProtocolName field exists if not in schema
-      // Use acquisition name as fallback for ProtocolName DICOM field
-      const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
-      if (!hasProtocolName && acquisition.protocolName) {
-        const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
-        if (protocolNameFieldDef) {
-          // Clean acquisition name for use as ProtocolName (lowercase, underscores, no special chars)
-          const cleanedName = acquisition.protocolName
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '_')
-            .replace(/^_+|_+$/g, '');
-
-          allFields.push({
-            name: protocolNameFieldDef.keyword,
-            tag: protocolNameFieldDef.tag,
-            vr: protocolNameFieldDef.vr,
-            level: 'acquisition',
-            value: cleanedName,
-            dataType: 'String'
-          });
-        }
-      }
-
-      // Generate test data using shared utility
-      const testData = generateTestDataFromSchema(
-        allFields,
-        acquisition.series || [],
-        validationFieldValues,
-        maxValidationRows
-      );
-
-      // Add fields from testData that aren't in allFields (from validation tests)
-      const existingFieldNames = new Set(allFields.map(f => f.name));
-      const testDataFieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
-
-      for (const fieldName of testDataFieldNames) {
-        if (!existingFieldNames.has(fieldName)) {
-          // This field came from validation tests - look up its DICOM tag
-          const fieldDef = await getFieldByKeyword(fieldName);
-          if (fieldDef) {
-            allFields.push({
-              name: fieldName,
-              tag: fieldDef.tag.replace(/[()]/g, ''),
-              vr: fieldDef.vr || '',
-              level: 'acquisition',
-              dataType: inferDataTypeFromValue(testData[0][fieldName]),
-              value: testData[0][fieldName]
-            } as any);
-          }
-        }
-      }
-
-      // Step 3: Generate DICOMs from the test data
-      setProgress(prev => ({ ...prev!, currentOperation: 'Generating DICOM files...', percentage: 50 }));
-      const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(
-        acquisition,
-        testData,
-        allFields
-      );
-
-      // Step 4: Unzip in-memory
-      setProgress(prev => ({ ...prev!, currentOperation: 'Extracting DICOM files...', percentage: 70 }));
-      const zip = await JSZip.loadAsync(zipBlob);
-      const dicomFiles: File[] = [];
-
-      for (const [filename, zipEntry] of Object.entries(zip.files)) {
-        if (!zipEntry.dir && filename.endsWith('.dcm')) {
-          const blob = await zipEntry.async('blob');
-          dicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
-        }
-      }
-
-      console.log(`✅ Generated ${dicomFiles.length} DICOM files from schema`);
-
-      // Step 5: Convert to FileList and process through existing DICOM pipeline
+      // Step 3: Process generated DICOMs through existing pipeline
       setProgress(prev => ({ ...prev!, currentOperation: 'Processing generated DICOMs...', percentage: 80 }));
 
       const fileList = new DataTransfer();
       dicomFiles.forEach(file => fileList.items.add(file));
 
-      // Process the generated DICOMs using existing pipeline
       await handleFileUpload(fileList.files);
 
     } catch (error) {
@@ -1150,7 +767,7 @@ const DataLoadingAndMatching: React.FC = () => {
       setIsProcessing(false);
       setProgress(null);
     }
-  }, [handleFileUpload, convertSchemaToAcquisition]);
+  }, [handleFileUpload, getSchemaContent]);
 
   // Drag and drop handlers (unchanged)
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -1164,39 +781,6 @@ const DataLoadingAndMatching: React.FC = () => {
       setIsDragOver(false);
     }
   }, []);
-
-  const getAllFilesFromDirectory = async (dirEntry: FileSystemDirectoryEntry): Promise<File[]> => {
-    const files: File[] = [];
-
-    return new Promise((resolve) => {
-      const reader = dirEntry.createReader();
-
-      const readEntries = () => {
-        reader.readEntries(async (entries) => {
-          if (entries.length === 0) {
-            resolve(files);
-            return;
-          }
-
-          for (const entry of entries) {
-            if (entry.isFile) {
-              const file = await new Promise<File>((fileResolve) => {
-                (entry as FileSystemFileEntry).file(fileResolve);
-              });
-              files.push(file);
-            } else if (entry.isDirectory) {
-              const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
-              files.push(...subFiles);
-            }
-          }
-
-          readEntries();
-        });
-      };
-
-      readEntries();
-    });
-  };
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -1689,16 +1273,9 @@ const DataLoadingAndMatching: React.FC = () => {
     const schema = getUnifiedSchema(schemaId);
     if (!schema) return;
 
-    const binding: SchemaBinding = {
-      schemaId,
-      acquisitionId: acquisitionIndex,
-      schema
-    };
-
     setUploadingForSchema(selectionId);
 
     try {
-      // Use existing handleSchemaAsData logic but link to schema-first selection
       setIsProcessing(true);
       setProgress({
         currentFile: 0,
@@ -1707,71 +1284,25 @@ const DataLoadingAndMatching: React.FC = () => {
         percentage: 0
       });
 
-      // Convert schema to acquisition
+      // Convert schema to acquisition using shared utility
       setProgress(prev => ({ ...prev!, currentOperation: 'Loading schema acquisition...', percentage: 10 }));
-      const acquisition = await convertSchemaToAcquisition(binding);
+      const acquisition = await convertSchemaToAcquisition(schema, acquisitionIndex, getSchemaContent);
 
       if (!acquisition) {
         throw new Error('Failed to load schema acquisition');
       }
 
-      // Generate test data
-      setProgress(prev => ({ ...prev!, currentOperation: 'Generating test data...', percentage: 30 }));
-
-      const allFields = [...(acquisition.acquisitionFields || [])];
-      const seriesFieldMap = new Map<string, any>();
-      (acquisition.series || []).forEach(series => {
-        if (Array.isArray(series.fields)) {
-          series.fields.forEach(field => {
-            if (!seriesFieldMap.has(field.tag)) {
-              seriesFieldMap.set(field.tag, { ...field, level: 'series' });
-            }
-          });
-        }
+      // Generate DICOMs using shared utility
+      const dicomFiles = await generateDicomsFromAcquisition(acquisition, (message, pct) => {
+        setProgress(prev => ({
+          ...prev!,
+          currentOperation: message,
+          percentage: 10 + (pct * 0.6)
+        }));
       });
-      allFields.push(...Array.from(seriesFieldMap.values()));
-
-      const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
-        acquisition.validationFunctions || [],
-        allFields,
-        acquisition.series || []
-      );
-
-      const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
-      if (!hasProtocolName && acquisition.protocolName) {
-        const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
-        if (protocolNameFieldDef) {
-          const cleanedName = acquisition.protocolName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-          allFields.push({
-            name: protocolNameFieldDef.keyword,
-            tag: protocolNameFieldDef.tag,
-            vr: protocolNameFieldDef.vr,
-            level: 'acquisition',
-            value: cleanedName,
-            dataType: 'String'
-          });
-        }
-      }
-
-      const testData = generateTestDataFromSchema(allFields, acquisition.series || [], validationFieldValues, maxValidationRows);
-
-      // Generate DICOMs
-      setProgress(prev => ({ ...prev!, currentOperation: 'Generating DICOM files...', percentage: 50 }));
-      const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(acquisition, testData, allFields);
-
-      // Extract and process
-      setProgress(prev => ({ ...prev!, currentOperation: 'Processing generated DICOMs...', percentage: 70 }));
-      const zip = await JSZip.loadAsync(zipBlob);
-      const dicomFiles: File[] = [];
-
-      for (const [filename, zipEntry] of Object.entries(zip.files)) {
-        if (!zipEntry.dir && filename.endsWith('.dcm')) {
-          const blob = await zipEntry.async('blob');
-          dicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
-        }
-      }
 
       // Process through existing pipeline
+      setProgress(prev => ({ ...prev!, currentOperation: 'Processing generated DICOMs...', percentage: 70 }));
       const fileList = new DataTransfer();
       dicomFiles.forEach(file => fileList.items.add(file));
 
@@ -1793,7 +1324,7 @@ const DataLoadingAndMatching: React.FC = () => {
     setIsProcessing(false);
     setProgress(null);
     setUploadingForSchema(null);
-  }, [getUnifiedSchema, convertSchemaToAcquisition, pairSchemaWithAcquisition]);
+  }, [getUnifiedSchema, getSchemaContent, pairSchemaWithAcquisition]);
 
   const handleContinue = async () => {
     // Collect all compliance results for the report
