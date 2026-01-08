@@ -31,7 +31,7 @@ import { schemaCacheManager } from '../../services/SchemaCacheManager';
 import AcquisitionTable from '../schema/AcquisitionTable';
 import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import ComplianceReportModal from './ComplianceReportModal';
-import DetailedDescriptionModal from '../schema/DetailedDescriptionModal';
+import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
 import CombinedComplianceView from './CombinedComplianceView';
 import { generateDicomsFromAcquisition } from '../../utils/testDataGeneration';
 import { convertSchemaToAcquisition } from '../../utils/schemaToAcquisition';
@@ -379,20 +379,49 @@ const DataLoadingAndMatching: React.FC = () => {
 
   // README modal state
   const [showReadmeModal, setShowReadmeModal] = useState(false);
-  const [readmeContent, setReadmeContent] = useState<{ title: string; description: string } | null>(null);
+  const [readmeModalData, setReadmeModalData] = useState<{
+    schemaName: string;
+    readmeItems: ReadmeItem[];
+    initialSelection: string;
+  } | null>(null);
 
-  // Open README for a schema acquisition
+  // Build README items from schema data for the sidebar
+  const buildReadmeItems = (schemaData: any, schemaName: string): ReadmeItem[] => {
+    const items: ReadmeItem[] = [];
+
+    // Schema-level README
+    items.push({
+      id: 'schema',
+      type: 'schema',
+      name: schemaName,
+      description: schemaData.description || ''
+    });
+
+    // Acquisition READMEs
+    Object.entries(schemaData.acquisitions || {}).forEach(([name, acqData]: [string, any], index) => {
+      items.push({
+        id: `acquisition-${index}`,
+        type: 'acquisition',
+        name: name,
+        description: acqData?.detailed_description || acqData?.description || '',
+        acquisitionIndex: index
+      });
+    });
+
+    return items;
+  };
+
+  // Open README for a schema acquisition (from compliance table)
   const openReadmeForSelection = async (selection: AcquisitionSelection) => {
     try {
       const content = await getSchemaContent(selection.schemaId);
       if (content) {
         const schemaData = JSON.parse(content);
-        const acquisitionEntries = Object.entries(schemaData.acquisitions || {});
-        const [name, acqData] = acquisitionEntries[selection.acquisitionIndex] as [string, any];
-
-        setReadmeContent({
-          title: name,
-          description: acqData?.detailed_description || ''
+        const schemaName = schemaData.name || 'Schema';
+        setReadmeModalData({
+          schemaName,
+          readmeItems: buildReadmeItems(schemaData, schemaName),
+          initialSelection: `acquisition-${selection.acquisitionIndex}`
         });
         setShowReadmeModal(true);
       }
@@ -407,9 +436,10 @@ const DataLoadingAndMatching: React.FC = () => {
       const content = await getSchemaContent(schemaId);
       if (content) {
         const schemaData = JSON.parse(content);
-        setReadmeContent({
-          title: schemaName,
-          description: schemaData.description || ''
+        setReadmeModalData({
+          schemaName,
+          readmeItems: buildReadmeItems(schemaData, schemaName),
+          initialSelection: 'schema'
         });
         setShowReadmeModal(true);
       }
@@ -424,12 +454,10 @@ const DataLoadingAndMatching: React.FC = () => {
       const content = await getSchemaContent(schemaId);
       if (content) {
         const schemaData = JSON.parse(content);
-        const acquisitionEntries = Object.entries(schemaData.acquisitions || {});
-        const [, acqData] = acquisitionEntries[acquisitionIndex] as [string, any];
-
-        setReadmeContent({
-          title: acquisitionName,
-          description: acqData?.detailed_description || ''
+        setReadmeModalData({
+          schemaName,
+          readmeItems: buildReadmeItems(schemaData, schemaName),
+          initialSelection: `acquisition-${acquisitionIndex}`
         });
         setShowReadmeModal(true);
       }
@@ -2267,16 +2295,16 @@ const DataLoadingAndMatching: React.FC = () => {
         </div>
       )}
 
-      {/* README Modal */}
-      <DetailedDescriptionModal
+      {/* README Modal with sidebar navigation */}
+      <SchemaReadmeModal
         isOpen={showReadmeModal}
         onClose={() => {
           setShowReadmeModal(false);
-          setReadmeContent(null);
+          setReadmeModalData(null);
         }}
-        title={readmeContent?.title || ''}
-        description={readmeContent?.description || ''}
-        isReadOnly={true}
+        schemaName={readmeModalData?.schemaName || ''}
+        readmeItems={readmeModalData?.readmeItems || []}
+        initialSelection={readmeModalData?.initialSelection || 'schema'}
       />
     </div>
   );
