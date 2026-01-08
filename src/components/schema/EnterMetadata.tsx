@@ -3,29 +3,24 @@ import { useNavigate } from 'react-router-dom';
 import { User, Tag, X, Plus, Edit } from 'lucide-react';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import { useSchemaContext } from '../../contexts/SchemaContext';
-import TagInput from '../common/TagInput';
-import { useTagSuggestions } from '../../hooks/useTagSuggestions';
 
 interface SchemaMetadata {
   name: string;
   description: string;
   authors: string[];
   version: string;
-  tags?: string[];
 }
 
 const EnterMetadata: React.FC = () => {
   const navigate = useNavigate();
   const { schemaMetadata, setSchemaMetadata } = useAcquisitions();
   const { originSchema } = useSchemaContext();
-  const { allTags } = useTagSuggestions();
 
   const [metadata, setMetadata] = useState<SchemaMetadata>({
     name: '',
     description: '',
     authors: [],
-    version: '1.0',
-    tags: []
+    version: '1.0'
   });
   const [newAuthor, setNewAuthor] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -38,15 +33,11 @@ const EnterMetadata: React.FC = () => {
         name: originSchema.metadata.title || originSchema.metadata.name || originSchema.name,
         description: originSchema.metadata.description || '',
         authors: originSchema.metadata.authors || [],
-        version: originSchema.metadata.version || '1.0',
-        tags: originSchema.metadata.tags || []
+        version: originSchema.metadata.version || '1.0'
       });
     } else if (schemaMetadata) {
       // Fall back to existing schema metadata
-      setMetadata({
-        ...schemaMetadata,
-        tags: schemaMetadata.tags || []
-      });
+      setMetadata(schemaMetadata);
     }
   }, [schemaMetadata, originSchema]);
 
@@ -235,18 +226,6 @@ const EnterMetadata: React.FC = () => {
             </p>
           </div>
 
-          {/* Tags */}
-          <div>
-            <TagInput
-              label="Tags"
-              tags={metadata.tags || []}
-              onChange={(tags) => setMetadata(prev => ({ ...prev, tags }))}
-              suggestions={allTags}
-              placeholder="Add a tag (e.g., structural, fMRI, spine)..."
-              helperText="Add tags to categorize this schema. Tags help organize schemas by application type."
-            />
-          </div>
-
           {/* Version */}
           <div>
             <label htmlFor="version" className="block text-sm font-medium text-content-secondary mb-2">
@@ -289,14 +268,6 @@ const EnterMetadata: React.FC = () => {
                 {metadata.authors.length > 0 ? metadata.authors.join(', ') : 'No authors specified'}
               </span>
             </div>
-            {metadata.tags && metadata.tags.length > 0 && (
-              <div>
-                <span className="font-medium text-content-secondary">Tags:</span>
-                <span className="ml-2 text-content-primary">
-                  {metadata.tags.join(', ')}
-                </span>
-              </div>
-            )}
             {metadata.description && (
               <div>
                 <span className="font-medium text-content-secondary">Description:</span>

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen } from 'lucide-react';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
@@ -30,6 +30,15 @@ interface UnifiedSchemaSelectorProps {
 
   // Utility
   getSchemaContent: (schemaId: string) => Promise<string | null>;
+
+  // Drag-and-drop support
+  enableDragDrop?: boolean;
+  onAcquisitionDragStart?: (selection: AcquisitionSelection, event: React.DragEvent) => void;
+  onSchemaDragStart?: (schemaId: string, schemaName: string, acquisitionCount: number, event: React.DragEvent) => void;
+
+  // README support
+  onSchemaReadmeClick?: (schemaId: string, schemaName: string) => void;
+  onAcquisitionReadmeClick?: (schemaId: string, schemaName: string, acquisitionIndex: number, acquisitionName: string) => void;
 }
 
 interface DeleteConfirmModalProps {
@@ -95,7 +104,12 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   onAcquisitionToggle,
   expandable = true,
   selectedSchemaId,
-  getSchemaContent
+  getSchemaContent,
+  enableDragDrop = false,
+  onAcquisitionDragStart,
+  onSchemaDragStart,
+  onSchemaReadmeClick,
+  onAcquisitionReadmeClick
 }) => {
   const { deleteSchema } = useSchemaContext();
 
@@ -115,6 +129,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     schemaId: '',
     schemaName: ''
   });
+  const [showNonMatchingFor, setShowNonMatchingFor] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'nested' | 'flat'>('nested');
 
   // Combine all schemas with source indicator
   const allSchemas = useMemo(() => [
@@ -156,7 +172,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     return schemas;
   }, [allSchemas, showLibrary, showCustom, searchQuery, selectedTags]);
 
-  // Get all unique tags with counts (from filtered schemas, excluding tag filter)
+  // Get all unique tags with counts (counting acquisitions, not schemas)
   const tagsWithCounts = useMemo(() => {
     // Use schemas filtered by source and search, but not by tags
     let schemasForTags = allSchemas;
@@ -179,26 +195,22 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     const tagCounts = new Map<string, number>();
 
     schemasForTags.forEach(schema => {
-      const schemaTags = new Set<string>();
+      const schemaTags = schema.tags || [];
 
-      // Collect schema-level tags
-      if (schema.tags) {
-        schema.tags.forEach(tag => schemaTags.add(tag));
-      }
-
-      // Collect acquisition-level tags
+      // Count each acquisition's effective tags (schema tags + acquisition tags)
       if (schema.acquisitions) {
         schema.acquisitions.forEach(acq => {
-          if (acq.tags) {
-            acq.tags.forEach(tag => schemaTags.add(tag));
-          }
+          const effectiveTags = new Set([...schemaTags, ...(acq.tags || [])]);
+          effectiveTags.forEach(tag => {
+            tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+          });
+        });
+      } else {
+        // Single-acquisition schema: count schema tags once
+        schemaTags.forEach(tag => {
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
         });
       }
-
-      // Increment count for each unique tag in this schema
-      schemaTags.forEach(tag => {
-        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-      });
     });
 
     return Array.from(tagCounts.entries())
@@ -214,6 +226,46 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         : [...prev, tag]
     );
   };
+
+  // Toggle showing non-matching acquisitions for a schema
+  const toggleShowNonMatching = (schemaId: string) => {
+    setShowNonMatchingFor(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(schemaId)) newSet.delete(schemaId);
+      else newSet.add(schemaId);
+      return newSet;
+    });
+  };
+
+  // Auto-expand schemas when tag filter is applied
+  useEffect(() => {
+    if (selectedTags.length > 0) {
+      const schemaIds = filteredSchemas.map(s => s.id);
+      setExpandedSchemas(new Set(schemaIds));
+      // Also reset the non-matching visibility when filter changes
+      setShowNonMatchingFor(new Set());
+    }
+  }, [selectedTags.join(',')]);
+
+  // Load acquisitions for expanded schemas
+  useEffect(() => {
+    expandedSchemas.forEach(id => {
+      if (!schemaAcquisitions[id] && !loadingSchemas.has(id)) {
+        loadSchemaAcquisitions(id);
+      }
+    });
+  }, [expandedSchemas]);
+
+  // Load all acquisitions when in flat view mode
+  useEffect(() => {
+    if (viewMode === 'flat') {
+      filteredSchemas.forEach(s => {
+        if (!schemaAcquisitions[s.id] && !loadingSchemas.has(s.id)) {
+          loadSchemaAcquisitions(s.id);
+        }
+      });
+    }
+  }, [viewMode, filteredSchemas.map(s => s.id).join(',')]);
 
   // Check if an acquisition has a specific tag (including inherited schema tags)
   const acquisitionHasTag = (acq: { tags?: string[] }, schemaTags: string[], tag: string): boolean => {
@@ -237,6 +289,26 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       )
     );
   };
+
+  // Flattened acquisitions list for flat view mode
+  const flattenedAcquisitions = useMemo(() => {
+    if (viewMode !== 'flat') return [];
+
+    return filteredSchemas.flatMap(schema => {
+      const acquisitions = schemaAcquisitions[schema.id] || [];
+      return acquisitions
+        .map((acquisition, index) => {
+          const matchesTag = selectedTags.length === 0 ||
+            selectedTags.every(tag => acquisitionHasTag(
+              { tags: schema.acquisitions?.[index]?.tags },
+              schema.tags || [],
+              tag
+            ));
+          return { schema, acquisition, index, matchesTag };
+        })
+        .filter(item => item.matchesTag);
+    });
+  }, [viewMode, filteredSchemas, schemaAcquisitions, selectedTags]);
 
   // Multi-select helpers
   const isAcquisitionSelected = (schemaId: string, acquisitionIndex: number): boolean => {
@@ -462,16 +534,26 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       >
         {/* Schema Header */}
         <div
+          draggable={enableDragDrop}
+          onDragStart={(e) => {
+            if (enableDragDrop && onSchemaDragStart) {
+              onSchemaDragStart(schema.id, schema.name, schema.acquisitions?.length || 1, e);
+            }
+          }}
           className={`px-4 py-3 rounded-t-lg cursor-pointer transition-colors ${
             selectionMode === 'schema'
               ? 'hover:bg-surface-secondary'
               : expandable
                 ? 'hover:bg-surface-secondary'
                 : ''
-          }`}
+          } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
           onClick={() => handleSchemaClick(schema.id)}
         >
           <div className="flex items-center justify-between">
+            {/* Drag handle for schema */}
+            {enableDragDrop && (
+              <GripVertical className="h-4 w-4 text-content-muted mr-2 flex-shrink-0" />
+            )}
             {/* Select All checkbox in header */}
             {multiSelectMode && (
               <div
@@ -543,6 +625,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
               </div>
             </div>
             <div className="flex items-center space-x-2 ml-4">
+              {/* README button */}
+              {onSchemaReadmeClick && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSchemaReadmeClick(schema.id, schema.name);
+                  }}
+                  className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
+                  title="View README"
+                >
+                  <BookOpen className="h-4 w-4" />
+                </button>
+              )}
+
               {/* Download button */}
               <button
                 onClick={(e) => handleDownload(schema.id, schema.name, e)}
@@ -575,35 +671,49 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
         {/* Expanded Acquisitions */}
         {expandable && isExpanded && selectionMode === 'acquisition' && (
-          <div className="p-4 border-t border-border bg-surface-secondary">
+          <div className="p-4 border-t border-border bg-surface-secondary max-h-[800px] overflow-y-auto">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600"></div>
                 <span className="ml-2 text-sm text-content-secondary">Loading acquisitions...</span>
               </div>
             ) : acquisitions.length > 0 ? (
-              <div className="space-y-2">
-                {/* Sort acquisitions: matching first, then non-matching (when tags selected) */}
-                {acquisitions
-                  .map((acquisition, index) => ({
-                    acquisition,
-                    index,
-                    matchesTag: selectedTags.length === 0 ||
-                      selectedTags.every(tag =>
-                        acquisitionHasTag(
-                          { tags: schema.acquisitions?.[index]?.tags },
-                          schema.tags || [],
-                          tag
-                        )
+              (() => {
+                // Split acquisitions into matching and non-matching
+                const allAcqs = acquisitions.map((acquisition, index) => ({
+                  acquisition,
+                  index,
+                  matchesTag: selectedTags.length === 0 ||
+                    selectedTags.every(tag =>
+                      acquisitionHasTag(
+                        { tags: schema.acquisitions?.[index]?.tags },
+                        schema.tags || [],
+                        tag
                       )
-                  }))
-                  .sort((a, b) => (b.matchesTag ? 1 : 0) - (a.matchesTag ? 1 : 0))
-                  .map(({ acquisition, index, matchesTag }) => {
+                    )
+                }));
+                const matchingAcqs = allAcqs.filter(a => a.matchesTag);
+                const nonMatchingAcqs = allAcqs.filter(a => !a.matchesTag);
+                const showNonMatching = showNonMatchingFor.has(schema.id);
+
+                const renderAcquisitionCard = ({ acquisition, index, matchesTag }: { acquisition: Acquisition; index: number; matchesTag: boolean }) => {
                   const isAcqSelected = multiSelectMode && isAcquisitionSelected(schema.id, index);
 
                   return multiSelectMode ? (
                     <div
                       key={acquisition.id}
+                      draggable={enableDragDrop}
+                      onDragStart={(e) => {
+                        if (enableDragDrop && onAcquisitionDragStart) {
+                          const selection: AcquisitionSelection = {
+                            schemaId: schema.id,
+                            acquisitionIndex: index,
+                            schemaName: schema.name,
+                            acquisitionName: acquisition.protocolName
+                          };
+                          onAcquisitionDragStart(selection, e);
+                        }
+                      }}
                       onClick={() => onAcquisitionToggle?.({
                         schemaId: schema.id,
                         acquisitionIndex: index,
@@ -613,12 +723,14 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                       className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
                         isAcqSelected
                           ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                          : matchesTag
-                            ? 'border-border-secondary hover:bg-surface-secondary hover:border-border'
-                            : 'border-border-secondary opacity-50'
-                      }`}
+                          : 'border-border-secondary hover:bg-surface-secondary hover:border-border'
+                      } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
                     >
                       <div className="flex items-start space-x-3">
+                        {/* Drag handle icon */}
+                        {enableDragDrop && (
+                          <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
+                        )}
                         <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
                           isAcqSelected
                             ? 'bg-brand-600 border-brand-600'
@@ -671,17 +783,26 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             )}
                           </div>
                         </div>
+                        {/* README button for acquisition */}
+                        {onAcquisitionReadmeClick && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAcquisitionReadmeClick(schema.id, schema.name, index, acquisition.protocolName);
+                            }}
+                            className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start"
+                            title="View README"
+                          >
+                            <BookOpen className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ) : (
                     <button
                       key={acquisition.id}
                       onClick={() => onAcquisitionSelect?.(schema.id, index)}
-                      className={`w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary transition-all ${
-                        matchesTag
-                          ? 'hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700'
-                          : 'opacity-50'
-                      }`}
+                      className="w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary transition-all hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700"
                     >
                       <div className="flex items-start space-x-3">
                         <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
@@ -730,11 +851,60 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             )}
                           </div>
                         </div>
+                        {/* README button for acquisition */}
+                        {onAcquisitionReadmeClick && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAcquisitionReadmeClick(schema.id, schema.name, index, acquisition.protocolName);
+                            }}
+                            className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start cursor-pointer"
+                            title="View README"
+                          >
+                            <BookOpen className="h-4 w-4" />
+                          </div>
+                        )}
                       </div>
                     </button>
                   );
-                })}
-              </div>
+                };
+
+                return (
+                  <div className="space-y-2">
+                    {/* Render matching acquisitions */}
+                    {matchingAcqs.map(renderAcquisitionCard)}
+
+                    {/* Show non-matching summary if there are any and tags are selected */}
+                    {nonMatchingAcqs.length > 0 && selectedTags.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => toggleShowNonMatching(schema.id)}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 border border-dashed border-border-secondary rounded-lg text-sm text-content-tertiary hover:text-content-secondary hover:border-content-muted transition-colors"
+                        >
+                          {showNonMatching ? (
+                            <>
+                              <ChevronUp className="h-4 w-4" />
+                              Hide {nonMatchingAcqs.length} acquisition{nonMatchingAcqs.length !== 1 ? 's' : ''} not matching criteria
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-4 w-4" />
+                              Show {nonMatchingAcqs.length} acquisition{nonMatchingAcqs.length !== 1 ? 's' : ''} not matching criteria
+                            </>
+                          )}
+                        </button>
+
+                        {/* Render non-matching acquisitions when expanded */}
+                        {showNonMatching && (
+                          <div className="space-y-2 opacity-60">
+                            {nonMatchingAcqs.map(renderAcquisitionCard)}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()
             ) : (
               <div className="text-center py-4 text-sm text-content-tertiary">
                 No acquisitions found in this schema
@@ -748,7 +918,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
   return (
     <>
-      <div className="bg-surface-primary rounded-lg shadow-md border border-border h-fit flex">
+      <div className="bg-surface-primary rounded-lg shadow-md border border-border h-[800px] flex">
         {/* Left Sidebar - Tags */}
         <div className="w-48 border-r border-border p-4 flex-shrink-0 flex flex-col">
           <h3 className="font-medium text-sm text-content-primary mb-3 flex items-center flex-shrink-0">
@@ -825,6 +995,19 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                   {showCustom && <Check className="h-3 w-3 ml-1.5" />}
                 </button>
               </div>
+
+              {/* View mode toggle */}
+              <div className="border-l border-border-secondary pl-4 ml-2">
+                <label className="flex items-center gap-2 text-sm text-content-secondary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={viewMode === 'flat'}
+                    onChange={(e) => setViewMode(e.target.checked ? 'flat' : 'nested')}
+                    className="w-4 h-4 rounded border-border-secondary text-brand-600 focus:ring-brand-500 focus:ring-offset-0"
+                  />
+                  Flat list
+                </label>
+              </div>
             </div>
 
             {/* Active filters */}
@@ -884,23 +1067,220 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
           {/* Schema list */}
           <div className="flex-1 overflow-y-auto p-4">
-            <div className="text-sm text-content-secondary mb-3">
-              {filteredSchemas.length} {filteredSchemas.length === 1 ? 'schema' : 'schemas'} found
-            </div>
-            {filteredSchemas.length > 0 ? (
-              <div className="space-y-4">
-                {filteredSchemas.map(schema => renderSchemaCard(schema))}
-              </div>
+            {viewMode === 'nested' ? (
+              <>
+                <div className="text-sm text-content-secondary mb-3">
+                  {filteredSchemas.length} {filteredSchemas.length === 1 ? 'schema' : 'schemas'} found
+                </div>
+                {filteredSchemas.length > 0 ? (
+                  <div className="space-y-4">
+                    {filteredSchemas.map(schema => renderSchemaCard(schema))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-content-tertiary">
+                      {searchQuery || selectedTags.length > 0
+                        ? 'No schemas match your filters.'
+                        : !showLibrary && !showCustom
+                          ? 'Enable Library or Custom to see schemas.'
+                          : 'No schemas available.'}
+                    </p>
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="text-center py-8">
-                <p className="text-sm text-content-tertiary">
-                  {searchQuery || selectedTags.length > 0
-                    ? 'No schemas match your filters.'
-                    : !showLibrary && !showCustom
-                      ? 'Enable Library or Custom to see schemas.'
-                      : 'No schemas available.'}
-                </p>
-              </div>
+              <>
+                <div className="text-sm text-content-secondary mb-3">
+                  {flattenedAcquisitions.length} {flattenedAcquisitions.length === 1 ? 'acquisition' : 'acquisitions'}{selectedTags.length > 0 ? ' matching' : ' found'}
+                </div>
+                {flattenedAcquisitions.length > 0 ? (
+                  <div className="space-y-2">
+                    {flattenedAcquisitions.map(({ schema, acquisition, index }) => {
+                      const isAcqSelected = multiSelectMode && isAcquisitionSelected(schema.id, index);
+
+                      return multiSelectMode ? (
+                        <div
+                          key={`${schema.id}-${index}`}
+                          draggable={enableDragDrop}
+                          onDragStart={(e) => {
+                            if (enableDragDrop && onAcquisitionDragStart) {
+                              const selection: AcquisitionSelection = {
+                                schemaId: schema.id,
+                                acquisitionIndex: index,
+                                schemaName: schema.name,
+                                acquisitionName: acquisition.protocolName
+                              };
+                              onAcquisitionDragStart(selection, e);
+                            }
+                          }}
+                          onClick={() => onAcquisitionToggle?.({
+                            schemaId: schema.id,
+                            acquisitionIndex: index,
+                            schemaName: schema.name,
+                            acquisitionName: acquisition.protocolName
+                          })}
+                          className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
+                            isAcqSelected
+                              ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                              : 'border-border-secondary hover:bg-surface-secondary hover:border-border'
+                          } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                        >
+                          <div className="flex items-start space-x-3">
+                            {enableDragDrop && (
+                              <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
+                            )}
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
+                              isAcqSelected
+                                ? 'bg-brand-600 border-brand-600'
+                                : 'border-border-secondary bg-surface-primary'
+                            }`}>
+                              {isAcqSelected && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-content-primary">
+                                  {acquisition.protocolName}
+                                </span>
+                                <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
+                                  {schema.name}
+                                </span>
+                              </div>
+                              {acquisition.seriesDescription && (
+                                <div className="text-xs text-content-secondary mt-1">
+                                  {acquisition.seriesDescription}
+                                </div>
+                              )}
+                              {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {schema.acquisitions[index].tags.map(tag => (
+                                    <span
+                                      key={tag}
+                                      className={`px-1.5 py-0.5 text-xs rounded ${
+                                        selectedTags.includes(tag)
+                                          ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
+                                          : 'bg-surface-tertiary text-content-tertiary'
+                                      }`}
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
+                                {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                                  <span className="flex items-center">
+                                    <List className="h-3 w-3 mr-1" />
+                                    {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                  </span>
+                                )}
+                                {acquisition.series && acquisition.series.length > 0 && (
+                                  <span>{acquisition.series.length} series</span>
+                                )}
+                                {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                                  <span className="text-brand-600 dark:text-brand-400">
+                                    {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {onAcquisitionReadmeClick && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAcquisitionReadmeClick(schema.id, schema.name, index, acquisition.protocolName);
+                                }}
+                                className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start"
+                                title="View README"
+                              >
+                                <BookOpen className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          key={`${schema.id}-${index}`}
+                          onClick={() => onAcquisitionSelect?.(schema.id, index)}
+                          className="w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary transition-all hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700"
+                        >
+                          <div className="flex items-start space-x-3">
+                            <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-content-primary">
+                                  {acquisition.protocolName}
+                                </span>
+                                <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
+                                  {schema.name}
+                                </span>
+                              </div>
+                              {acquisition.seriesDescription && (
+                                <div className="text-xs text-content-secondary mt-1">
+                                  {acquisition.seriesDescription}
+                                </div>
+                              )}
+                              {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {schema.acquisitions[index].tags.map(tag => (
+                                    <span
+                                      key={tag}
+                                      className={`px-1.5 py-0.5 text-xs rounded ${
+                                        selectedTags.includes(tag)
+                                          ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
+                                          : 'bg-surface-tertiary text-content-tertiary'
+                                      }`}
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
+                                {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                                  <span className="flex items-center">
+                                    <List className="h-3 w-3 mr-1" />
+                                    {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                  </span>
+                                )}
+                                {acquisition.series && acquisition.series.length > 0 && (
+                                  <span>{acquisition.series.length} series</span>
+                                )}
+                                {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                                  <span className="text-brand-600 dark:text-brand-400">
+                                    {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {onAcquisitionReadmeClick && (
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAcquisitionReadmeClick(schema.id, schema.name, index, acquisition.protocolName);
+                                }}
+                                className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start cursor-pointer"
+                                title="View README"
+                              >
+                                <BookOpen className="h-4 w-4" />
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-content-tertiary">
+                      {searchQuery || selectedTags.length > 0
+                        ? 'No acquisitions match your filters.'
+                        : !showLibrary && !showCustom
+                          ? 'Enable Library or Custom to see acquisitions.'
+                          : 'No acquisitions available.'}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

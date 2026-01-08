@@ -1,7 +1,28 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Database, Loader, CheckCircle, Plus, X, Trash2, FileText, AlertTriangle, Copy } from 'lucide-react';
-import { Acquisition, ProcessingProgress } from '../../types';
+import { Upload, Database, Loader, CheckCircle, Plus, X, Trash2, FileText, AlertTriangle, Copy, Image, GripVertical } from 'lucide-react';
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragEndEvent,
+  DragOverEvent,
+  useDroppable,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Acquisition, ProcessingProgress, AcquisitionSelection } from '../../types';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo } from '../../utils/fileUploadUtils';
 import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
@@ -10,6 +31,7 @@ import { schemaCacheManager } from '../../services/SchemaCacheManager';
 import AcquisitionTable from '../schema/AcquisitionTable';
 import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import ComplianceReportModal from './ComplianceReportModal';
+import DetailedDescriptionModal from '../schema/DetailedDescriptionModal';
 import CombinedComplianceView from './CombinedComplianceView';
 import { processSchemaFieldForUI, inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { getFieldByKeyword } from '../../services/dicomFieldService';
@@ -24,9 +46,10 @@ const SchemaAcquisitionDisplay = React.memo<{
   onToggleCollapse?: () => void;
   onDeselect?: () => void;
   isDataProcessing?: boolean;
+  hideHeader?: boolean;
   getSchemaContent: (schemaId: string) => Promise<string | null>;
   getSchemaAcquisition: (binding: SchemaBinding) => Promise<Acquisition | null>;
-}>(({ binding, realAcquisition, isCollapsed, onToggleCollapse, onDeselect, isDataProcessing, getSchemaContent, getSchemaAcquisition }) => {
+}>(({ binding, realAcquisition, isCollapsed, onToggleCollapse, onDeselect, isDataProcessing, hideHeader, getSchemaContent, getSchemaAcquisition }) => {
   const [schemaAcquisition, setSchemaAcquisition] = useState<Acquisition | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -36,14 +59,17 @@ const SchemaAcquisitionDisplay = React.memo<{
       return;
     }
 
-    // Don't reload if we already have the right schema
-    if (schemaAcquisition) {
+    // Check if we already have the RIGHT acquisition loaded (matching current binding)
+    const expectedId = `schema-${binding.schemaId}-${binding.acquisitionId || 'default'}`;
+    if (schemaAcquisition && schemaAcquisition.id === expectedId) {
       setIsLoading(false);
       return;
     }
 
     const loadSchema = async () => {
       setIsLoading(true);
+      // Clear previous acquisition when loading a new one
+      setSchemaAcquisition(null);
       try {
         const acquisition = await getSchemaAcquisition(binding);
         setSchemaAcquisition(acquisition);
@@ -75,6 +101,7 @@ const SchemaAcquisitionDisplay = React.memo<{
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
         onDeselect={onDeselect}
+        hideHeader={hideHeader}
         // Disabled handlers for compliance mode
         onUpdate={() => {}}
         onDelete={() => {}}
@@ -130,6 +157,178 @@ const SchemaAcquisitionDisplay = React.memo<{
   return !bindingChanged && !realAcquisitionChanged && !collapsedChanged;
 });
 
+// Unified sidebar item type for drag-and-drop
+interface SidebarItem {
+  id: string;
+  type: 'schema-first' | 'data';
+  data: AcquisitionSelection | Acquisition;
+}
+
+// Sortable sidebar item component
+const SortableAcquisitionItem: React.FC<{
+  item: SidebarItem;
+  isSelected: boolean;
+  linkedData?: Acquisition;
+  pairing?: SchemaBinding | null;
+  onSelect: () => void;
+  onRemove?: () => void;
+}> = ({ item, isSelected, linkedData, pairing, onSelect, onRemove }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  if (item.type === 'schema-first') {
+    const selection = item.data as AcquisitionSelection;
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        onClick={onSelect}
+        className={`border rounded-lg p-4 cursor-pointer transition-all ${
+          isSelected
+            ? 'border-brand-500 bg-brand-50 shadow-md'
+            : 'border-border hover:border-border-secondary hover:bg-surface-secondary'
+        }`}
+      >
+        <div className="flex items-start">
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing touch-none"
+          >
+            <GripVertical className="h-4 w-4 text-content-muted mt-0.5 mr-2 flex-shrink-0" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center space-x-2">
+              <FileText className="h-4 w-4 text-content-tertiary flex-shrink-0" />
+              <h3 className="text-sm font-medium text-content-primary truncate">
+                {selection.acquisitionName}
+              </h3>
+            </div>
+            <p className="text-xs text-content-secondary mt-1 truncate">
+              {selection.schemaName}
+            </p>
+            <div className="flex items-center mt-2 text-xs space-x-3">
+              {linkedData ? (
+                <span className="text-brand-600 flex items-center">
+                  <Image className="h-3 w-3 mr-1" />
+                  Data loaded
+                </span>
+              ) : (
+                <span className="text-status-warning flex items-center">
+                  <Image className="h-3 w-3 mr-1" />
+                  No data
+                </span>
+              )}
+              <span className="text-brand-600 flex items-center">
+                <FileText className="h-3 w-3 mr-1" />
+                Schema loaded
+              </span>
+            </div>
+          </div>
+          {onRemove && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              className="p-1 text-content-tertiary hover:text-status-error rounded ml-2"
+              title="Remove"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Data acquisition item
+  const acquisition = item.data as Acquisition;
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={onSelect}
+      className={`border rounded-lg p-4 cursor-pointer transition-all ${
+        isSelected
+          ? 'border-brand-500 bg-brand-50 shadow-md'
+          : 'border-border hover:border-border-secondary hover:bg-surface-secondary'
+      }`}
+    >
+      <div className="flex items-start">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing touch-none"
+        >
+          <GripVertical className="h-4 w-4 text-content-muted mt-0.5 mr-2 flex-shrink-0" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center space-x-2">
+            <FileText className="h-4 w-4 text-content-tertiary flex-shrink-0" />
+            <h3 className="text-sm font-medium text-content-primary truncate">
+              {acquisition.protocolName || 'Untitled Acquisition'}
+            </h3>
+          </div>
+          <p className="text-xs text-content-secondary mt-1 truncate">
+            {acquisition.seriesDescription || 'No description'}
+          </p>
+          <div className="flex items-center mt-2 text-xs space-x-3">
+            <span className="text-brand-600 flex items-center">
+              <Image className="h-3 w-3 mr-1" />
+              Data loaded
+            </span>
+            {pairing ? (
+              <span className="text-brand-600 flex items-center">
+                <FileText className="h-3 w-3 mr-1" />
+                Schema loaded
+              </span>
+            ) : (
+              <span className="text-status-warning flex items-center">
+                <FileText className="h-3 w-3 mr-1" />
+                No schema
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Droppable zone for receiving new items from schema browser
+const DroppableZone: React.FC<{ children: React.ReactNode; isOver: boolean }> = ({ children, isOver }) => {
+  const { setNodeRef } = useDroppable({ id: 'sidebar-drop-zone' });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`p-2 space-y-2 max-h-[800px] overflow-y-auto transition-colors ${
+        isOver ? 'bg-brand-50 dark:bg-brand-900/20' : ''
+      }`}
+    >
+      {children}
+      {isOver && (
+        <div className="p-3 text-center text-brand-600 text-sm border-2 border-dashed border-brand-500 rounded-lg bg-brand-50 dark:bg-brand-900/30">
+          Drop to add
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DataLoadingAndMatching: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -165,18 +364,108 @@ const DataLoadingAndMatching: React.FC = () => {
     files: null
   });
   const [dicomAnalysisError, setDicomAnalysisError] = useState<string | null>(null);
+
+  // Schema-first workflow state
+  const [showSchemaFirstModal, setShowSchemaFirstModal] = useState(false);
+  const [schemaFirstSelections, setSchemaFirstSelections] = useState<AcquisitionSelection[]>([]);
+  const [pendingSchemaSelections, setPendingSchemaSelections] = useState<AcquisitionSelection[]>([]); // Temp state for modal
+  const [schemaFirstData, setSchemaFirstData] = useState<Map<string, Acquisition>>(new Map());
+  const [uploadingForSchema, setUploadingForSchema] = useState<string | null>(null);
+
+  // Tabbed options state
+  const [activeOptionsTab, setActiveOptionsTab] = useState<'schema' | 'data'>('schema');
+
+  // DnD Kit state
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [isOverDropZone, setIsOverDropZone] = useState(false);
+
+  // README modal state
+  const [showReadmeModal, setShowReadmeModal] = useState(false);
+  const [readmeContent, setReadmeContent] = useState<{ title: string; description: string } | null>(null);
+
+  // Open README for a schema acquisition
+  const openReadmeForSelection = async (selection: AcquisitionSelection) => {
+    try {
+      const content = await getSchemaContent(selection.schemaId);
+      if (content) {
+        const schemaData = JSON.parse(content);
+        const acquisitionEntries = Object.entries(schemaData.acquisitions || {});
+        const [name, acqData] = acquisitionEntries[selection.acquisitionIndex] as [string, any];
+
+        setReadmeContent({
+          title: name,
+          description: acqData?.detailed_description || ''
+        });
+        setShowReadmeModal(true);
+      }
+    } catch (error) {
+      console.error('Failed to load README:', error);
+    }
+  };
+
+  // Open README for a schema (schema-level description)
+  const handleSchemaReadmeClick = async (schemaId: string, schemaName: string) => {
+    try {
+      const content = await getSchemaContent(schemaId);
+      if (content) {
+        const schemaData = JSON.parse(content);
+        setReadmeContent({
+          title: schemaName,
+          description: schemaData.description || ''
+        });
+        setShowReadmeModal(true);
+      }
+    } catch (error) {
+      console.error('Failed to load schema README:', error);
+    }
+  };
+
+  // Open README for an acquisition in the schema browser
+  const handleAcquisitionReadmeClick = async (schemaId: string, schemaName: string, acquisitionIndex: number, acquisitionName: string) => {
+    try {
+      const content = await getSchemaContent(schemaId);
+      if (content) {
+        const schemaData = JSON.parse(content);
+        const acquisitionEntries = Object.entries(schemaData.acquisitions || {});
+        const [, acqData] = acquisitionEntries[acquisitionIndex] as [string, any];
+
+        setReadmeContent({
+          title: acquisitionName,
+          description: acqData?.detailed_description || ''
+        });
+        setShowReadmeModal(true);
+      }
+    } catch (error) {
+      console.error('Failed to load acquisition README:', error);
+    }
+  };
+
+  // DnD Kit sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before starting drag
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   const ADD_NEW_ID = '__add_new__';
 
   // Auto-select logic
   useEffect(() => {
-    if (loadedData.length === 0) {
-      // Start with "Add New" selected when no acquisitions
+    if (loadedData.length === 0 && !selectedAcquisitionId?.startsWith('schema-first:')) {
+      // Start with "Add New" selected when no acquisitions (but preserve schema-first selections)
       setSelectedAcquisitionId(ADD_NEW_ID);
     } else if (selectedAcquisitionId === ADD_NEW_ID) {
       // Keep "Add New" selected if it was previously selected
+    } else if (selectedAcquisitionId?.startsWith('schema-first:')) {
+      // Keep schema-first selection as-is
     } else if (!selectedAcquisitionId || !loadedData.find(a => a.id === selectedAcquisitionId)) {
       // Select first acquisition if none selected or selected one was deleted
-      setSelectedAcquisitionId(loadedData[0].id);
+      setSelectedAcquisitionId(loadedData[0]?.id || ADD_NEW_ID);
     }
   }, [loadedData, selectedAcquisitionId]);
 
@@ -187,6 +476,7 @@ const DataLoadingAndMatching: React.FC = () => {
     console.log('🔧 convertSchemaToAcquisition called with:', { schemaId: schema.id, acquisitionId });
 
     let acquisitionDescription = schema.description || 'Schema requirements';
+    let acquisitionProtocolName = schema.name; // Default to schema name, override with acquisition name if found
 
     try {
       // Get schema content to extract fields
@@ -216,6 +506,7 @@ const DataLoadingAndMatching: React.FC = () => {
 
           const acquisitionName = acquisitionKeys[index];
           targetAcquisition = parsedSchema.acquisitions[acquisitionName];
+          acquisitionProtocolName = acquisitionName; // Use the actual acquisition name
 
           if (targetAcquisition) {
             // Use acquisition-specific description if available
@@ -334,7 +625,7 @@ const DataLoadingAndMatching: React.FC = () => {
       // Convert to acquisition format
       return {
         id: `schema-${schema.id}-${acquisitionId || 'default'}`,
-        protocolName: schema.name,
+        protocolName: acquisitionProtocolName,
         seriesDescription: acquisitionDescription,
         acquisitionFields: schemaFields.filter(f => !f.level || f.level === 'acquisition') || [],
         seriesFields: schemaFields.filter(f => f.level === 'series') || [],
@@ -361,7 +652,7 @@ const DataLoadingAndMatching: React.FC = () => {
       // Return minimal acquisition if conversion fails
       return {
         id: `schema-${schema.id}-${acquisitionId || 'default'}`,
-        protocolName: schema.name,
+        protocolName: acquisitionProtocolName,
         seriesDescription: acquisitionDescription,
         acquisitionFields: [],
         seriesFields: [],
@@ -1035,6 +1326,475 @@ const DataLoadingAndMatching: React.FC = () => {
     });
   };
 
+  // Schema-first workflow helpers
+  const getSchemaFirstSelectionId = (selection: AcquisitionSelection) =>
+    `schema-first:${selection.schemaId}:${selection.acquisitionIndex}`;
+
+  const handleSchemaFirstToggle = (selection: AcquisitionSelection) => {
+    // Update pending selections (not the actual state yet)
+    setPendingSchemaSelections(prev => {
+      const exists = prev.some(
+        s => s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex
+      );
+      if (exists) {
+        return prev.filter(
+          s => !(s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex)
+        );
+      } else {
+        return [...prev, selection];
+      }
+    });
+  };
+
+  const openSchemaFirstModal = () => {
+    // Initialize pending with current selections
+    setPendingSchemaSelections([...schemaFirstSelections]);
+    setShowSchemaFirstModal(true);
+  };
+
+  const confirmSchemaFirstSelections = () => {
+    // Commit pending selections to actual state
+    setSchemaFirstSelections(pendingSchemaSelections);
+    setShowSchemaFirstModal(false);
+
+    // Auto-select the first new schema-first item if nothing else is selected
+    if (pendingSchemaSelections.length > 0 && selectedAcquisitionId === ADD_NEW_ID) {
+      const firstSelection = pendingSchemaSelections[0];
+      setSelectedAcquisitionId(getSchemaFirstSelectionId(firstSelection));
+    }
+  };
+
+  const cancelSchemaFirstModal = () => {
+    // Discard pending selections
+    setPendingSchemaSelections([]);
+    setShowSchemaFirstModal(false);
+  };
+
+  const removeSchemaFirstSelection = (selectionId: string) => {
+    // Parse the selection ID
+    const parts = selectionId.split(':');
+    if (parts.length !== 3) return;
+
+    const schemaId = parts[1];
+    const acquisitionIndex = parseInt(parts[2], 10);
+
+    // Remove from selections
+    setSchemaFirstSelections(prev =>
+      prev.filter(s => !(s.schemaId === schemaId && s.acquisitionIndex === acquisitionIndex))
+    );
+
+    // Remove any linked data
+    setSchemaFirstData(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(selectionId);
+      return newMap;
+    });
+
+    // If this was selected, switch to ADD_NEW_ID
+    if (selectedAcquisitionId === selectionId) {
+      setSelectedAcquisitionId(ADD_NEW_ID);
+    }
+  };
+
+  // Computed sidebar items for dnd-kit
+  const sidebarItems: SidebarItem[] = useMemo(() => {
+    const schemaItems: SidebarItem[] = schemaFirstSelections.map(selection => ({
+      id: getSchemaFirstSelectionId(selection),
+      type: 'schema-first' as const,
+      data: selection,
+    }));
+
+    const dataItems: SidebarItem[] = loadedData.map(acquisition => ({
+      id: acquisition.id,
+      type: 'data' as const,
+      data: acquisition,
+    }));
+
+    return [...schemaItems, ...dataItems];
+  }, [schemaFirstSelections, loadedData]);
+
+  // DnD Kit handlers
+  const handleDndDragStart = (event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  };
+
+  const handleDndDragOver = (event: DragOverEvent) => {
+    const { over } = event;
+    setIsOverDropZone(over?.id === 'sidebar-drop-zone');
+  };
+
+  const handleDndDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    setIsOverDropZone(false);
+
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // If dropped on the drop zone (from schema browser), it's already handled by native drag
+    if (overId === 'sidebar-drop-zone') return;
+
+    // Reordering within the list
+    if (activeId !== overId) {
+      const activeItem = sidebarItems.find(item => item.id === activeId);
+      const overItem = sidebarItems.find(item => item.id === overId);
+
+      if (!activeItem || !overItem) return;
+
+      // Handle reordering within same type
+      if (activeItem.type === 'schema-first' && overItem.type === 'schema-first') {
+        setSchemaFirstSelections(prev => {
+          const oldIndex = prev.findIndex(s => getSchemaFirstSelectionId(s) === activeId);
+          const newIndex = prev.findIndex(s => getSchemaFirstSelectionId(s) === overId);
+          if (oldIndex === -1 || newIndex === -1) return prev;
+          return arrayMove(prev, oldIndex, newIndex);
+        });
+      } else if (activeItem.type === 'data' && overItem.type === 'data') {
+        setLoadedData(prev => {
+          const oldIndex = prev.findIndex(a => a.id === activeId);
+          const newIndex = prev.findIndex(a => a.id === overId);
+          if (oldIndex === -1 || newIndex === -1) return prev;
+          return arrayMove(prev, oldIndex, newIndex);
+        });
+      }
+      // Cross-type reordering could be added here if needed
+    }
+  };
+
+  // Native drag handler for schema browser items (still needed for cross-context drag)
+  const handleAcquisitionDragStart = (selection: AcquisitionSelection, event: React.DragEvent) => {
+    event.dataTransfer.setData('application/json', JSON.stringify({ type: 'acquisition', selection }));
+    event.dataTransfer.effectAllowed = 'copy';
+  };
+
+  // Native drag handler for entire schema (adds all acquisitions)
+  const handleSchemaDragStart = (schemaId: string, schemaName: string, acquisitionCount: number, event: React.DragEvent) => {
+    event.dataTransfer.setData('application/json', JSON.stringify({ type: 'schema', schemaId, schemaName, acquisitionCount }));
+    event.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleSidebarDrop = async (event: React.DragEvent) => {
+    event.preventDefault();
+    setIsOverDropZone(false);
+
+    try {
+      const rawData = event.dataTransfer.getData('application/json');
+      const data = JSON.parse(rawData);
+
+      if (data.type === 'acquisition') {
+        // Single acquisition drop
+        const selection: AcquisitionSelection = data.selection;
+
+        // Check if already added
+        const exists = schemaFirstSelections.some(
+          s => s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex
+        );
+
+        if (!exists) {
+          setSchemaFirstSelections(prev => [...prev, selection]);
+        }
+      } else if (data.type === 'schema') {
+        // Entire schema drop - add all acquisitions
+        const { schemaId, schemaName } = data;
+
+        // Get the schema to find all acquisitions
+        const schema = getUnifiedSchema(schemaId);
+        if (schema) {
+          // Parse the schema content to get all acquisitions
+          const content = await getSchemaContent(schemaId);
+          if (content) {
+            const schemaData = JSON.parse(content);
+            const acquisitionEntries = Object.entries(schemaData.acquisitions || {});
+
+            const newSelections: AcquisitionSelection[] = [];
+            acquisitionEntries.forEach(([name, _], index) => {
+              // Check if already added
+              const exists = schemaFirstSelections.some(
+                s => s.schemaId === schemaId && s.acquisitionIndex === index
+              );
+
+              if (!exists) {
+                newSelections.push({
+                  schemaId,
+                  acquisitionIndex: index,
+                  schemaName,
+                  acquisitionName: name
+                });
+              }
+            });
+
+            if (newSelections.length > 0) {
+              setSchemaFirstSelections(prev => [...prev, ...newSelections]);
+            }
+          }
+        }
+      } else {
+        // Legacy format (just a selection object without type wrapper)
+        const selection: AcquisitionSelection = data;
+        const exists = schemaFirstSelections.some(
+          s => s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex
+        );
+
+        if (!exists) {
+          setSchemaFirstSelections(prev => [...prev, selection]);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse dropped data:', e);
+    }
+  };
+
+  const handleSidebarDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsOverDropZone(true);
+  };
+
+  const handleSidebarDragLeave = (event: React.DragEvent) => {
+    const relatedTarget = event.relatedTarget as Node | null;
+    const currentTarget = event.currentTarget as Node;
+    if (!relatedTarget || !currentTarget.contains(relatedTarget)) {
+      setIsOverDropZone(false);
+    }
+  };
+
+  // Schema-first file upload handler
+  const handleSchemaFirstFileUpload = useCallback(async (selectionId: string, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    // Parse selection to get schema info for pairing
+    const parts = selectionId.split(':');
+    if (parts.length !== 3) return;
+    const schemaId = parts[1];
+    const acquisitionIndex = parseInt(parts[2], 10);
+
+    setUploadingForSchema(selectionId);
+    setIsProcessing(true);
+    setProgress({
+      currentFile: 0,
+      totalFiles: files.length,
+      currentOperation: 'Initializing...',
+      percentage: 0
+    });
+
+    try {
+      // Process files (reuse existing logic)
+      const fileObjects = await processUploadedFiles(files, {
+        onProgress: (fileProgress) => {
+          setProgress(prev => ({
+            ...prev!,
+            currentOperation: `Reading file ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.fileName}`,
+            percentage: (fileProgress.current / fileProgress.total) * 25
+          }));
+        }
+      });
+
+      const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
+        try {
+          const progressObj = progress.toJs ? progress.toJs() : progress;
+          const percentage = progressObj.percentage || 0;
+          const operation = progressObj.currentOperation || 'Processing...';
+          setProgress(prev => ({
+            ...prev!,
+            currentOperation: operation,
+            percentage: 25 + (percentage * 0.65)
+          }));
+        } catch (error) {
+          console.error('Progress callback failed:', error);
+        }
+      });
+
+      const acquisitions = result || [];
+
+      if (acquisitions.length > 0) {
+        // Use the first acquisition for this schema
+        const acquisition = acquisitions[0];
+
+        // Store the linked data
+        setSchemaFirstData(prev => new Map(prev).set(selectionId, acquisition));
+
+        // Auto-pair with the schema
+        pairSchemaWithAcquisition(acquisition.id, schemaId, acquisitionIndex);
+      }
+
+      setDicomAnalysisError(null);
+    } catch (error) {
+      console.error('Failed to process DICOM files:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setDicomAnalysisError(errorMessage);
+    }
+
+    setIsProcessing(false);
+    setProgress(null);
+    setUploadingForSchema(null);
+  }, [pairSchemaWithAcquisition]);
+
+  // Schema-first drag and drop handler
+  const handleSchemaFirstDrop = useCallback(async (e: React.DragEvent, selectionId: string) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const items = Array.from(e.dataTransfer.items);
+    const files: File[] = [];
+
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry) {
+          if (entry.isDirectory) {
+            const dirFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+            files.push(...dirFiles);
+          } else {
+            const file = item.getAsFile();
+            if (file) files.push(file);
+          }
+        } else {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+    }
+
+    if (files.length > 0) {
+      const fileList = {
+        length: files.length,
+        item: (index: number) => files[index] || null,
+        [Symbol.iterator]: function* () {
+          for (let i = 0; i < files.length; i++) {
+            yield files[i];
+          }
+        }
+      };
+      files.forEach((file, index) => {
+        (fileList as any)[index] = file;
+      });
+
+      await handleSchemaFirstFileUpload(selectionId, fileList as FileList);
+    } else {
+      await handleSchemaFirstFileUpload(selectionId, e.dataTransfer.files);
+    }
+  }, [handleSchemaFirstFileUpload]);
+
+  // Generate test data for schema-first selection
+  const handleGenerateTestDataForSchema = useCallback(async (selectionId: string) => {
+    // Parse selection to get schema info
+    const parts = selectionId.split(':');
+    if (parts.length !== 3) return;
+    const schemaId = parts[1];
+    const acquisitionIndex = parts[2];
+
+    // Get the schema
+    const schema = getUnifiedSchema(schemaId);
+    if (!schema) return;
+
+    const binding: SchemaBinding = {
+      schemaId,
+      acquisitionId: acquisitionIndex,
+      schema
+    };
+
+    setUploadingForSchema(selectionId);
+
+    try {
+      // Use existing handleSchemaAsData logic but link to schema-first selection
+      setIsProcessing(true);
+      setProgress({
+        currentFile: 0,
+        totalFiles: 1,
+        currentOperation: 'Loading schema...',
+        percentage: 0
+      });
+
+      // Convert schema to acquisition
+      setProgress(prev => ({ ...prev!, currentOperation: 'Loading schema acquisition...', percentage: 10 }));
+      const acquisition = await convertSchemaToAcquisition(binding);
+
+      if (!acquisition) {
+        throw new Error('Failed to load schema acquisition');
+      }
+
+      // Generate test data
+      setProgress(prev => ({ ...prev!, currentOperation: 'Generating test data...', percentage: 30 }));
+
+      const allFields = [...(acquisition.acquisitionFields || [])];
+      const seriesFieldMap = new Map<string, any>();
+      (acquisition.series || []).forEach(series => {
+        if (Array.isArray(series.fields)) {
+          series.fields.forEach(field => {
+            if (!seriesFieldMap.has(field.tag)) {
+              seriesFieldMap.set(field.tag, { ...field, level: 'series' });
+            }
+          });
+        }
+      });
+      allFields.push(...Array.from(seriesFieldMap.values()));
+
+      const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
+        acquisition.validationFunctions || [],
+        allFields,
+        acquisition.series || []
+      );
+
+      const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
+      if (!hasProtocolName && acquisition.protocolName) {
+        const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
+        if (protocolNameFieldDef) {
+          const cleanedName = acquisition.protocolName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+          allFields.push({
+            name: protocolNameFieldDef.keyword,
+            tag: protocolNameFieldDef.tag,
+            vr: protocolNameFieldDef.vr,
+            level: 'acquisition',
+            value: cleanedName,
+            dataType: 'String'
+          });
+        }
+      }
+
+      const testData = generateTestDataFromSchema(allFields, acquisition.series || [], validationFieldValues, maxValidationRows);
+
+      // Generate DICOMs
+      setProgress(prev => ({ ...prev!, currentOperation: 'Generating DICOM files...', percentage: 50 }));
+      const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(acquisition, testData, allFields);
+
+      // Extract and process
+      setProgress(prev => ({ ...prev!, currentOperation: 'Processing generated DICOMs...', percentage: 70 }));
+      const zip = await JSZip.loadAsync(zipBlob);
+      const dicomFiles: File[] = [];
+
+      for (const [filename, zipEntry] of Object.entries(zip.files)) {
+        if (!zipEntry.dir && filename.endsWith('.dcm')) {
+          const blob = await zipEntry.async('blob');
+          dicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
+        }
+      }
+
+      // Process through existing pipeline
+      const fileList = new DataTransfer();
+      dicomFiles.forEach(file => fileList.items.add(file));
+
+      // Process files and link to schema-first selection
+      const fileObjects = await processUploadedFiles(fileList.files, {});
+      const result = await dicompareAPI.analyzeFilesForUI(fileObjects, () => {});
+
+      if (result && result.length > 0) {
+        const loadedAcquisition = result[0];
+        setSchemaFirstData(prev => new Map(prev).set(selectionId, loadedAcquisition));
+        pairSchemaWithAcquisition(loadedAcquisition.id, schemaId, parseInt(acquisitionIndex, 10));
+      }
+
+    } catch (error) {
+      console.error('Failed to generate test data:', error);
+      setDicomAnalysisError(`Failed to generate test data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    setIsProcessing(false);
+    setProgress(null);
+    setUploadingForSchema(null);
+  }, [getUnifiedSchema, convertSchemaToAcquisition, pairSchemaWithAcquisition]);
+
   const handleContinue = async () => {
     // Collect all compliance results for the report
     const reportResults = new Map<string, any[]>();
@@ -1066,51 +1826,6 @@ const DataLoadingAndMatching: React.FC = () => {
     ? loadedData.find(a => a.id === selectedAcquisitionId)
     : null;
 
-  // Component to render compact acquisition preview card
-  const renderAcquisitionPreview = (acquisition: Acquisition) => {
-    const pairing = getAcquisitionPairing(acquisition.id);
-    const hasNoPairing = !pairing;
-    const isSelected = selectedAcquisitionId === acquisition.id;
-
-    return (
-      <div
-        key={acquisition.id}
-        onClick={() => setSelectedAcquisitionId(acquisition.id)}
-        className={`border rounded-lg p-4 cursor-pointer transition-all ${
-          isSelected
-            ? 'border-brand-500 bg-brand-50 shadow-md'
-            : 'border-border hover:border-border-secondary hover:bg-surface-secondary'
-        }`}
-      >
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-2">
-              <FileText className="h-4 w-4 text-content-tertiary flex-shrink-0" />
-              <h3 className="text-sm font-medium text-content-primary truncate">
-                {acquisition.protocolName || 'Untitled Acquisition'}
-              </h3>
-              {hasNoPairing && (
-                <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0" title="No schema assigned" />
-              )}
-            </div>
-            <p className="text-xs text-content-secondary mt-1 truncate">
-              {acquisition.seriesDescription || 'No description'}
-            </p>
-            <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
-              <span>{acquisition.totalFiles} files</span>
-              {pairing && (
-                <span className="text-status-success flex items-center">
-                  <CheckCircle className="h-3 w-3 mr-1" />
-                  Paired
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // Component to render "Add New Acquisition" selectable item
   const renderAddNewItem = () => {
     const isSelected = selectedAcquisitionId === ADD_NEW_ID;
@@ -1127,12 +1842,9 @@ const DataLoadingAndMatching: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Plus className="h-4 w-4 text-brand-500 flex-shrink-0" />
           <h3 className="text-sm font-medium text-content-primary">
-            Load DICOMs
+            Load DICOMs/Schemas
           </h3>
         </div>
-        <p className="text-xs text-content-secondary mt-1">
-
-        </p>
       </div>
     );
   };
@@ -1197,6 +1909,344 @@ const DataLoadingAndMatching: React.FC = () => {
       </div>
     );
   };
+
+  // Schema-first view - show schema requirements + upload area
+  const renderSchemaFirstView = (selectionId: string) => {
+    const selection = schemaFirstSelections.find(
+      s => getSchemaFirstSelectionId(s) === selectionId
+    );
+
+    if (!selection) {
+      return (
+        <div className="bg-surface-primary rounded-lg border border-border shadow-sm p-6 text-center">
+          <p className="text-content-secondary">Schema selection not found</p>
+        </div>
+      );
+    }
+
+    const linkedData = schemaFirstData.get(selectionId);
+
+    // If data is uploaded, show the combined compliance view
+    if (linkedData) {
+      const pairing = getAcquisitionPairing(linkedData.id);
+
+      return (
+        <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-semibold text-content-primary">{selection.acquisitionName}</h3>
+                <p className="text-sm text-content-secondary mt-1">{selection.schemaName}</p>
+                <p className="text-xs text-status-success mt-1 flex items-center">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  {linkedData.totalFiles} files loaded
+                </p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => openReadmeForSelection(selection)}
+                  className="inline-flex items-center px-3 py-2 border border-border-secondary text-content-secondary text-sm rounded-lg hover:bg-surface-secondary"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  README
+                </button>
+                <button
+                  onClick={() => {
+                    // Clear linked data to allow re-upload
+                    setSchemaFirstData(prev => {
+                      const newMap = new Map(prev);
+                      newMap.delete(selectionId);
+                      return newMap;
+                    });
+                  }}
+                  className="inline-flex items-center px-3 py-2 border border-border-secondary text-content-secondary text-sm rounded-lg hover:bg-surface-secondary"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Replace Data
+                </button>
+                <button
+                  onClick={() => removeSchemaFirstSelection(selectionId)}
+                  className="inline-flex items-center px-3 py-2 border border-status-error/30 text-status-error text-sm rounded-lg hover:bg-status-error-bg"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Content - Compliance View */}
+          <div className="px-6 py-4">
+            <CombinedComplianceView
+              key={`schema-first-${selectionId}-${linkedData.id}`}
+              acquisition={linkedData}
+              pairing={pairing}
+              getSchemaContent={getSchemaContent}
+              getSchemaAcquisition={getSchemaAcquisition}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // No data yet - show schema requirements + upload area
+    return (
+      <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-semibold text-content-primary">{selection.acquisitionName}</h3>
+              <p className="text-sm text-content-secondary mt-1">{selection.schemaName}</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => openReadmeForSelection(selection)}
+                className="inline-flex items-center px-3 py-2 border border-border-secondary text-content-secondary text-sm rounded-lg hover:bg-surface-secondary"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                README
+              </button>
+              <button
+                onClick={() => removeSchemaFirstSelection(selectionId)}
+                className="inline-flex items-center px-3 py-2 border border-border-secondary text-content-secondary text-sm rounded-lg hover:bg-surface-secondary"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Upload Area */}
+        <div className="px-6 py-4 border-b border-border">
+          <div
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              isDragOver
+                ? 'border-brand-500 bg-brand-50'
+                : 'border-border-secondary hover:border-brand-500'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleSchemaFirstDrop(e, selectionId)}
+          >
+            {uploadingForSchema === selectionId ? (
+              <>
+                <Loader className="h-8 w-8 text-brand-600 mx-auto mb-2 animate-spin" />
+                <p className="text-sm text-content-secondary">{progress?.currentOperation || 'Processing...'}</p>
+                {progress && (
+                  <div className="mt-3 w-full max-w-xs mx-auto">
+                    <div className="w-full bg-surface-secondary rounded-full h-1.5">
+                      <div
+                        className="bg-brand-600 h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: `${progress.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <Upload className="h-8 w-8 text-content-muted mx-auto mb-2" />
+                <p className="text-sm text-content-secondary mb-3">
+                  Upload DICOMs that should match: <strong>{selection.acquisitionName}</strong>
+                </p>
+                <input
+                  type="file"
+                  multiple
+                  webkitdirectory=""
+                  accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
+                  className="hidden"
+                  id={`file-upload-${selectionId}`}
+                  onChange={(e) => handleSchemaFirstFileUpload(selectionId, e.target.files)}
+                />
+                <div className="flex justify-center gap-3">
+                  <label
+                    htmlFor={`file-upload-${selectionId}`}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Browse Files
+                  </label>
+                  <button
+                    onClick={() => handleGenerateTestDataForSchema(selectionId)}
+                    className="inline-flex items-center px-4 py-2 border border-brand-600 text-brand-600 text-sm font-medium rounded-md hover:bg-brand-50"
+                  >
+                    <Database className="h-4 w-4 mr-2" />
+                    Generate Test Data
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Schema Requirements - Display using SchemaAcquisitionDisplay */}
+        <div className="px-6 py-4">
+          <SchemaAcquisitionDisplay
+            binding={{
+              schemaId: selection.schemaId,
+              acquisitionId: selection.acquisitionIndex.toString(),
+              schema: getUnifiedSchema(selection.schemaId)!
+            }}
+            isCollapsed={false}
+            isDataProcessing={false}
+            hideHeader={true}
+            getSchemaContent={getSchemaContent}
+            getSchemaAcquisition={getSchemaAcquisition}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  // Tabbed options - inline schema browser or data upload
+  const renderTabbedOptions = () => (
+    <div className="border border-border rounded-lg bg-surface-primary shadow-sm flex flex-col h-full">
+      {/* Tab Headers */}
+      <div className="flex border-b border-border">
+        <button
+          onClick={() => setActiveOptionsTab('schema')}
+          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+            activeOptionsTab === 'schema'
+              ? 'text-brand-600 border-b-2 border-brand-600 bg-surface-primary'
+              : 'text-content-secondary hover:text-content-primary bg-surface-secondary'
+          }`}
+        >
+          <FileText className="h-4 w-4 inline mr-2" />
+          Schema selection
+        </button>
+        <button
+          onClick={() => setActiveOptionsTab('data')}
+          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+            activeOptionsTab === 'data'
+              ? 'text-brand-600 border-b-2 border-brand-600 bg-surface-primary'
+              : 'text-content-secondary hover:text-content-primary bg-surface-secondary'
+          }`}
+        >
+          <Upload className="h-4 w-4 inline mr-2" />
+          Load data
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {activeOptionsTab === 'schema' ? (
+          <div className="h-full flex flex-col">
+            {/* Inline Schema Browser */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <UnifiedSchemaSelector
+                librarySchemas={librarySchemas}
+                uploadedSchemas={uploadedSchemas}
+                selectionMode="acquisition"
+                multiSelectMode={true}
+                selectedAcquisitions={pendingSchemaSelections}
+                onAcquisitionToggle={handleSchemaFirstToggle}
+                onSchemaUpload={handleSchemaUpload}
+                expandable={true}
+                getSchemaContent={getSchemaContent}
+                enableDragDrop={true}
+                onAcquisitionDragStart={handleAcquisitionDragStart}
+                onSchemaDragStart={handleSchemaDragStart}
+                onSchemaReadmeClick={handleSchemaReadmeClick}
+                onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
+              />
+            </div>
+
+            {/* Footer with Add Button */}
+            <div className="px-4 py-3 border-t border-border flex items-center justify-between bg-surface-secondary">
+              <p className="text-sm text-content-secondary">
+                {pendingSchemaSelections.length} selected
+              </p>
+              <button
+                onClick={confirmSchemaFirstSelections}
+                disabled={pendingSchemaSelections.length === 0}
+                className="px-4 py-2 bg-brand-600 text-content-inverted rounded-lg hover:bg-brand-700 disabled:bg-surface-tertiary disabled:text-content-muted disabled:cursor-not-allowed"
+              >
+                Add {pendingSchemaSelections.length} Acquisition{pendingSchemaSelections.length !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 flex-1">
+            {/* Upload area content */}
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors h-full flex flex-col items-center justify-center ${
+                isDragOver
+                  ? 'border-brand-500 bg-brand-50'
+                  : 'border-border-secondary hover:border-brand-500'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader className="h-12 w-12 text-brand-600 mx-auto mb-4 animate-spin" />
+                  <h3 className="text-lg font-semibold text-content-primary mb-2">Processing DICOM Files</h3>
+                  <p className="text-content-secondary mb-4">{progress?.currentOperation}</p>
+
+                  {progress && (
+                    <div className="space-y-3 mb-4 w-full max-w-xs">
+                      <div className="w-full bg-surface-secondary rounded-full h-2">
+                        <div
+                          className="bg-brand-600 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${progress.percentage}%` }}
+                        />
+                      </div>
+                      <p className="text-sm text-content-secondary">
+                        {Math.round(progress.percentage)}% complete
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Upload className="h-12 w-12 text-content-muted mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-content-primary mb-2">
+                    Load Data for Compliance Testing
+                  </h3>
+                  <p className="text-content-secondary mb-4 text-sm">
+                    Drag and drop DICOMs (folders or .zip), protocols (.pro, .exar1, .ExamCard, LxProtocol), or click to browse
+                  </p>
+
+                  <input
+                    type="file"
+                    multiple
+                    webkitdirectory=""
+                    accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
+                    className="hidden"
+                    id="file-upload-tabbed"
+                    onChange={(e) => handleFileUpload(e.target.files)}
+                  />
+                  <div className="flex items-center justify-center gap-3">
+                    <label
+                      htmlFor="file-upload-tabbed"
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Browse Files
+                    </label>
+
+                    <span className="text-content-tertiary text-sm">or</span>
+
+                    <button
+                      onClick={() => setShowSchemaAsDataModal(true)}
+                      className="inline-flex items-center px-4 py-2 border border-brand-600 text-brand-600 text-sm font-medium rounded-md hover:bg-brand-50"
+                    >
+                      <Database className="h-4 w-4 mr-2" />
+                      Generate Example Data
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   // Upload area component
   const renderUploadArea = (isExtra: boolean = false) => (
@@ -1303,32 +2353,90 @@ const DataLoadingAndMatching: React.FC = () => {
       </div>
 
       {/* Master-Detail Layout */}
-      <div className="grid grid-cols-12 gap-6 min-h-[600px]">
-        {/* Left Panel - Acquisition Selector */}
-        <div className="col-span-12 md:col-span-3">
-          <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
+      <div className="grid grid-cols-12 gap-6 min-h-[800px]">
+        {/* Left Panel - Acquisition Selector with DnD Kit */}
+        <div
+          className="col-span-12 md:col-span-3"
+          onDragOver={handleSidebarDragOver}
+          onDragLeave={handleSidebarDragLeave}
+          onDrop={handleSidebarDrop}
+        >
+          <div className={`bg-surface-primary rounded-lg border shadow-sm transition-colors ${
+            isOverDropZone ? 'border-brand-500 bg-brand-50/50' : 'border-border'
+          }`}>
             {/* Header */}
             <div className="px-4 py-3 border-b border-border">
               <h3 className="text-lg font-medium text-content-primary">Acquisitions</h3>
-              <p className="text-sm text-content-secondary">Select to view or load more data</p>
+              <p className="text-sm text-content-secondary">Select to view or drag to reorder</p>
             </div>
 
-            {/* Acquisition List */}
-            <div className="p-2 space-y-2 max-h-[600px] overflow-y-auto">
-              {/* Upload New - Always first */}
-              {renderAddNewItem()}
+            {/* Acquisition List with DnD */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDndDragStart}
+              onDragOver={handleDndDragOver}
+              onDragEnd={handleDndDragEnd}
+            >
+              <div className="p-2 space-y-2 max-h-[800px] overflow-y-auto">
+                {/* Upload New - Always first (not sortable) */}
+                {renderAddNewItem()}
 
-              {/* Existing Acquisitions */}
-              {loadedData.map((acquisition) => renderAcquisitionPreview(acquisition))}
-            </div>
+                {/* Drop hint when dragging from schema browser */}
+                {isOverDropZone && (
+                  <div className="p-3 text-center text-brand-600 text-sm border-2 border-dashed border-brand-500 rounded-lg bg-brand-50 dark:bg-brand-900/30">
+                    Drop to add
+                  </div>
+                )}
+
+                {/* Sortable items */}
+                <SortableContext
+                  items={sidebarItems.map(item => item.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {sidebarItems.map((item) => (
+                    <SortableAcquisitionItem
+                      key={item.id}
+                      item={item}
+                      isSelected={selectedAcquisitionId === item.id}
+                      linkedData={item.type === 'schema-first' ? schemaFirstData.get(item.id) : undefined}
+                      pairing={item.type === 'data' ? getAcquisitionPairing((item.data as Acquisition).id) : null}
+                      onSelect={() => setSelectedAcquisitionId(item.id)}
+                      onRemove={item.type === 'schema-first' ? () => removeSchemaFirstSelection(item.id) : undefined}
+                    />
+                  ))}
+                </SortableContext>
+              </div>
+
+              {/* Drag Overlay for smooth animation */}
+              <DragOverlay>
+                {activeDragId ? (
+                  <div className="border rounded-lg p-4 bg-surface-primary shadow-lg border-brand-500 opacity-90">
+                    <div className="flex items-center space-x-2">
+                      <GripVertical className="h-4 w-4 text-content-muted" />
+                      <FileText className="h-4 w-4 text-content-tertiary" />
+                      <span className="text-sm font-medium text-content-primary">
+                        {sidebarItems.find(item => item.id === activeDragId)?.type === 'schema-first'
+                          ? (sidebarItems.find(item => item.id === activeDragId)?.data as AcquisitionSelection)?.acquisitionName
+                          : (sidebarItems.find(item => item.id === activeDragId)?.data as Acquisition)?.protocolName
+                        }
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           </div>
         </div>
 
         {/* Right Panel - Combined View */}
         <div className="col-span-12 md:col-span-9">
           {selectedAcquisitionId === ADD_NEW_ID ? (
-            /* Show upload options when "Upload New" is selected */
-            renderUploadArea(false)
+            /* Show tabbed options for schema selection or data loading */
+            renderTabbedOptions()
+          ) : selectedAcquisitionId?.startsWith('schema-first:') ? (
+            /* Show schema-first view */
+            renderSchemaFirstView(selectedAcquisitionId)
           ) : selectedAcquisition ? (
             /* Show combined acquisition + schema view */
             renderCombinedView(selectedAcquisition)
@@ -1390,7 +2498,68 @@ const DataLoadingAndMatching: React.FC = () => {
                 onSchemaUpload={handleSchemaUpload}
                 expandable={true}
                 getSchemaContent={getSchemaContent}
+                onSchemaReadmeClick={handleSchemaReadmeClick}
+                onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schema-First Selection Modal */}
+      {showSchemaFirstModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-primary rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-content-primary">Select Schema Acquisitions</h2>
+                <p className="text-sm text-content-secondary mt-1">
+                  Choose one or more schema acquisitions to validate against
+                </p>
+              </div>
+              <button
+                onClick={cancelSchemaFirstModal}
+                className="text-content-muted hover:text-content-secondary"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 p-6 overflow-y-auto">
+              <UnifiedSchemaSelector
+                librarySchemas={librarySchemas}
+                uploadedSchemas={uploadedSchemas}
+                selectionMode="acquisition"
+                multiSelectMode={true}
+                selectedAcquisitions={pendingSchemaSelections}
+                onAcquisitionToggle={handleSchemaFirstToggle}
+                onSchemaUpload={handleSchemaUpload}
+                expandable={true}
+                getSchemaContent={getSchemaContent}
+                onSchemaReadmeClick={handleSchemaReadmeClick}
+                onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
+              />
+            </div>
+
+            <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+              <p className="text-sm text-content-secondary">
+                {pendingSchemaSelections.length} acquisition{pendingSchemaSelections.length !== 1 ? 's' : ''} selected
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelSchemaFirstModal}
+                  className="px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmSchemaFirstSelections}
+                  disabled={pendingSchemaSelections.length === 0}
+                  className="px-4 py-2 bg-brand-600 text-content-inverted rounded-lg hover:bg-brand-700 disabled:bg-surface-secondary disabled:text-content-muted disabled:cursor-not-allowed"
+                >
+                  Add {pendingSchemaSelections.length} Acquisition{pendingSchemaSelections.length !== 1 ? 's' : ''}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1437,6 +2606,8 @@ const DataLoadingAndMatching: React.FC = () => {
                 onSchemaUpload={handleSchemaUpload}
                 expandable={true}
                 getSchemaContent={getSchemaContent}
+                onSchemaReadmeClick={handleSchemaReadmeClick}
+                onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
               />
             </div>
           </div>
@@ -1564,6 +2735,18 @@ const DataLoadingAndMatching: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* README Modal */}
+      <DetailedDescriptionModal
+        isOpen={showReadmeModal}
+        onClose={() => {
+          setShowReadmeModal(false);
+          setReadmeContent(null);
+        }}
+        title={readmeContent?.title || ''}
+        description={readmeContent?.description || ''}
+        isReadOnly={true}
+      />
     </div>
   );
 };

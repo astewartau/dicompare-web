@@ -31,6 +31,7 @@ interface AcquisitionTableProps {
   subtitle?: string;
   version?: string;
   authors?: string[];
+  hideHeader?: boolean; // Hide the header section (title, version, authors)
   // Collapse/deselect handlers
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -66,6 +67,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   subtitle,
   version,
   authors,
+  hideHeader = false,
   isCollapsed = false,
   onToggleCollapse,
   onDeselect,
@@ -300,8 +302,9 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   };
 
   return (
-    <div className="border border-border-secondary rounded-lg bg-surface-primary shadow-sm h-fit">
+    <div className={hideHeader ? 'bg-surface-primary h-fit' : 'border border-border-secondary rounded-lg bg-surface-primary shadow-sm h-fit'}>
       {/* Compact Header Bar */}
+      {!hideHeader && (
       <div className="px-3 py-2 bg-surface-secondary border-b border-border rounded-t-lg">
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
@@ -468,6 +471,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           )}
         </div>
       </div>
+      )}
 
       {/* Compact Body Content */}
       {isExpanded && (
