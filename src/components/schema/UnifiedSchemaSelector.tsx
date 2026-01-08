@@ -671,7 +671,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
         {/* Expanded Acquisitions */}
         {expandable && isExpanded && selectionMode === 'acquisition' && (
-          <div className="p-4 border-t border-border bg-surface-secondary max-h-[800px] overflow-y-auto">
+          <div className="p-4 border-t border-border bg-surface-secondary">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600"></div>
