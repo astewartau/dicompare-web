@@ -1,17 +1,89 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, Loader2, Copy, AlertTriangle, FileText, ArrowLeft } from 'lucide-react';
+import { Upload, Plus, Loader2, AlertTriangle, FileText, ArrowLeft, Copy, X, GripVertical } from 'lucide-react';
+import {
+  DndContext,
+  DragOverlay,
+  pointerWithin,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragEndEvent,
+  DragOverEvent,
+  useDroppable,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import { useAcquisitions } from '../../contexts/AcquisitionContext';
 import { useSchemaService } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import AcquisitionTable from './AcquisitionTable';
 import UnifiedSchemaSelector from './UnifiedSchemaSelector';
+import { SchemaUploadModal } from './SchemaUploadModal';
+import SchemaReadmeModal, { ReadmeItem } from './SchemaReadmeModal';
+import { schemaCacheManager } from '../../services/SchemaCacheManager';
 import { processFieldForUI } from '../../utils/fieldProcessing';
 import { roundDicomValue } from '../../utils/valueRounding';
 import { processUploadedFiles, checkFileSizeLimit, FileSizeInfo, getAllFilesFromDirectory } from '../../utils/fileUploadUtils';
 import { convertSchemaToAcquisitions, convertRawAcquisitionToContext } from '../../utils/schemaToAcquisition';
 import { processSchemaFieldForUI } from '../../utils/datatypeInference';
+import { AcquisitionSelection } from '../../types';
+
+// Droppable zone for acquisitions panel using dnd-kit
+interface AcquisitionsDropZoneProps {
+  isOverDropZone: boolean;
+  children: React.ReactNode;
+}
+
+const AcquisitionsDropZone: React.FC<AcquisitionsDropZoneProps> = ({ isOverDropZone, children }) => {
+  const { setNodeRef } = useDroppable({
+    id: 'acquisitions-drop-zone',
+  });
+
+  return (
+    <div ref={setNodeRef} className="col-span-12 md:col-span-4 lg:col-span-3">
+      {children}
+    </div>
+  );
+};
+
+// Sortable wrapper for acquisition items in the list
+interface SortableAcquisitionItemProps {
+  id: string;
+  children: (dragHandleProps: { attributes: any; listeners: any }) => React.ReactNode;
+}
+
+const SortableAcquisitionItem: React.FC<SortableAcquisitionItemProps> = ({ id, children }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ attributes, listeners })}
+    </div>
+  );
+};
 
 
 const BuildSchema: React.FC = () => {
@@ -46,8 +118,6 @@ const BuildSchema: React.FC = () => {
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const [isPyodideReady, setIsPyodideReady] = useState(() => dicompareAPI.isInitialized());
   const [isDragOver, setIsDragOver] = useState(false);
-  const [showSchemaModal, setShowSchemaModal] = useState(false);
-  const [isLoadingSchema, setIsLoadingSchema] = useState(false);
   const [selectedAcquisitionId, setSelectedAcquisitionId] = useState<string | null>(null);
   const [showBackConfirmModal, setShowBackConfirmModal] = useState(false);
   const [dicomAnalysisError, setDicomAnalysisError] = useState<string | null>(null);
@@ -56,6 +126,39 @@ const BuildSchema: React.FC = () => {
     info: null,
     files: null
   });
+
+  // Tabbed layout state
+  const [activeTab, setActiveTab] = useState<'schema' | 'data' | 'scratch'>('data');
+
+  // Schema selection state (for Tab 1)
+  const [selectedSchemaAcquisitions, setSelectedSchemaAcquisitions] = useState<AcquisitionSelection[]>([]);
+  const [isAddingFromSchema, setIsAddingFromSchema] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [schemaValidationError, setSchemaValidationError] = useState<string | null>(null);
+
+  // DnD Kit state
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [isOverDropZone, setIsOverDropZone] = useState(false);
+
+  // README modal state
+  const [showReadmeModal, setShowReadmeModal] = useState(false);
+  const [readmeModalData, setReadmeModalData] = useState<{
+    schemaName: string;
+    readmeItems: ReadmeItem[];
+    initialSelection: string;
+  } | null>(null);
+
+  // DnD Kit sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   const ADD_NEW_ID = '__add_new__';
 
   // Auto-select logic for new workflow
@@ -616,58 +719,6 @@ const BuildSchema: React.FC = () => {
     setAcquisitions([]);
   };
 
-  const handleCopyFromSchema = async (schemaId: string, acquisitionIndex: number) => {
-    setIsLoadingSchema(true);
-    try {
-      // Get schema content
-      const schemaContent = await getSchemaContent(schemaId);
-      if (!schemaContent) {
-        throw new Error('Failed to load schema content');
-      }
-
-      const parsedSchema = JSON.parse(schemaContent);
-
-      // Find the specific acquisition by index
-      let targetAcquisition = null;
-      let acquisitionName = '';
-      if (parsedSchema.acquisitions && typeof parsedSchema.acquisitions === 'object') {
-        const acquisitionKeys = Object.keys(parsedSchema.acquisitions);
-        if (acquisitionIndex >= 0 && acquisitionIndex < acquisitionKeys.length) {
-          acquisitionName = acquisitionKeys[acquisitionIndex];
-          targetAcquisition = parsedSchema.acquisitions[acquisitionName];
-        }
-      }
-
-      if (!targetAcquisition) {
-        throw new Error(`Acquisition at index ${acquisitionIndex} not found in schema`);
-      }
-
-      // Convert using shared utility
-      const newAcquisition = convertRawAcquisitionToContext(
-        acquisitionName,
-        targetAcquisition,
-        schemaId,
-        targetAcquisition.tags
-      );
-
-      // Add to acquisitions
-      setAcquisitions(prev => [...prev, newAcquisition]);
-
-      // Auto-select the newly created acquisition
-      setSelectedAcquisitionId(newAcquisition.id);
-
-      setShowSchemaModal(false);
-
-      console.log('✅ Successfully imported acquisition from schema');
-
-    } catch (error) {
-      console.error('❌ Failed to copy from schema:', error);
-      alert(`Failed to copy from schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsLoadingSchema(false);
-    }
-  };
-
   const handleContinue = () => {
     navigate('/schema-builder/enter-metadata');
   };
@@ -678,25 +729,300 @@ const BuildSchema: React.FC = () => {
       setShowBackConfirmModal(true);
     } else {
       // No data to lose, go back directly
-      navigate('/schema-builder/start');
+      navigate('/');
     }
   };
 
   const confirmBack = () => {
     setShowBackConfirmModal(false);
     setAcquisitions([]); // Clear data
-    navigate('/schema-builder/start');
+    navigate('/');
+  };
+
+  // Schema selection handlers (Tab 1)
+  const handleSchemaAcquisitionToggle = (selection: AcquisitionSelection) => {
+    setSelectedSchemaAcquisitions(prev => {
+      const exists = prev.some(
+        s => s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex
+      );
+      return exists
+        ? prev.filter(s => !(s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex))
+        : [...prev, selection];
+    });
+  };
+
+  const handleAddFromSelectedSchemas = async () => {
+    if (selectedSchemaAcquisitions.length === 0) return;
+
+    setIsAddingFromSchema(true);
+    try {
+      const newAcquisitions: any[] = [];
+
+      // Group selections by schemaId for efficient loading
+      const selectionsBySchema = new Map<string, AcquisitionSelection[]>();
+      for (const sel of selectedSchemaAcquisitions) {
+        if (!selectionsBySchema.has(sel.schemaId)) {
+          selectionsBySchema.set(sel.schemaId, []);
+        }
+        selectionsBySchema.get(sel.schemaId)!.push(sel);
+      }
+
+      // Extract each acquisition
+      for (const [schemaId, selections] of selectionsBySchema) {
+        const schemaContent = await getSchemaContent(schemaId);
+        if (!schemaContent) {
+          console.warn(`Failed to load schema content for ${schemaId}`);
+          continue;
+        }
+
+        const parsedSchema = JSON.parse(schemaContent);
+        const acquisitionKeys = Object.keys(parsedSchema.acquisitions || {});
+
+        for (const sel of selections) {
+          if (sel.acquisitionIndex < acquisitionKeys.length) {
+            const acquisitionName = acquisitionKeys[sel.acquisitionIndex];
+            const targetAcquisition = parsedSchema.acquisitions[acquisitionName];
+
+            if (targetAcquisition) {
+              const newAcquisition = convertRawAcquisitionToContext(
+                acquisitionName,
+                targetAcquisition,
+                schemaId,
+                targetAcquisition.tags
+              );
+              newAcquisitions.push(newAcquisition);
+            }
+          }
+        }
+      }
+
+      if (newAcquisitions.length > 0) {
+        setAcquisitions(prev => [...prev, ...newAcquisitions]);
+        // Select the first newly added acquisition
+        setSelectedAcquisitionId(newAcquisitions[0].id);
+        // Clear selections
+        setSelectedSchemaAcquisitions([]);
+      }
+    } catch (error) {
+      console.error('Failed to add from selected schemas:', error);
+    } finally {
+      setIsAddingFromSchema(false);
+    }
+  };
+
+  const handleSchemaFileUpload = async (file: File) => {
+    setSchemaValidationError(null);
+    try {
+      const validation = await schemaCacheManager.validateSchemaFile(file);
+      if (!validation.isValid) {
+        setSchemaValidationError(validation.error || 'Invalid schema file');
+        return;
+      }
+      setUploadedFile(file);
+      setShowUploadModal(true);
+    } catch (error) {
+      console.error('Failed to validate schema file:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setSchemaValidationError(errorMessage);
+    }
+  };
+
+  // Build README items from schema data for the sidebar
+  const buildReadmeItems = (schemaData: any, schemaName: string): ReadmeItem[] => {
+    const items: ReadmeItem[] = [];
+
+    // Schema-level README
+    items.push({
+      id: 'schema',
+      type: 'schema',
+      name: schemaName,
+      description: schemaData.description || ''
+    });
+
+    // Acquisition-level READMEs
+    const acquisitions = schemaData.acquisitions || {};
+    Object.entries(acquisitions).forEach(([name, data]: [string, any], index) => {
+      items.push({
+        id: `acquisition-${index}`,
+        type: 'acquisition',
+        name: name,
+        description: data.detailed_description || data.description || '',
+        acquisitionIndex: index
+      });
+    });
+
+    return items;
+  };
+
+  // Open README for a schema (schema-level description)
+  const handleSchemaReadmeClick = async (schemaId: string, schemaName: string) => {
+    try {
+      const content = await getSchemaContent(schemaId);
+      if (content) {
+        const schemaData = JSON.parse(content);
+        setReadmeModalData({
+          schemaName,
+          readmeItems: buildReadmeItems(schemaData, schemaName),
+          initialSelection: 'schema'
+        });
+        setShowReadmeModal(true);
+      }
+    } catch (error) {
+      console.error('Failed to load schema README:', error);
+    }
+  };
+
+  // Open README for an acquisition in the schema browser
+  const handleAcquisitionReadmeClick = async (schemaId: string, schemaName: string, acquisitionIndex: number, _acquisitionName: string) => {
+    try {
+      const content = await getSchemaContent(schemaId);
+      if (content) {
+        const schemaData = JSON.parse(content);
+        setReadmeModalData({
+          schemaName,
+          readmeItems: buildReadmeItems(schemaData, schemaName),
+          initialSelection: `acquisition-${acquisitionIndex}`
+        });
+        setShowReadmeModal(true);
+      }
+    } catch (error) {
+      console.error('Failed to load acquisition README:', error);
+    }
+  };
+
+  // DnD Kit handlers for drag-and-drop from schema selector
+  const handleDndDragStart = (event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  };
+
+  const handleDndDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    // Check if dragging from schema browser (not reordering)
+    const activeId = active.id as string;
+    const isFromSchemaBrowser = activeId.startsWith('schema-drag-') || activeId.startsWith('acq-drag-');
+
+    if (!isFromSchemaBrowser || !over) {
+      setIsOverDropZone(false);
+      return;
+    }
+
+    // Only show drop zone if over specific valid targets:
+    // - The acquisitions drop zone itself
+    // - Any existing acquisition in the list
+    const overId = over.id as string;
+    const isOverDropZone = overId === 'acquisitions-drop-zone';
+    const isOverAcquisition = acquisitions.some(a => a.id === overId);
+
+    setIsOverDropZone(isOverDropZone || isOverAcquisition);
+  };
+
+  const handleDndDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    setIsOverDropZone(false);
+
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Check if this is a drop from schema browser
+    const isFromSchemaBrowser = activeId.startsWith('schema-drag-') || activeId.startsWith('acq-drag-');
+
+    // Only accept drops on specific valid targets:
+    // - The acquisitions drop zone itself
+    // - Any existing acquisition in the list
+    const isOverDropZone = overId === 'acquisitions-drop-zone';
+    const isOverAcquisition = acquisitions.some(a => a.id === overId);
+    const isValidDropTarget = isOverDropZone || isOverAcquisition;
+
+    // Handle drop on acquisitions panel (from schema browser)
+    if (isFromSchemaBrowser && isValidDropTarget) {
+      const dragData = active.data.current;
+      if (dragData?.type === 'acquisition') {
+        // Single acquisition drop - add to acquisitions
+        const selection: AcquisitionSelection = dragData.selection;
+        try {
+          const schemaContent = await getSchemaContent(selection.schemaId);
+          if (!schemaContent) return;
+
+          const parsedSchema = JSON.parse(schemaContent);
+          const acquisitionKeys = Object.keys(parsedSchema.acquisitions || {});
+
+          if (selection.acquisitionIndex < acquisitionKeys.length) {
+            const acquisitionName = acquisitionKeys[selection.acquisitionIndex];
+            const targetAcquisition = parsedSchema.acquisitions[acquisitionName];
+
+            if (targetAcquisition) {
+              const newAcquisition = convertRawAcquisitionToContext(
+                acquisitionName,
+                targetAcquisition,
+                selection.schemaId,
+                targetAcquisition.tags
+              );
+              setAcquisitions(prev => [...prev, newAcquisition]);
+              setSelectedAcquisitionId(newAcquisition.id);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to add acquisition from drag:', error);
+        }
+      } else if (dragData?.type === 'schema') {
+        // Entire schema drop - add all acquisitions
+        try {
+          const schemaContent = await getSchemaContent(dragData.schemaId);
+          if (!schemaContent) return;
+
+          const parsedSchema = JSON.parse(schemaContent);
+          const acquisitionEntries = Object.entries(parsedSchema.acquisitions || {});
+
+          const newAcquisitions: any[] = [];
+          acquisitionEntries.forEach(([name, acqData]: [string, any]) => {
+            const newAcquisition = convertRawAcquisitionToContext(
+              name,
+              acqData,
+              dragData.schemaId,
+              acqData.tags
+            );
+            newAcquisitions.push(newAcquisition);
+          });
+
+          if (newAcquisitions.length > 0) {
+            setAcquisitions(prev => [...prev, ...newAcquisitions]);
+            setSelectedAcquisitionId(newAcquisitions[0].id);
+          }
+        } catch (error) {
+          console.error('Failed to add schema acquisitions from drag:', error);
+        }
+      }
+      return;
+    }
+
+    // Handle reordering within acquisitions list
+    if (activeId !== overId) {
+      // Check if both items are acquisitions (not schema browser items)
+      const isActiveAcquisition = acquisitions.some(a => a.id === activeId);
+      const isOverAcquisition = acquisitions.some(a => a.id === overId);
+
+      if (isActiveAcquisition && isOverAcquisition) {
+        setAcquisitions(prev => {
+          const oldIndex = prev.findIndex(a => a.id === activeId);
+          const newIndex = prev.findIndex(a => a.id === overId);
+          if (oldIndex === -1 || newIndex === -1) return prev;
+          return arrayMove(prev, oldIndex, newIndex);
+        });
+      }
+    }
   };
 
   // Component to render compact acquisition preview card
-  const renderAcquisitionPreview = (acquisition: any) => {
+  const renderAcquisitionPreview = (acquisition: any, dragHandleProps?: { attributes: any; listeners: any }) => {
     const incompleteFields = getAcquisitionIncompleteFields(acquisition.id);
     const hasIncomplete = incompleteFields.size > 0;
     const isSelected = selectedAcquisitionId === acquisition.id;
 
     return (
       <div
-        key={acquisition.id}
         onClick={() => setSelectedAcquisitionId(acquisition.id)}
         className={`border rounded-lg p-4 cursor-pointer transition-all ${
           isSelected
@@ -704,7 +1030,15 @@ const BuildSchema: React.FC = () => {
             : 'border-border hover:border-border-secondary hover:bg-surface-secondary'
         }`}
       >
-        <div className="flex items-start justify-between">
+        <div className="flex items-start">
+          {/* Drag handle - only this initiates drag */}
+          <div
+            {...(dragHandleProps?.attributes || {})}
+            {...(dragHandleProps?.listeners || {})}
+            className="cursor-grab active:cursor-grabbing touch-none"
+          >
+            <GripVertical className="h-4 w-4 text-content-muted mt-0.5 mr-2 flex-shrink-0" />
+          </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center space-x-2">
               <FileText className="h-4 w-4 text-content-tertiary flex-shrink-0" />
@@ -728,6 +1062,17 @@ const BuildSchema: React.FC = () => {
               )}
             </div>
           </div>
+          {/* Delete button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteAcquisition(acquisition.id);
+            }}
+            className="p-1 text-content-tertiary hover:text-status-error rounded ml-2 flex-shrink-0"
+            title="Remove"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     );
@@ -749,180 +1094,213 @@ const BuildSchema: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Plus className="h-4 w-4 text-brand-500 flex-shrink-0" />
           <h3 className="text-sm font-medium text-content-primary">
-            Add New Acquisition
+            Add acquisitions
           </h3>
         </div>
-        <p className="text-xs text-content-secondary mt-1">
-          Load files or create acquisition manually
-        </p>
       </div>
     );
   };
 
-  // Component to render unified upload card
-  const renderUnifiedUploadCard = (isAdditional: boolean = false) => (
-    <div className="border border-border rounded-lg bg-surface-primary shadow-sm p-6 h-fit">
-      <div
-        className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
-          isDragOver
-            ? 'border-brand-500 bg-brand-50'
-            : 'border-brand-500/30 hover:border-brand-500'
-        }`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {isUploading ? (
-          <>
-            <Loader2 className="h-12 w-12 text-brand-600 mx-auto mb-4 animate-spin" />
-            <h3 className="text-lg font-semibold text-content-primary mb-2 text-center">Processing Files</h3>
-            <p className="text-content-secondary mb-4 text-center">{uploadStatus}</p>
+  // Tabbed options - schema browser or data upload
+  const renderTabbedOptions = () => (
+    <div className="border border-border rounded-lg bg-surface-primary shadow-sm flex flex-col h-full">
+      {/* Tab Headers */}
+      <div className="flex border-b border-border">
+        <button
+          onClick={() => setActiveTab('schema')}
+          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+            activeTab === 'schema'
+              ? 'text-brand-600 border-b-2 border-brand-600 bg-surface-primary'
+              : 'text-content-secondary hover:text-content-primary bg-surface-secondary'
+          }`}
+        >
+          <FileText className="h-4 w-4 inline mr-2" />
+          From schema
+        </button>
+        <button
+          onClick={() => setActiveTab('data')}
+          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+            activeTab === 'data'
+              ? 'text-brand-600 border-b-2 border-brand-600 bg-surface-primary'
+              : 'text-content-secondary hover:text-content-primary bg-surface-secondary'
+          }`}
+        >
+          <Upload className="h-4 w-4 inline mr-2" />
+          From data
+        </button>
+        <button
+          onClick={() => {
+            // Immediately create a new acquisition and navigate to it
+            const newAcquisitionId = `acq_${Date.now()}`;
+            const newAcquisition = {
+              id: newAcquisitionId,
+              protocolName: 'New Acquisition',
+              seriesDescription: '',
+              totalFiles: 0,
+              acquisitionFields: [],
+              series: [],
+              metadata: {},
+              validationFunctions: []
+            };
+            setAcquisitions(prev => [...prev, newAcquisition]);
+            setSelectedAcquisitionId(newAcquisitionId);
+          }}
+          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+            activeTab === 'scratch'
+              ? 'text-brand-600 border-b-2 border-brand-600 bg-surface-primary'
+              : 'text-content-secondary hover:text-content-primary bg-surface-secondary'
+          }`}
+        >
+          <Plus className="h-4 w-4 inline mr-2" />
+          From scratch
+        </button>
+      </div>
 
-            <div className="max-w-md mx-auto space-y-3 mb-4">
-              <div className="w-full bg-surface-secondary rounded-full h-2">
-                <div
-                  className="bg-brand-600 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-              <p className="text-sm text-content-secondary text-center">
-                {Math.round(uploadProgress)}% complete
+      {/* Tab Content */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {activeTab === 'schema' ? (
+          <div className="h-full flex flex-col">
+            {/* Inline Schema Browser */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <UnifiedSchemaSelector
+                librarySchemas={librarySchemas}
+                uploadedSchemas={uploadedSchemas}
+                selectionMode="acquisition"
+                multiSelectMode={true}
+                selectedAcquisitions={selectedSchemaAcquisitions}
+                onAcquisitionToggle={handleSchemaAcquisitionToggle}
+                onSchemaUpload={handleSchemaFileUpload}
+                expandable={true}
+                getSchemaContent={getSchemaContent}
+                enableDragDrop={true}
+                onSchemaReadmeClick={handleSchemaReadmeClick}
+                onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
+              />
+            </div>
+
+            {/* Footer with Add Button */}
+            <div className="px-4 py-3 border-t border-border flex items-center justify-between bg-surface-secondary">
+              <p className="text-sm text-content-secondary">
+                {selectedSchemaAcquisitions.length} selected
               </p>
-            </div>
-          </>
-        ) : (
-          <>
-            <Upload className="h-10 w-10 text-brand-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-content-primary mb-2 text-center">
-              {isAdditional ? 'Add More Content' : 'Create Acquisitions'}
-            </h3>
-            <p className="text-sm text-content-secondary mb-6 text-center">
-              {isAdditional ? 'Load more files, zip archives, or add manual acquisitions' : 'Load files, zip archives, drag and drop, or create acquisitions manually'}
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* DICOM Loading Section */}
-          <div className="border border-blue-500/20 rounded-lg p-4 bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
-            <div className="text-center">
-              <Upload className="h-6 w-6 text-blue-500 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-content-primary mb-1">DICOM Files</h4>
-              <p className="text-xs text-content-secondary mb-3">Load DICOM files, zip archives, or folders</p>
-              <input
-                type="file"
-                multiple
-                webkitdirectory=""
-                accept=".dcm,.dicom,.zip"
-                className="hidden"
-                id={isAdditional ? "dicom-upload-extra" : "dicom-upload"}
-                onChange={(e) => handleFileUpload(e.target.files)}
-              />
-              <label
-                htmlFor={!isUploading ? (isAdditional ? "dicom-upload-extra" : "dicom-upload") : ""}
-                className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
-                  !isUploading
-                    ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer'
-                    : 'text-content-muted bg-surface-secondary cursor-not-allowed'
-                }`}
-              >
-                <Upload className="h-3 w-3 mr-1" />
-                Browse DICOMs
-              </label>
-            </div>
-          </div>
-
-          {/* Protocol Upload Section */}
-          <div className="border border-purple-500/20 rounded-lg p-4 bg-purple-500/5 hover:bg-purple-500/10 transition-colors">
-            <div className="text-center">
-              <Upload className="h-6 w-6 text-purple-500 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-content-primary mb-1">Protocol Files</h4>
-              <p className="text-xs text-content-secondary mb-3">Siemens (.pro, .exar1), Philips (.ExamCard), or GE (LxProtocol)</p>
-              <input
-                type="file"
-                accept=".pro,.exar1,.ExamCard,.examcard,LxProtocol"
-                className="hidden"
-                id={isAdditional ? "protocol-upload-extra" : "protocol-upload"}
-                onChange={(e) => handleProFileUpload(e.target.files)}
-              />
-              <label
-                htmlFor={!isUploading ? (isAdditional ? "protocol-upload-extra" : "protocol-upload") : ""}
-                className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
-                  !isUploading
-                    ? 'text-white bg-purple-600 hover:bg-purple-700 cursor-pointer'
-                    : 'text-content-muted bg-surface-secondary cursor-not-allowed'
-                }`}
-              >
-                <Upload className="h-3 w-3 mr-1" />
-                Browse Protocols
-              </label>
-            </div>
-          </div>
-
-          {/* Manual Entry Section */}
-          <div className="border border-border rounded-lg p-4 bg-surface-secondary/50 hover:bg-surface-secondary transition-colors">
-            <div className="text-center">
-              <Plus className="h-6 w-6 text-content-tertiary mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-content-primary mb-1">Manual Entry</h4>
-              <p className="text-xs text-content-secondary mb-3">Create acquisition manually</p>
               <button
-                onClick={() => {
-                  // Create a new acquisition manually here so we can get its ID
-                  const newAcquisitionId = `acq_${Date.now()}`;
-                  const newAcquisition = {
-                    id: newAcquisitionId,
-                    protocolName: 'New Acquisition',
-                    seriesDescription: '',
-                    totalFiles: 0,
-                    acquisitionFields: [],
-                    series: [],
-                    metadata: {},
-                    validationFunctions: []
-                  };
-
-                  // Add to acquisitions
-                  setAcquisitions(prev => [...prev, newAcquisition]);
-
-                  // Auto-select the newly created acquisition
-                  setSelectedAcquisitionId(newAcquisitionId);
-                }}
-                className="inline-flex items-center justify-center w-full px-3 py-2 border border-border-secondary rounded-md text-xs font-medium text-content-secondary bg-surface-primary hover:bg-surface-secondary"
+                onClick={handleAddFromSelectedSchemas}
+                disabled={selectedSchemaAcquisitions.length === 0 || isAddingFromSchema}
+                className="px-4 py-2 bg-brand-600 text-content-inverted rounded-lg hover:bg-brand-700 disabled:bg-surface-tertiary disabled:text-content-muted disabled:cursor-not-allowed"
               >
-                <Plus className="h-3 w-3 mr-1" />
-                Add Acquisition
-              </button>
-            </div>
-          </div>
-
-          {/* Copy from Schema Section */}
-          <div className="border border-orange-500/20 rounded-lg p-4 bg-orange-500/5 hover:bg-orange-500/10 transition-colors">
-            <div className="text-center">
-              <Copy className="h-6 w-6 text-orange-500 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-content-primary mb-1">Copy from Schema</h4>
-              <p className="text-xs text-content-secondary mb-3">Import from existing schemas</p>
-              <button
-                onClick={() => setShowSchemaModal(true)}
-                disabled={isLoadingSchema}
-                className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
-                  !isLoadingSchema
-                    ? 'text-white bg-orange-600 hover:bg-orange-700 cursor-pointer'
-                    : 'text-content-muted bg-surface-secondary cursor-not-allowed'
-                }`}
-              >
-                {isLoadingSchema ? (
+                {isAddingFromSchema ? (
                   <>
-                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    Loading...
+                    <Loader2 className="h-4 w-4 inline mr-2 animate-spin" />
+                    Adding...
                   </>
                 ) : (
-                  <>
-                    <Copy className="h-3 w-3 mr-1" />
-                    Browse Schemas
-                  </>
+                  <>Add {selectedSchemaAcquisitions.length} Acquisition{selectedSchemaAcquisitions.length !== 1 ? 's' : ''}</>
                 )}
               </button>
             </div>
           </div>
-        </div>
-          </>
+        ) : (
+          <div className="p-6 flex-1">
+            {/* Upload area content */}
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 transition-colors h-full flex flex-col ${
+                isDragOver
+                  ? 'border-brand-500 bg-brand-50'
+                  : 'border-border-secondary hover:border-brand-500'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              {isUploading ? (
+                <div className="flex-1 flex flex-col items-center justify-center">
+                  <Loader2 className="h-12 w-12 text-brand-600 mx-auto mb-4 animate-spin" />
+                  <h3 className="text-lg font-semibold text-content-primary mb-2">Processing Files</h3>
+                  <p className="text-content-secondary mb-4">{uploadStatus}</p>
+
+                  <div className="w-full max-w-xs space-y-3 mb-4">
+                    <div className="w-full bg-surface-secondary rounded-full h-2">
+                      <div
+                        className="bg-brand-600 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-sm text-content-secondary text-center">
+                      {Math.round(uploadProgress)}% complete
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center">
+                  <Upload className="h-10 w-10 text-brand-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-content-primary mb-2 text-center">
+                    Load Data
+                  </h3>
+                  <p className="text-sm text-content-secondary mb-6 text-center">
+                    Drag and drop files, or choose an option below
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-xl">
+                    {/* DICOM Loading Section */}
+                    <div className="border border-blue-500/20 rounded-lg p-4 bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
+                      <div className="text-center">
+                        <Upload className="h-6 w-6 text-blue-500 mx-auto mb-2" />
+                        <h4 className="text-sm font-medium text-content-primary mb-1">DICOM Files</h4>
+                        <p className="text-xs text-content-secondary mb-3">Load DICOM files, zip archives, or folders</p>
+                        <input
+                          type="file"
+                          multiple
+                          webkitdirectory=""
+                          accept=".dcm,.dicom,.zip"
+                          className="hidden"
+                          id="dicom-upload-tabbed"
+                          onChange={(e) => handleFileUpload(e.target.files)}
+                        />
+                        <label
+                          htmlFor={!isUploading ? "dicom-upload-tabbed" : ""}
+                          className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
+                            !isUploading
+                              ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                              : 'text-content-muted bg-surface-secondary cursor-not-allowed'
+                          }`}
+                        >
+                          <Upload className="h-3 w-3 mr-1" />
+                          Browse DICOMs
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Protocol Upload Section */}
+                    <div className="border border-purple-500/20 rounded-lg p-4 bg-purple-500/5 hover:bg-purple-500/10 transition-colors">
+                      <div className="text-center">
+                        <Upload className="h-6 w-6 text-purple-500 mx-auto mb-2" />
+                        <h4 className="text-sm font-medium text-content-primary mb-1">Protocol Files</h4>
+                        <p className="text-xs text-content-secondary mb-3">Siemens, Philips, or GE protocols</p>
+                        <input
+                          type="file"
+                          accept=".pro,.exar1,.ExamCard,.examcard,LxProtocol"
+                          className="hidden"
+                          id="protocol-upload-tabbed"
+                          onChange={(e) => handleProFileUpload(e.target.files)}
+                        />
+                        <label
+                          htmlFor={!isUploading ? "protocol-upload-tabbed" : ""}
+                          className={`inline-flex items-center justify-center w-full px-3 py-2 border border-transparent text-xs font-medium rounded-md ${
+                            !isUploading
+                              ? 'text-white bg-purple-600 hover:bg-purple-700 cursor-pointer'
+                              : 'text-content-muted bg-surface-secondary cursor-not-allowed'
+                          }`}
+                        >
+                          <Upload className="h-3 w-3 mr-1" />
+                          Browse Protocols
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -937,7 +1315,7 @@ const BuildSchema: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-bold text-content-primary mb-4">
-              Build Schema - Step 2
+              Schema Builder
               {editingSchema && (
                 <span className="text-lg font-normal text-brand-600 ml-2">
                   (Editing: {editingSchema.metadata?.name || 'Schema'})
@@ -950,7 +1328,7 @@ const BuildSchema: React.FC = () => {
                   'Review and modify the loaded schema acquisitions and configure which DICOM fields to include.' :
                   'Review detected acquisitions and configure which DICOM fields to include in your validation schema.'
               ) : (
-                'Load reference files to automatically extract metadata and create acquisition schemas, or manually add acquisitions.'
+                'Start from an existing schema or load reference data to create acquisition schemas.'
               )}
             </p>
           </div>
@@ -969,32 +1347,58 @@ const BuildSchema: React.FC = () => {
       </div>
 
       {/* Master-Detail Layout - Always Visible */}
-      <div className="grid grid-cols-12 gap-6 min-h-[600px]">
-        {/* Left Panel - Acquisition Selector */}
-        <div className="col-span-12 md:col-span-4 lg:col-span-3">
-          <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
-            {/* Header */}
-            <div className="px-4 py-3 border-b border-border">
-              <h3 className="text-lg font-medium text-content-primary">Acquisitions</h3>
-              <p className="text-sm text-content-secondary">Select an acquisition to edit or create new</p>
-            </div>
+      {/* DndContext wraps entire layout to enable drag from schema browser to acquisitions panel */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={handleDndDragStart}
+        onDragOver={handleDndDragOver}
+        onDragEnd={handleDndDragEnd}
+      >
+        <div className="grid grid-cols-12 gap-6 min-h-[600px]">
+          {/* Left Panel - Acquisition Selector (Droppable Zone) */}
+          <AcquisitionsDropZone isOverDropZone={isOverDropZone}>
+            <div className={`bg-surface-primary rounded-lg border shadow-sm transition-colors ${
+              isOverDropZone ? 'border-brand-500 bg-brand-50/50' : 'border-border'
+            }`}>
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-border">
+                <h3 className="text-lg font-medium text-content-primary">Acquisitions</h3>
+                <p className="text-sm text-content-secondary">Select to view or drag to reorder</p>
+              </div>
 
-            {/* Acquisition List */}
-            <div className="p-2 space-y-2 max-h-[500px] overflow-y-auto">
-              {/* Add New Acquisition - Always first */}
-              {renderAddNewItem()}
+              {/* Acquisition List */}
+              <div className="p-2 space-y-2 max-h-[500px] overflow-y-auto">
+                {/* Add New Acquisition - Always first (not sortable) */}
+                {renderAddNewItem()}
 
-              {/* Existing Acquisitions */}
-              {acquisitions.map((acquisition) => renderAcquisitionPreview(acquisition))}
+                {/* Drop hint when dragging from schema browser */}
+                {isOverDropZone && (
+                  <div className="p-3 text-center text-brand-600 text-sm border-2 border-dashed border-brand-500 rounded-lg bg-brand-50 dark:bg-brand-900/30">
+                    Drop to add
+                  </div>
+                )}
+
+                {/* Existing Acquisitions - Sortable */}
+                <SortableContext
+                  items={acquisitions.map(a => a.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {acquisitions.map((acquisition) => (
+                    <SortableAcquisitionItem key={acquisition.id} id={acquisition.id}>
+                      {(dragHandleProps) => renderAcquisitionPreview(acquisition, dragHandleProps)}
+                    </SortableAcquisitionItem>
+                  ))}
+                </SortableContext>
+              </div>
             </div>
-          </div>
-        </div>
+          </AcquisitionsDropZone>
 
         {/* Right Panel - Detail View */}
         <div className="col-span-12 md:col-span-8 lg:col-span-9">
           {selectedAcquisitionId === ADD_NEW_ID ? (
-            /* Show upload options when "Add New" is selected */
-            renderUnifiedUploadCard(false)
+            /* Show tabbed options when "Add New" is selected */
+            renderTabbedOptions()
           ) : selectedAcquisition ? (
             /* Show selected acquisition details - Clean editing mode */
             <AcquisitionTable
@@ -1029,7 +1433,56 @@ const BuildSchema: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
+        </div>
+
+        {/* Drag Overlay for smooth animation */}
+        <DragOverlay>
+          {activeDragId ? (
+            (() => {
+              // Check if it's a schema browser drag
+              if (activeDragId.startsWith('schema-drag-')) {
+                return (
+                  <div className="border rounded-lg p-4 bg-surface-primary shadow-lg border-brand-500 opacity-90">
+                    <div className="flex items-center space-x-2">
+                      <GripVertical className="h-4 w-4 text-content-muted" />
+                      <FileText className="h-4 w-4 text-content-tertiary" />
+                      <span className="text-sm font-medium text-content-primary">
+                        Schema (all acquisitions)
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+              if (activeDragId.startsWith('acq-drag-')) {
+                return (
+                  <div className="border rounded-lg p-4 bg-surface-primary shadow-lg border-brand-500 opacity-90">
+                    <div className="flex items-center space-x-2">
+                      <GripVertical className="h-4 w-4 text-content-muted" />
+                      <FileText className="h-4 w-4 text-content-tertiary" />
+                      <span className="text-sm font-medium text-content-primary">
+                        Acquisition
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+              // It's a sidebar acquisition being reordered
+              const acquisition = acquisitions.find(a => a.id === activeDragId);
+              return (
+                <div className="border rounded-lg p-4 bg-surface-primary shadow-lg border-brand-500 opacity-90">
+                  <div className="flex items-center space-x-2">
+                    <GripVertical className="h-4 w-4 text-content-muted" />
+                    <FileText className="h-4 w-4 text-content-tertiary" />
+                    <span className="text-sm font-medium text-content-primary">
+                      {acquisition?.protocolName || 'Acquisition'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* Navigation Buttons */}
       <div className="mt-8 flex justify-between items-end">
@@ -1059,44 +1512,6 @@ const BuildSchema: React.FC = () => {
           </button>
         </div>
       </div>
-
-      {/* Schema Selection Modal */}
-      {showSchemaModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-surface-primary rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
-            <div className="px-6 py-4 border-b border-border">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-content-primary">Select Schema and Acquisition</h3>
-                <button
-                  onClick={() => setShowSchemaModal(false)}
-                  className="text-content-muted hover:text-content-secondary"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <p className="text-content-secondary mt-4">
-                Select a schema from your library, then choose a specific acquisition to import into your current schema.
-              </p>
-            </div>
-
-            <div className="p-6">
-              <UnifiedSchemaSelector
-                librarySchemas={librarySchemas}
-                uploadedSchemas={uploadedSchemas}
-                selectionMode="acquisition"
-                onAcquisitionSelect={(schemaId, acquisitionIndex) => {
-                  handleCopyFromSchema(schemaId, acquisitionIndex);
-                  setShowSchemaModal(false);
-                }}
-                expandable={true}
-                getSchemaContent={getSchemaContent}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Back Confirmation Modal */}
       {showBackConfirmModal && (
@@ -1196,6 +1611,57 @@ const BuildSchema: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Schema Upload Modal */}
+      <SchemaUploadModal
+        isOpen={showUploadModal}
+        onClose={() => {
+          setShowUploadModal(false);
+          setUploadedFile(null);
+        }}
+        onUploadComplete={() => {
+          setShowUploadModal(false);
+          setUploadedFile(null);
+        }}
+        preloadedFile={uploadedFile}
+      />
+
+      {/* Schema Validation Error Modal */}
+      {schemaValidationError && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-surface-primary rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-start mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-status-error-bg rounded-full flex items-center justify-center">
+                <span className="text-status-error text-xl">!</span>
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-content-primary">Invalid Schema File</h3>
+                <p className="mt-2 text-sm text-content-secondary">{schemaValidationError}</p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setSchemaValidationError(null)}
+                className="px-4 py-2 bg-surface-secondary text-content-primary rounded-md hover:bg-border-secondary"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* README Modal with sidebar navigation */}
+      <SchemaReadmeModal
+        isOpen={showReadmeModal}
+        onClose={() => {
+          setShowReadmeModal(false);
+          setReadmeModalData(null);
+        }}
+        schemaName={readmeModalData?.schemaName || ''}
+        readmeItems={readmeModalData?.readmeItems || []}
+        initialSelection={readmeModalData?.initialSelection || 'schema'}
+      />
     </div>
   );
 };

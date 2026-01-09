@@ -4,7 +4,6 @@ import { Blocks, ShieldCheck, Github } from 'lucide-react';
 import { AcquisitionProvider } from '../contexts/AcquisitionContext';
 import { SchemaProvider } from '../contexts/SchemaContext';
 import ThemeToggle from '../components/common/ThemeToggle';
-import SchemaStartPage from '../components/schema/SchemaStartPage';
 import BuildSchema from '../components/schema/BuildSchema';
 import EnterMetadata from '../components/schema/EnterMetadata';
 import DownloadSchema from '../components/schema/DownloadSchema';
@@ -14,15 +13,23 @@ const SchemaBuilder: React.FC = () => {
   const currentStep = location.pathname.split('/').pop();
 
   const steps = [
-    { id: 'start', name: 'Choose Starting Point', path: '/schema-builder/start' },
-    { id: 'build-schema', name: 'Build Schema', path: '/schema-builder/build-schema' },
+    { id: 'build-schema', name: 'Schema Builder', path: '/schema-builder' },
     { id: 'enter-metadata', name: 'Enter Metadata', path: '/schema-builder/enter-metadata' },
     { id: 'save-schema', name: 'Save Schema', path: '/schema-builder/save-schema' }
   ];
 
   const getCurrentStepIndex = () => {
-    const stepIndex = steps.findIndex(step => step.path.includes(currentStep || ''));
-    return stepIndex >= 0 ? stepIndex : 0;
+    // Check for exact matches or partial matches
+    if (location.pathname === '/schema-builder' || location.pathname === '/schema-builder/' || location.pathname.endsWith('/build-schema')) {
+      return 0;
+    }
+    if (location.pathname.includes('enter-metadata')) {
+      return 1;
+    }
+    if (location.pathname.includes('save-schema')) {
+      return 2;
+    }
+    return 0;
   };
 
   return (
@@ -90,8 +97,7 @@ const SchemaBuilder: React.FC = () => {
         {/* Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Routes>
-            <Route path="/" element={<SchemaStartPage />} />
-            <Route path="/start" element={<SchemaStartPage />} />
+            <Route path="/" element={<BuildSchema />} />
             <Route path="/build-schema" element={<BuildSchema />} />
             <Route path="/enter-metadata" element={<EnterMetadata />} />
             <Route path="/save-schema" element={<DownloadSchema />} />

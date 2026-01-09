@@ -5,6 +5,7 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -12,6 +13,7 @@ import {
   DragStartEvent,
   DragEndEvent,
   DragOverEvent,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -33,6 +35,27 @@ import { generateDicomsFromAcquisition } from '../../utils/testDataGeneration';
 import { convertSchemaToAcquisition } from '../../utils/schemaToAcquisition';
 import { SchemaAcquisitionDisplay, SortableAcquisitionItem, SidebarItem } from './ComplianceSidebarComponents';
 import SchemaSelectionModal from './SchemaSelectionModal';
+
+// Droppable zone for sidebar using dnd-kit
+interface SidebarDropZoneProps {
+  isOverDropZone: boolean;
+  children: React.ReactNode;
+}
+
+const SidebarDropZone: React.FC<SidebarDropZoneProps> = ({ isOverDropZone, children }) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'sidebar-drop-zone',
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="col-span-12 md:col-span-3"
+    >
+      {children}
+    </div>
+  );
+};
 
 const DataLoadingAndMatching: React.FC = () => {
   const navigate = useNavigate();
@@ -738,8 +761,56 @@ const DataLoadingAndMatching: React.FC = () => {
   };
 
   const handleDndDragOver = (event: DragOverEvent) => {
-    const { over } = event;
-    setIsOverDropZone(over?.id === 'sidebar-drop-zone');
+    const { active, over } = event;
+    // Check if dragging from schema browser (not reordering)
+    const activeId = active.id as string;
+    const isFromSchemaBrowser = activeId.startsWith('schema-drag-') || activeId.startsWith('acq-drag-');
+
+    if (!isFromSchemaBrowser || !over) {
+      setIsOverDropZone(false);
+      return;
+    }
+
+    // Only show drop zone if over specific valid targets:
+    // - The sidebar drop zone itself
+    // - Any existing sidebar item (schema-first selections or loaded data)
+    const overId = over.id as string;
+    const isOverDropZone = overId === 'sidebar-drop-zone';
+    const isOverSidebarItem = sidebarItems.some(item => item.id === overId);
+
+    setIsOverDropZone(isOverDropZone || isOverSidebarItem);
+  };
+
+  // Helper to handle adding schema acquisitions to sidebar
+  const handleAddSchemaAcquisitions = async (schemaId: string, schemaName: string) => {
+    const schema = getUnifiedSchema(schemaId);
+    if (schema) {
+      const content = await getSchemaContent(schemaId);
+      if (content) {
+        const schemaData = JSON.parse(content);
+        const acquisitionEntries = Object.entries(schemaData.acquisitions || {});
+
+        const newSelections: AcquisitionSelection[] = [];
+        acquisitionEntries.forEach(([name, _], index) => {
+          const exists = schemaFirstSelections.some(
+            s => s.schemaId === schemaId && s.acquisitionIndex === index
+          );
+
+          if (!exists) {
+            newSelections.push({
+              schemaId,
+              acquisitionIndex: index,
+              schemaName,
+              acquisitionName: name
+            });
+          }
+        });
+
+        if (newSelections.length > 0) {
+          setSchemaFirstSelections(prev => [...prev, ...newSelections]);
+        }
+      }
+    }
   };
 
   const handleDndDragEnd = (event: DragEndEvent) => {
@@ -752,8 +823,35 @@ const DataLoadingAndMatching: React.FC = () => {
     const activeId = active.id as string;
     const overId = over.id as string;
 
-    // If dropped on the drop zone (from schema browser), it's already handled by native drag
-    if (overId === 'sidebar-drop-zone') return;
+    // Check if this is a drop from schema browser
+    const isFromSchemaBrowser = activeId.startsWith('schema-drag-') || activeId.startsWith('acq-drag-');
+
+    // Only accept drops on specific valid targets:
+    // - The sidebar drop zone itself
+    // - Any existing sidebar item (schema-first selections or loaded data)
+    const isOverDropZone = overId === 'sidebar-drop-zone';
+    const isOverSidebarItem = sidebarItems.some(item => item.id === overId);
+    const isValidDropTarget = isOverDropZone || isOverSidebarItem;
+
+    // Handle drop on sidebar (from schema browser via dnd-kit)
+    if (isFromSchemaBrowser && isValidDropTarget) {
+      const dragData = active.data.current;
+      if (dragData?.type === 'acquisition') {
+        // Single acquisition drop
+        const selection: AcquisitionSelection = dragData.selection;
+        const exists = schemaFirstSelections.some(
+          s => s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex
+        );
+
+        if (!exists) {
+          setSchemaFirstSelections(prev => [...prev, selection]);
+        }
+      } else if (dragData?.type === 'schema') {
+        // Entire schema drop - add all acquisitions
+        handleAddSchemaAcquisitions(dragData.schemaId, dragData.schemaName);
+      }
+      return;
+    }
 
     // Reordering within the list
     if (activeId !== overId) {
@@ -782,102 +880,7 @@ const DataLoadingAndMatching: React.FC = () => {
     }
   };
 
-  // Native drag handler for schema browser items (still needed for cross-context drag)
-  const handleAcquisitionDragStart = (selection: AcquisitionSelection, event: React.DragEvent) => {
-    event.dataTransfer.setData('application/json', JSON.stringify({ type: 'acquisition', selection }));
-    event.dataTransfer.effectAllowed = 'copy';
-  };
-
-  // Native drag handler for entire schema (adds all acquisitions)
-  const handleSchemaDragStart = (schemaId: string, schemaName: string, acquisitionCount: number, event: React.DragEvent) => {
-    event.dataTransfer.setData('application/json', JSON.stringify({ type: 'schema', schemaId, schemaName, acquisitionCount }));
-    event.dataTransfer.effectAllowed = 'copy';
-  };
-
-  const handleSidebarDrop = async (event: React.DragEvent) => {
-    event.preventDefault();
-    setIsOverDropZone(false);
-
-    try {
-      const rawData = event.dataTransfer.getData('application/json');
-      const data = JSON.parse(rawData);
-
-      if (data.type === 'acquisition') {
-        // Single acquisition drop
-        const selection: AcquisitionSelection = data.selection;
-
-        // Check if already added
-        const exists = schemaFirstSelections.some(
-          s => s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex
-        );
-
-        if (!exists) {
-          setSchemaFirstSelections(prev => [...prev, selection]);
-        }
-      } else if (data.type === 'schema') {
-        // Entire schema drop - add all acquisitions
-        const { schemaId, schemaName } = data;
-
-        // Get the schema to find all acquisitions
-        const schema = getUnifiedSchema(schemaId);
-        if (schema) {
-          // Parse the schema content to get all acquisitions
-          const content = await getSchemaContent(schemaId);
-          if (content) {
-            const schemaData = JSON.parse(content);
-            const acquisitionEntries = Object.entries(schemaData.acquisitions || {});
-
-            const newSelections: AcquisitionSelection[] = [];
-            acquisitionEntries.forEach(([name, _], index) => {
-              // Check if already added
-              const exists = schemaFirstSelections.some(
-                s => s.schemaId === schemaId && s.acquisitionIndex === index
-              );
-
-              if (!exists) {
-                newSelections.push({
-                  schemaId,
-                  acquisitionIndex: index,
-                  schemaName,
-                  acquisitionName: name
-                });
-              }
-            });
-
-            if (newSelections.length > 0) {
-              setSchemaFirstSelections(prev => [...prev, ...newSelections]);
-            }
-          }
-        }
-      } else {
-        // Legacy format (just a selection object without type wrapper)
-        const selection: AcquisitionSelection = data;
-        const exists = schemaFirstSelections.some(
-          s => s.schemaId === selection.schemaId && s.acquisitionIndex === selection.acquisitionIndex
-        );
-
-        if (!exists) {
-          setSchemaFirstSelections(prev => [...prev, selection]);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse dropped data:', e);
-    }
-  };
-
-  const handleSidebarDragOver = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    setIsOverDropZone(true);
-  };
-
-  const handleSidebarDragLeave = (event: React.DragEvent) => {
-    const relatedTarget = event.relatedTarget as Node | null;
-    const currentTarget = event.currentTarget as Node;
-    if (!relatedTarget || !currentTarget.contains(relatedTarget)) {
-      setIsOverDropZone(false);
-    }
-  };
+  // Note: Native drag handlers removed - now using dnd-kit exclusively
 
   // Schema-first file upload handler
   const handleSchemaFirstFileUpload = useCallback(async (selectionId: string, files: FileList | null) => {
@@ -1108,7 +1111,7 @@ const DataLoadingAndMatching: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Plus className="h-4 w-4 text-brand-500 flex-shrink-0" />
           <h3 className="text-sm font-medium text-content-primary">
-            Load DICOMs/Schemas
+            Add acquisitions
           </h3>
         </div>
       </div>
@@ -1413,8 +1416,6 @@ const DataLoadingAndMatching: React.FC = () => {
                 expandable={true}
                 getSchemaContent={getSchemaContent}
                 enableDragDrop={true}
-                onAcquisitionDragStart={handleAcquisitionDragStart}
-                onSchemaDragStart={handleSchemaDragStart}
                 onSchemaReadmeClick={handleSchemaReadmeClick}
                 onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
               />
@@ -1596,7 +1597,7 @@ const DataLoadingAndMatching: React.FC = () => {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-content-primary mb-2">Load and Validate DICOM Data</h2>
+            <h2 className="text-3xl font-bold text-content-primary mb-2">Compliance Checker</h2>
             <p className="text-content-secondary">
 
             </p>
@@ -1619,31 +1620,27 @@ const DataLoadingAndMatching: React.FC = () => {
       </div>
 
       {/* Master-Detail Layout */}
-      <div className="grid grid-cols-12 gap-6 min-h-[800px]">
-        {/* Left Panel - Acquisition Selector with DnD Kit */}
-        <div
-          className="col-span-12 md:col-span-3"
-          onDragOver={handleSidebarDragOver}
-          onDragLeave={handleSidebarDragLeave}
-          onDrop={handleSidebarDrop}
-        >
-          <div className={`bg-surface-primary rounded-lg border shadow-sm transition-colors ${
-            isOverDropZone ? 'border-brand-500 bg-brand-50/50' : 'border-border'
-          }`}>
-            {/* Header */}
-            <div className="px-4 py-3 border-b border-border">
-              <h3 className="text-lg font-medium text-content-primary">Acquisitions</h3>
-              <p className="text-sm text-content-secondary">Select to view or drag to reorder</p>
-            </div>
+      {/* DndContext wraps entire layout to enable drag from schema browser to sidebar */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={handleDndDragStart}
+        onDragOver={handleDndDragOver}
+        onDragEnd={handleDndDragEnd}
+      >
+        <div className="grid grid-cols-12 gap-6 min-h-[800px]">
+          {/* Left Panel - Acquisition Selector with DnD Kit */}
+          <SidebarDropZone isOverDropZone={isOverDropZone}>
+            <div className={`bg-surface-primary rounded-lg border shadow-sm transition-colors ${
+              isOverDropZone ? 'border-brand-500 bg-brand-50/50' : 'border-border'
+            }`}>
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-border">
+                <h3 className="text-lg font-medium text-content-primary">Acquisitions</h3>
+                <p className="text-sm text-content-secondary">Select to view or drag to reorder</p>
+              </div>
 
-            {/* Acquisition List with DnD */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDndDragStart}
-              onDragOver={handleDndDragOver}
-              onDragEnd={handleDndDragEnd}
-            >
+              {/* Acquisition List */}
               <div className="p-2 space-y-2 max-h-[800px] overflow-y-auto">
                 {/* Upload New - Always first (not sortable) */}
                 {renderAddNewItem()}
@@ -1673,30 +1670,11 @@ const DataLoadingAndMatching: React.FC = () => {
                   ))}
                 </SortableContext>
               </div>
+            </div>
+          </SidebarDropZone>
 
-              {/* Drag Overlay for smooth animation */}
-              <DragOverlay>
-                {activeDragId ? (
-                  <div className="border rounded-lg p-4 bg-surface-primary shadow-lg border-brand-500 opacity-90">
-                    <div className="flex items-center space-x-2">
-                      <GripVertical className="h-4 w-4 text-content-muted" />
-                      <FileText className="h-4 w-4 text-content-tertiary" />
-                      <span className="text-sm font-medium text-content-primary">
-                        {sidebarItems.find(item => item.id === activeDragId)?.type === 'schema-first'
-                          ? (sidebarItems.find(item => item.id === activeDragId)?.data as AcquisitionSelection)?.acquisitionName
-                          : (sidebarItems.find(item => item.id === activeDragId)?.data as Acquisition)?.protocolName
-                        }
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-          </div>
-        </div>
-
-        {/* Right Panel - Combined View */}
-        <div className="col-span-12 md:col-span-9">
+          {/* Right Panel - Combined View */}
+          <div className="col-span-12 md:col-span-9">
           {selectedAcquisitionId === ADD_NEW_ID ? (
             /* Show tabbed options for schema selection or data loading */
             renderTabbedOptions()
@@ -1717,7 +1695,48 @@ const DataLoadingAndMatching: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
+        </div>
+
+        {/* Drag Overlay for smooth animation */}
+        <DragOverlay>
+          {activeDragId ? (
+            (() => {
+              // Check if it's a schema browser drag (from schema selector)
+              if (activeDragId.startsWith('schema-drag-') || activeDragId.startsWith('acq-drag-')) {
+                const isSchema = activeDragId.startsWith('schema-drag-');
+                return (
+                  <div className="border rounded-lg p-4 bg-surface-primary shadow-lg border-brand-500 opacity-90">
+                    <div className="flex items-center space-x-2">
+                      <GripVertical className="h-4 w-4 text-content-muted" />
+                      <FileText className="h-4 w-4 text-content-tertiary" />
+                      <span className="text-sm font-medium text-content-primary">
+                        {isSchema ? 'Schema (all acquisitions)' : 'Acquisition'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+              // Regular sidebar item drag
+              const item = sidebarItems.find(item => item.id === activeDragId);
+              if (!item) return null;
+              return (
+                <div className="border rounded-lg p-4 bg-surface-primary shadow-lg border-brand-500 opacity-90">
+                  <div className="flex items-center space-x-2">
+                    <GripVertical className="h-4 w-4 text-content-muted" />
+                    <FileText className="h-4 w-4 text-content-tertiary" />
+                    <span className="text-sm font-medium text-content-primary">
+                      {item.type === 'schema-first'
+                        ? (item.data as AcquisitionSelection)?.acquisitionName
+                        : (item.data as Acquisition)?.protocolName
+                      }
+                    </span>
+                  </div>
+                </div>
+              );
+            })()
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* Upload Modal */}
       <SchemaUploadModal

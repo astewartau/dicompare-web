@@ -116,11 +116,26 @@ export const convertSchemaToAcquisitions = async (
 ): Promise<Acquisition[]> => {
   const acquisitions: Acquisition[] = [];
 
-  for (const schemaAcq of schema.acquisitions) {
-    const acquisition = await convertSchemaToAcquisition(schema, schemaAcq.id, getSchemaContent);
-    if (acquisition) {
-      acquisitions.push(acquisition);
+  // Fetch the actual JSON content to discover acquisitions
+  // (don't rely on schema.acquisitions metadata which may not be loaded yet)
+  try {
+    const content = await getSchemaContent(schema.id);
+    if (!content) {
+      console.error('Could not load schema content for:', schema.id);
+      return acquisitions;
     }
+
+    const schemaData = JSON.parse(content);
+    const acquisitionEntries = Object.entries(schemaData.acquisitions || {});
+
+    for (let index = 0; index < acquisitionEntries.length; index++) {
+      const acquisition = await convertSchemaToAcquisition(schema, index.toString(), getSchemaContent);
+      if (acquisition) {
+        acquisitions.push(acquisition);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load acquisitions for schema:', schema.id, error);
   }
 
   return acquisitions;

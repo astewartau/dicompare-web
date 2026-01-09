@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen } from 'lucide-react';
+import { useDraggable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
@@ -31,10 +33,8 @@ interface UnifiedSchemaSelectorProps {
   // Utility
   getSchemaContent: (schemaId: string) => Promise<string | null>;
 
-  // Drag-and-drop support
+  // Drag-and-drop support (uses dnd-kit - must be used within a DndContext)
   enableDragDrop?: boolean;
-  onAcquisitionDragStart?: (selection: AcquisitionSelection, event: React.DragEvent) => void;
-  onSchemaDragStart?: (schemaId: string, schemaName: string, acquisitionCount: number, event: React.DragEvent) => void;
 
   // README support
   onSchemaReadmeClick?: (schemaId: string, schemaName: string) => void;
@@ -91,6 +91,86 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   );
 };
 
+// Draggable wrapper for schema headers (drags entire schema with all acquisitions)
+interface DraggableSchemaProps {
+  schemaId: string;
+  schemaName: string;
+  acquisitionCount: number;
+  enabled: boolean;
+  children: React.ReactNode;
+}
+
+const DraggableSchema: React.FC<DraggableSchemaProps> = ({
+  schemaId,
+  schemaName,
+  acquisitionCount,
+  enabled,
+  children
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `schema-drag-${schemaId}`,
+    data: {
+      type: 'schema',
+      schemaId,
+      schemaName,
+      acquisitionCount
+    },
+    disabled: !enabled
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  if (!enabled) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      {children}
+    </div>
+  );
+};
+
+// Draggable wrapper for individual acquisition items
+interface DraggableAcquisitionProps {
+  selection: AcquisitionSelection;
+  enabled: boolean;
+  children: React.ReactNode;
+}
+
+const DraggableAcquisition: React.FC<DraggableAcquisitionProps> = ({
+  selection,
+  enabled,
+  children
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `acq-drag-${selection.schemaId}-${selection.acquisitionIndex}`,
+    data: {
+      type: 'acquisition',
+      selection
+    },
+    disabled: !enabled
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  if (!enabled) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      {children}
+    </div>
+  );
+};
+
 const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   librarySchemas,
   uploadedSchemas,
@@ -106,8 +186,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   selectedSchemaId,
   getSchemaContent,
   enableDragDrop = false,
-  onAcquisitionDragStart,
-  onSchemaDragStart,
   onSchemaReadmeClick,
   onAcquisitionReadmeClick
 }) => {
@@ -130,7 +208,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     schemaName: ''
   });
   const [showNonMatchingFor, setShowNonMatchingFor] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'nested' | 'flat'>('nested');
+  const [viewMode, setViewMode] = useState<'nested' | 'flat'>('flat');
+
+  // Refs to track loading state (avoids stale closure issues)
+  const loadingInProgressRef = React.useRef<Set<string>>(new Set());
+  const loadedSchemasRef = React.useRef<Set<string>>(new Set());
 
   // Combine all schemas with source indicator
   const allSchemas = useMemo(() => [
@@ -160,11 +242,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     // Filter by selected tags (AND logic - show schemas where at least one acquisition has ALL selected tags)
     if (selectedTags.length > 0) {
       schemas = schemas.filter(s => {
-        const schemaTags = s.tags || [];
-        // Check if at least one acquisition has ALL selected tags (inheriting schema tags)
-        return s.acquisitions?.some((acq, _) => {
-          const effectiveTags = [...new Set([...schemaTags, ...(acq.tags || [])])];
-          return selectedTags.every(tag => effectiveTags.includes(tag));
+        // Check if at least one acquisition has ALL selected tags (acquisition-level tags only)
+        return s.acquisitions?.some((acq) => {
+          const acqTags = acq.tags || [];
+          return selectedTags.every(tag => acqTags.includes(tag));
         }) || false;
       });
     }
@@ -195,20 +276,13 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     const tagCounts = new Map<string, number>();
 
     schemasForTags.forEach(schema => {
-      const schemaTags = schema.tags || [];
-
-      // Count each acquisition's effective tags (schema tags + acquisition tags)
+      // Only count acquisition-level tags (schema-level tags don't exist per metaschema)
       if (schema.acquisitions) {
         schema.acquisitions.forEach(acq => {
-          const effectiveTags = new Set([...schemaTags, ...(acq.tags || [])]);
-          effectiveTags.forEach(tag => {
+          const acqTags = acq.tags || [];
+          acqTags.forEach(tag => {
             tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
           });
-        });
-      } else {
-        // Single-acquisition schema: count schema tags once
-        schemaTags.forEach(tag => {
-          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
         });
       }
     });
@@ -250,9 +324,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   // Load acquisitions for expanded schemas
   useEffect(() => {
     expandedSchemas.forEach(id => {
-      if (!schemaAcquisitions[id] && !loadingSchemas.has(id)) {
-        loadSchemaAcquisitions(id);
-      }
+      loadSchemaAcquisitions(id);
     });
   }, [expandedSchemas]);
 
@@ -260,17 +332,15 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   useEffect(() => {
     if (viewMode === 'flat') {
       filteredSchemas.forEach(s => {
-        if (!schemaAcquisitions[s.id] && !loadingSchemas.has(s.id)) {
-          loadSchemaAcquisitions(s.id);
-        }
+        loadSchemaAcquisitions(s.id);
       });
     }
   }, [viewMode, filteredSchemas.map(s => s.id).join(',')]);
 
-  // Check if an acquisition has a specific tag (including inherited schema tags)
-  const acquisitionHasTag = (acq: { tags?: string[] }, schemaTags: string[], tag: string): boolean => {
-    const effectiveTags = [...(schemaTags || []), ...(acq.tags || [])];
-    return effectiveTags.includes(tag);
+  // Check if an acquisition has a specific tag (acquisition-level tags only)
+  const acquisitionHasTag = (acq: { tags?: string[] }, tag: string): boolean => {
+    const acqTags = acq.tags || [];
+    return acqTags.includes(tag);
   };
 
   // Get indices of acquisitions that match the current tag filter (AND logic)
@@ -281,11 +351,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     }
     return acquisitions.map((_, index) => index).filter(index =>
       selectedTags.every(tag =>
-        acquisitionHasTag(
-          { tags: schema.acquisitions?.[index]?.tags },
-          schema.tags || [],
-          tag
-        )
+        acquisitionHasTag({ tags: schema.acquisitions?.[index]?.tags }, tag)
       )
     );
   };
@@ -301,7 +367,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
           const matchesTag = selectedTags.length === 0 ||
             selectedTags.every(tag => acquisitionHasTag(
               { tags: schema.acquisitions?.[index]?.tags },
-              schema.tags || [],
               tag
             ));
           return { schema, acquisition, index, matchesTag };
@@ -309,6 +374,9 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         .filter(item => item.matchesTag);
     });
   }, [viewMode, filteredSchemas, schemaAcquisitions, selectedTags]);
+
+  // Check if flat view is still loading acquisitions
+  const isFlatViewLoading = viewMode === 'flat' && loadingSchemas.size > 0;
 
   // Multi-select helpers
   const isAcquisitionSelected = (schemaId: string, acquisitionIndex: number): boolean => {
@@ -384,6 +452,35 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     handleSelectAllInSchema(schema, acquisitions, matchingIndices);
   };
 
+  const loadSchemaAcquisitions = async (schemaId: string) => {
+    // Use refs to check loading state (avoids stale closure issues)
+    if (loadedSchemasRef.current.has(schemaId) || loadingInProgressRef.current.has(schemaId)) {
+      return;
+    }
+
+    loadingInProgressRef.current.add(schemaId);
+    setLoadingSchemas(prev => new Set(prev).add(schemaId));
+
+    try {
+      const schema = [...librarySchemas, ...uploadedSchemas].find(s => s.id === schemaId);
+
+      if (schema) {
+        const acquisitions = await convertSchemaToAcquisitions(schema, getSchemaContent);
+        loadedSchemasRef.current.add(schemaId);
+        setSchemaAcquisitions(prev => ({ ...prev, [schemaId]: acquisitions }));
+      }
+    } catch (error) {
+      console.error(`Failed to load acquisitions for schema ${schemaId}:`, error);
+    } finally {
+      loadingInProgressRef.current.delete(schemaId);
+      setLoadingSchemas(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(schemaId);
+        return newSet;
+      });
+    }
+  };
+
   const toggleSchemaExpansion = async (schemaId: string) => {
     if (!expandable) return;
 
@@ -397,28 +494,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       }
       return newSet;
     });
-  };
-
-  const loadSchemaAcquisitions = async (schemaId: string) => {
-    if (schemaAcquisitions[schemaId] || loadingSchemas.has(schemaId)) return;
-
-    setLoadingSchemas(prev => new Set(prev).add(schemaId));
-
-    try {
-      const schema = [...librarySchemas, ...uploadedSchemas].find(s => s.id === schemaId);
-      if (schema) {
-        const acquisitions = await convertSchemaToAcquisitions(schema, getSchemaContent);
-        setSchemaAcquisitions(prev => ({ ...prev, [schemaId]: acquisitions }));
-      }
-    } catch (error) {
-      console.error(`Failed to load acquisitions for schema ${schemaId}:`, error);
-    } finally {
-      setLoadingSchemas(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(schemaId);
-        return newSet;
-      });
-    }
   };
 
   const handleSchemaClick = (schemaId: string) => {
@@ -520,7 +595,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     const matchingCount = matchingIndices?.length ??
       (selectedTags.length > 0
         ? (schema.acquisitions?.filter((_, i) =>
-            selectedTags.every(tag => acquisitionHasTag({ tags: schema.acquisitions?.[i]?.tags }, schema.tags || [], tag))
+            selectedTags.every(tag => acquisitionHasTag({ tags: schema.acquisitions?.[i]?.tags }, tag))
           ).length || 0)
         : (schema.acquisitions?.length || 1));
     const selectionState = getSchemaSelectionState(schema.id, matchingCount, matchingIndices);
@@ -532,23 +607,23 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
           isSelected ? 'border-brand-500 ring-2 ring-brand-100' : 'border-border'
         }`}
       >
-        {/* Schema Header */}
-        <div
-          draggable={enableDragDrop}
-          onDragStart={(e) => {
-            if (enableDragDrop && onSchemaDragStart) {
-              onSchemaDragStart(schema.id, schema.name, schema.acquisitions?.length || 1, e);
-            }
-          }}
-          className={`px-4 py-3 rounded-t-lg cursor-pointer transition-colors ${
-            selectionMode === 'schema'
-              ? 'hover:bg-surface-secondary'
-              : expandable
-                ? 'hover:bg-surface-secondary'
-                : ''
-          } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
-          onClick={() => handleSchemaClick(schema.id)}
+        {/* Schema Header - wrapped with DraggableSchema for dnd-kit support */}
+        <DraggableSchema
+          schemaId={schema.id}
+          schemaName={schema.name}
+          acquisitionCount={schema.acquisitions?.length || 1}
+          enabled={enableDragDrop}
         >
+          <div
+            className={`px-4 py-3 rounded-t-lg cursor-pointer transition-colors ${
+              selectionMode === 'schema'
+                ? 'hover:bg-surface-secondary'
+                : expandable
+                  ? 'hover:bg-surface-secondary'
+                  : ''
+            } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            onClick={() => handleSchemaClick(schema.id)}
+          >
           <div className="flex items-center justify-between">
             {/* Drag handle for schema */}
             {enableDragDrop && (
@@ -595,23 +670,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
               <p className="text-xs text-content-secondary truncate mt-1">
                 {schema.description || 'No description available'}
               </p>
-              {/* Show tags */}
-              {schema.tags && schema.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {schema.tags.map(tag => (
-                    <span
-                      key={tag}
-                      className={`px-2 py-0.5 text-xs rounded-full ${
-                        selectedTags.includes(tag)
-                          ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
-                          : 'bg-surface-secondary text-content-tertiary'
-                      }`}
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
               <div className="mt-2 flex items-center space-x-3 text-xs text-content-tertiary">
                 <span>v{schema.version || '1.0.0'}</span>
                 {schema.isMultiAcquisition && (
@@ -667,7 +725,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
               )}
             </div>
           </div>
-        </div>
+          </div>
+        </DraggableSchema>
 
         {/* Expanded Acquisitions */}
         {expandable && isExpanded && selectionMode === 'acquisition' && (
@@ -687,7 +746,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                     selectedTags.every(tag =>
                       acquisitionHasTag(
                         { tags: schema.acquisitions?.[index]?.tags },
-                        schema.tags || [],
                         tag
                       )
                     )
@@ -698,34 +756,27 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
                 const renderAcquisitionCard = ({ acquisition, index, matchesTag }: { acquisition: Acquisition; index: number; matchesTag: boolean }) => {
                   const isAcqSelected = multiSelectMode && isAcquisitionSelected(schema.id, index);
+                  const acqSelection: AcquisitionSelection = {
+                    schemaId: schema.id,
+                    acquisitionIndex: index,
+                    schemaName: schema.name,
+                    acquisitionName: acquisition.protocolName
+                  };
 
                   return multiSelectMode ? (
-                    <div
+                    <DraggableAcquisition
                       key={acquisition.id}
-                      draggable={enableDragDrop}
-                      onDragStart={(e) => {
-                        if (enableDragDrop && onAcquisitionDragStart) {
-                          const selection: AcquisitionSelection = {
-                            schemaId: schema.id,
-                            acquisitionIndex: index,
-                            schemaName: schema.name,
-                            acquisitionName: acquisition.protocolName
-                          };
-                          onAcquisitionDragStart(selection, e);
-                        }
-                      }}
-                      onClick={() => onAcquisitionToggle?.({
-                        schemaId: schema.id,
-                        acquisitionIndex: index,
-                        schemaName: schema.name,
-                        acquisitionName: acquisition.protocolName
-                      })}
-                      className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
-                        isAcqSelected
-                          ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                          : 'border-border-secondary hover:bg-surface-secondary hover:border-border'
-                      } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                      selection={acqSelection}
+                      enabled={enableDragDrop}
                     >
+                      <div
+                        onClick={() => onAcquisitionToggle?.(acqSelection)}
+                        className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
+                          isAcqSelected
+                            ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                            : 'border-border-secondary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700'
+                        } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                      >
                       <div className="flex items-start space-x-3">
                         {/* Drag handle icon */}
                         {enableDragDrop && (
@@ -797,7 +848,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                           </button>
                         )}
                       </div>
-                    </div>
+                      </div>
+                    </DraggableAcquisition>
                   ) : (
                     <button
                       key={acquisition.id}
@@ -1001,11 +1053,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                 <label className="flex items-center gap-2 text-sm text-content-secondary cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    checked={viewMode === 'flat'}
-                    onChange={(e) => setViewMode(e.target.checked ? 'flat' : 'nested')}
+                    checked={viewMode === 'nested'}
+                    onChange={(e) => setViewMode(e.target.checked ? 'nested' : 'flat')}
                     className="w-4 h-4 rounded border-border-secondary text-brand-600 focus:ring-brand-500 focus:ring-offset-0"
                   />
-                  Flat list
+                  Group schemas
                 </label>
               </div>
             </div>
@@ -1034,39 +1086,39 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
             )}
           </div>
 
-          {/* Upload Area - show when Custom is enabled */}
-          {onSchemaUpload && showCustom && (
-            <div className="px-4 pt-4">
-              <div
-                className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-                  dragActive
-                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                    : 'border-border-secondary hover:border-content-muted'
-                }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-              >
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileInput}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <Upload className="h-6 w-6 text-content-muted mx-auto mb-2" />
-                <p className="text-sm text-content-secondary mb-1">
-                  Drop schema file here or click to browse
-                </p>
-                <p className="text-xs text-content-tertiary">
-                  Supports .json files
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Schema list */}
           <div className="flex-1 overflow-y-auto p-4">
+            {/* Upload Area - inside scrollable region, show when Custom is enabled */}
+            {onSchemaUpload && showCustom && (
+              <div className="mb-4">
+                <div
+                  className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                    dragActive
+                      ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                      : 'border-border-secondary hover:border-content-muted'
+                  }`}
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileInput}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <Upload className="h-6 w-6 text-content-muted mx-auto mb-2" />
+                  <p className="text-sm text-content-secondary mb-1">
+                    Drop schema file here or click to browse
+                  </p>
+                  <p className="text-xs text-content-tertiary">
+                    Supports .json files
+                  </p>
+                </div>
+              </div>
+            )}
+
             {viewMode === 'nested' ? (
               <>
                 <div className="text-sm text-content-secondary mb-3">
@@ -1091,40 +1143,45 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
             ) : (
               <>
                 <div className="text-sm text-content-secondary mb-3">
-                  {flattenedAcquisitions.length} {flattenedAcquisitions.length === 1 ? 'acquisition' : 'acquisitions'}{selectedTags.length > 0 ? ' matching' : ' found'}
+                  {isFlatViewLoading ? (
+                    <span className="flex items-center">
+                      <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-brand-600 mr-2"></span>
+                      Loading acquisitions...
+                    </span>
+                  ) : (
+                    <>{flattenedAcquisitions.length} {flattenedAcquisitions.length === 1 ? 'acquisition' : 'acquisitions'}{selectedTags.length > 0 ? ' matching' : ' found'}</>
+                  )}
                 </div>
-                {flattenedAcquisitions.length > 0 ? (
+                {isFlatViewLoading && flattenedAcquisitions.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600"></div>
+                    <span className="ml-2 text-sm text-content-secondary">Loading acquisitions...</span>
+                  </div>
+                ) : flattenedAcquisitions.length > 0 ? (
                   <div className="space-y-2">
                     {flattenedAcquisitions.map(({ schema, acquisition, index }) => {
                       const isAcqSelected = multiSelectMode && isAcquisitionSelected(schema.id, index);
+                      const flatAcqSelection: AcquisitionSelection = {
+                        schemaId: schema.id,
+                        acquisitionIndex: index,
+                        schemaName: schema.name,
+                        acquisitionName: acquisition.protocolName
+                      };
 
                       return multiSelectMode ? (
-                        <div
+                        <DraggableAcquisition
                           key={`${schema.id}-${index}`}
-                          draggable={enableDragDrop}
-                          onDragStart={(e) => {
-                            if (enableDragDrop && onAcquisitionDragStart) {
-                              const selection: AcquisitionSelection = {
-                                schemaId: schema.id,
-                                acquisitionIndex: index,
-                                schemaName: schema.name,
-                                acquisitionName: acquisition.protocolName
-                              };
-                              onAcquisitionDragStart(selection, e);
-                            }
-                          }}
-                          onClick={() => onAcquisitionToggle?.({
-                            schemaId: schema.id,
-                            acquisitionIndex: index,
-                            schemaName: schema.name,
-                            acquisitionName: acquisition.protocolName
-                          })}
-                          className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
-                            isAcqSelected
-                              ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                              : 'border-border-secondary hover:bg-surface-secondary hover:border-border'
-                          } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                          selection={flatAcqSelection}
+                          enabled={enableDragDrop}
                         >
+                          <div
+                            onClick={() => onAcquisitionToggle?.(flatAcqSelection)}
+                            className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
+                              isAcqSelected
+                                ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                                : 'border-border-secondary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700'
+                            } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                          >
                           <div className="flex items-start space-x-3">
                             {enableDragDrop && (
                               <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
@@ -1196,7 +1253,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                               </button>
                             )}
                           </div>
-                        </div>
+                          </div>
+                        </DraggableAcquisition>
                       ) : (
                         <button
                           key={`${schema.id}-${index}`}

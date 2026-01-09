@@ -163,9 +163,6 @@ const EnterMetadata: React.FC = () => {
               className="w-full px-4 py-3 border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
               placeholder="Describe the purpose and scope of this schema..."
             />
-            <p className="mt-1 text-sm text-content-tertiary">
-              Optional: Provide additional context about when and how to use this schema
-            </p>
           </div>
 
           {/* Authors */}
@@ -250,32 +247,6 @@ const EnterMetadata: React.FC = () => {
           </div>
         </div>
 
-        {/* Schema Preview */}
-        <div className="mt-8 p-4 bg-surface-secondary rounded-lg">
-          <h3 className="text-lg font-medium text-content-primary mb-4">Schema Preview</h3>
-          <div className="space-y-2 text-sm">
-            <div>
-              <span className="font-medium text-content-secondary">Name:</span>
-              <span className="ml-2 text-content-primary">{metadata.name || 'Untitled Schema'}</span>
-            </div>
-            <div>
-              <span className="font-medium text-content-secondary">Version:</span>
-              <span className="ml-2 text-content-primary">{metadata.version}</span>
-            </div>
-            <div>
-              <span className="font-medium text-content-secondary">Authors:</span>
-              <span className="ml-2 text-content-primary">
-                {metadata.authors.length > 0 ? metadata.authors.join(', ') : 'No authors specified'}
-              </span>
-            </div>
-            {metadata.description && (
-              <div>
-                <span className="font-medium text-content-secondary">Description:</span>
-                <div className="ml-2 text-content-primary mt-1">{metadata.description}</div>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Navigation Buttons */}

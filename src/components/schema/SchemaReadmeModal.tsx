@@ -142,16 +142,6 @@ const SchemaReadmeModal: React.FC<SchemaReadmeModalProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-border bg-surface-secondary flex justify-end flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-content-secondary hover:text-content-primary border border-border-secondary rounded-md hover:bg-surface-hover"
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   );

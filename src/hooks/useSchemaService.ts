@@ -85,6 +85,7 @@ export const useSchemaService = () => {
   };
 
   // Get all schemas (uploaded + library) with acquisition data
+  // Note: Schema-level tags don't exist per metaschema - tags are only at acquisition level
   const getAllUnifiedSchemas = (): UnifiedSchema[] => {
     const uploadedUnified: UnifiedSchema[] = uploadedSchemas.map(schema => ({
       id: schema.id,
@@ -95,7 +96,6 @@ export const useSchemaService = () => {
       format: schema.format,
       version: schema.version,
       authors: schema.authors,
-      tags: schema.tags,
       acquisitions: schemaAcquisitions[schema.id] || [],
       isMultiAcquisition: (schemaAcquisitions[schema.id] || []).length > 1
     }));
