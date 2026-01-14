@@ -4,7 +4,7 @@ import { SchemaBinding, UnifiedSchema } from '../hooks/useSchemaService';
 import { searchDicomFields, suggestDataType, suggestValidationConstraint, isValidDicomTag } from '../services/dicomFieldService';
 import { convertValueToDataType, inferDataTypeFromValue } from '../utils/datatypeInference';
 import { getSuggestedToleranceValue } from '../utils/vrMapping';
-import { dicompareAPI } from '../services/DicompareAPI';
+import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
 import { processUploadedFiles, getAllFilesFromDirectory } from '../utils/fileUploadUtils';
 import { generateDicomsFromAcquisition } from '../utils/testDataGeneration';
 import { convertSchemaToAcquisition } from '../utils/schemaToAcquisition';
@@ -294,23 +294,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         );
 
         const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
-          try {
-            console.log('📥 JS received progress:', progress);
-            const progressObj = progress.toJs ? progress.toJs() : progress;
-            console.log('📥 Converted progress:', progressObj);
-            const percentage = progressObj.percentage || 0;
-            const operation = progressObj.currentOperation || 'Processing...';
-            console.log(`📥 Setting state: ${percentage}% - ${operation}`);
-
-            setProcessingProgress({
-              currentFile: Math.floor((progressObj.totalProcessed / progressObj.totalFiles) * dicomFiles.length),
-              totalFiles: dicomFiles.length,
-              currentOperation: operation,
-              percentage: percentage
-            });
-          } catch (error) {
-            console.error('Progress callback failed:', error);
-          }
+          setProcessingProgress({
+            currentFile: progress.currentFile,
+            totalFiles: progress.totalFiles,
+            currentOperation: progress.currentOperation,
+            percentage: progress.percentage
+          });
         });
 
         newAcquisitions.push(...(result || []));
@@ -528,18 +517,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         );
 
         const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
-          try {
-            const progressObj = progress.toJs ? progress.toJs() : progress;
-            const percentage = progressObj.percentage || 0;
-            const operation = progressObj.currentOperation || 'Processing...';
-            setProcessingProgress(prev => ({
-              ...prev!,
-              currentOperation: operation,
-              percentage: percentage
-            }));
-          } catch (error) {
-            console.error('Progress callback failed:', error);
-          }
+          setProcessingProgress(prev => ({
+            ...prev!,
+            currentOperation: progress.currentOperation,
+            percentage: progress.percentage
+          }));
         });
 
         if (result && result.length > 0) {
