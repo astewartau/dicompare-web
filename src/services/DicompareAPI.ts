@@ -149,15 +149,9 @@ print("Session cache cleared")
 
     console.log(`Analyzing ${files.length} DICOM files...`);
 
-    // Convert FileObject[] to bytes dictionary
-    const dicomBytes: Record<string, Uint8Array> = {};
-    for (const file of files) {
-      dicomBytes[file.name] = file.content;
-    }
-
-    // Set up progress callback
+    // Set up progress callback - pass directly like old version did
     if (onProgress) {
-      await pyodideManager.setGlobal('_progress_callback', (progress: any) => {
+      await pyodideManager.setPythonGlobal('progress_callback', (progress: any) => {
         onProgress({
           currentFile: progress.totalProcessed || 0,
           totalFiles: progress.totalFiles || files.length,
@@ -165,32 +159,46 @@ print("Session cache cleared")
           percentage: progress.percentage || 0
         });
       });
+    } else {
+      await pyodideManager.setPythonGlobal('progress_callback', null);
     }
 
-    // Pass data to Python
-    await pyodideManager.setPythonGlobal('dicom_bytes', dicomBytes);
+    // Pass data to Python as parallel arrays (more efficient than dict)
+    const fileNames: string[] = [];
+    const fileContents: Uint8Array[] = [];
+    for (const file of files) {
+      fileNames.push(file.name);
+      fileContents.push(file.content);
+    }
+    await pyodideManager.setPythonGlobal('dicom_file_names', fileNames);
+    await pyodideManager.setPythonGlobal('dicom_file_contents', fileContents);
 
     // Call the new Python function
     const result = await pyodideManager.runPythonAsync(`
 import json
 from dicompare.interface import analyze_dicom_files_for_ui
 
-# Get progress callback if available
-progress_cb = _progress_callback if '_progress_callback' in dir() else None
+# Reconstruct dictionary from parallel arrays (more efficient in Pyodide)
+names = list(dicom_file_names)
+total_files = len(names)
+print(f"Processing {total_files} files...")
 
-# Convert JSProxy to Python dict
-files_dict = dicom_bytes.to_py() if hasattr(dicom_bytes, 'to_py') else dicom_bytes
-
-# Ensure bytes are proper Python bytes
-converted = {}
-for name, data in files_dict.items():
-    if hasattr(data, 'to_py'):
-        converted[name] = bytes(data.to_py())
+dicom_bytes = {}
+for i, name in enumerate(names):
+    content = dicom_file_contents[i]
+    if hasattr(content, 'getBuffer'):
+        buf = content.getBuffer()
+        dicom_bytes[name] = bytes(buf.data)
+        buf.release()
+    elif hasattr(content, 'to_py'):
+        dicom_bytes[name] = bytes(content.to_py())
     else:
-        converted[name] = bytes(data)
+        dicom_bytes[name] = bytes(content)
 
-# Call the analysis function
-acquisitions = await analyze_dicom_files_for_ui(converted, progress_cb)
+print(f"Converted {len(dicom_bytes)} files, calling analyze_dicom_files_for_ui...")
+
+# Call the analysis function with progress callback
+acquisitions = await analyze_dicom_files_for_ui(dicom_bytes, progress_callback)
 
 result_json = json.dumps(acquisitions, default=str)
 return result_json
@@ -206,7 +214,7 @@ return result_json
 
   /**
    * Validate an acquisition against a schema.
-   * Calls dicompare.interface.validate_acquisition_for_ui()
+   * Uses validate_acquisition_direct to pass data directly (avoids cache issues).
    */
   async validateAcquisitionAgainstSchema(
     acquisition: UIAcquisition,
@@ -232,24 +240,219 @@ return result_json
       schemaContent = await response.text();
     }
 
-    // Pass data to Python
-    await pyodideManager.setPythonGlobal('acquisition_name', acquisition.protocolName);
+    // Convert acquisition to format Python expects
+    const acquisitionData = this.acquisitionToPythonDict(acquisition);
+
+    // Pass data to Python - use validate_acquisition_direct to avoid cache issues
+    await pyodideManager.setPythonGlobal('acquisition_data', acquisitionData);
     await pyodideManager.setPythonGlobal('schema_content', schemaContent);
     await pyodideManager.setPythonGlobal('schema_acquisition_index', acquisitionIndex ? parseInt(acquisitionIndex) : null);
 
     const result = await pyodideManager.runPython(`
 import json
-from dicompare.interface import validate_acquisition_for_ui
+from dicompare.interface import validate_acquisition_direct
 
-acq_name = acquisition_name if not hasattr(acquisition_name, 'to_py') else acquisition_name.to_py()
+acq_data = acquisition_data if not hasattr(acquisition_data, 'to_py') else acquisition_data.to_py()
 schema_str = schema_content if not hasattr(schema_content, 'to_py') else schema_content.to_py()
 acq_index = schema_acquisition_index if not hasattr(schema_acquisition_index, 'to_py') else schema_acquisition_index.to_py()
 
-results = validate_acquisition_for_ui(acq_name, schema_str, acq_index)
+results = validate_acquisition_direct(acq_data, schema_str, acq_index)
 json.dumps(results, default=str)
     `);
 
     return JSON.parse(result as string);
+  }
+
+  /**
+   * Convert a UI acquisition to a Python-compatible dict for validation.
+   */
+  private acquisitionToPythonDict(acquisition: UIAcquisition): Record<string, any> {
+    return {
+      protocolName: acquisition.protocolName,
+      sliceCount: acquisition.sliceCount || 0,
+      acquisitionFields: acquisition.acquisitionFields?.map(f => ({
+        tag: f.tag,
+        keyword: f.keyword,
+        name: f.name,
+        value: f.value
+      })) || [],
+      series: acquisition.series?.map(s => ({
+        name: s.name,
+        fields: s.fields?.map(f => ({
+          tag: f.tag,
+          keyword: f.keyword,
+          name: f.name,
+          value: f.value
+        })) || []
+      })) || []
+    };
+  }
+
+  /**
+   * Validate an acquisition against another acquisition (data-as-schema mode).
+   * Converts the schema acquisition to schema format and validates using direct data.
+   */
+  async validateAcquisitionAgainstAcquisition(
+    dataAcquisition: UIAcquisition,
+    schemaAcquisition: UIAcquisition
+  ): Promise<ValidationResult[]> {
+    await this.ensureInitialized();
+
+    // Convert the schema acquisition to schema JSON format
+    const schemaContent = this.acquisitionToSchemaJson(schemaAcquisition);
+
+    // Convert data acquisition to format Python expects
+    const acquisitionData = this.acquisitionToPythonDict(dataAcquisition);
+
+    // Pass data to Python - use validate_acquisition_direct to avoid cache issues
+    await pyodideManager.setPythonGlobal('acquisition_data', acquisitionData);
+    await pyodideManager.setPythonGlobal('schema_content', schemaContent);
+    await pyodideManager.setPythonGlobal('schema_acquisition_index', 0); // First (and only) acquisition
+
+    const result = await pyodideManager.runPython(`
+import json
+from dicompare.interface import validate_acquisition_direct
+
+acq_data = acquisition_data if not hasattr(acquisition_data, 'to_py') else acquisition_data.to_py()
+schema_str = schema_content if not hasattr(schema_content, 'to_py') else schema_content.to_py()
+acq_index = schema_acquisition_index if not hasattr(schema_acquisition_index, 'to_py') else schema_acquisition_index.to_py()
+
+results = validate_acquisition_direct(acq_data, schema_str, acq_index)
+json.dumps(results, default=str)
+    `);
+
+    return JSON.parse(result as string);
+  }
+
+  /**
+   * Convert a UI acquisition object to schema JSON format.
+   * Follows the metaschema format from dicompare-pip/dicompare/metaschema.json
+   */
+  private acquisitionToSchemaJson(acquisition: UIAcquisition): string {
+    // Build the schema structure
+    const schema: any = {
+      name: acquisition.protocolName || 'Generated Schema',
+      description: acquisition.seriesDescription || '',
+      acquisitions: {}
+    };
+
+    // Build the acquisition entry
+    const acqEntry: any = {
+      fields: [],  // Must be an array, not an object
+      series: []
+    };
+
+    // Add acquisition-level fields as array
+    if (acquisition.acquisitionFields) {
+      for (const field of acquisition.acquisitionFields) {
+        acqEntry.fields.push(this.fieldToSchemaField(field));
+      }
+    }
+
+    // Add series
+    if (acquisition.series) {
+      for (const series of acquisition.series) {
+        const seriesEntry: any = {
+          name: series.name,
+          fields: []  // Must be an array
+        };
+        if (series.fields) {
+          for (const field of series.fields) {
+            seriesEntry.fields.push(this.seriesFieldToSchemaField(field));
+          }
+        }
+        acqEntry.series.push(seriesEntry);
+      }
+    }
+
+    // Add validation functions as rules if present
+    if (acquisition.validationFunctions && acquisition.validationFunctions.length > 0) {
+      acqEntry.rules = acquisition.validationFunctions.map(func => ({
+        id: func.name.toLowerCase().replace(/\s+/g, '_'),
+        name: func.customName || func.name,
+        description: func.description || '',
+        implementation: func.implementation || '',
+        fields: func.fields || []
+      }));
+    }
+
+    // Use the acquisition name as the key
+    const acqName = acquisition.protocolName || 'Acquisition';
+    schema.acquisitions[acqName] = acqEntry;
+
+    return JSON.stringify(schema);
+  }
+
+  /**
+   * Convert a DicomField to schema field format.
+   * Schema field format: { field: string, tag?: string, value?: any, tolerance?: number, ... }
+   */
+  private fieldToSchemaField(field: any): any {
+    const schemaField: any = {
+      field: field.name || field.keyword || field.tag  // 'field' is required
+    };
+
+    // Add tag if present
+    if (field.tag) {
+      schemaField.tag = field.tag;
+    }
+
+    // Add value if present
+    if (field.value !== undefined && field.value !== null && field.value !== '') {
+      schemaField.value = field.value;
+    }
+
+    // Add validation rule properties
+    if (field.validationRule) {
+      if (field.validationRule.type === 'tolerance' && field.validationRule.tolerance !== undefined) {
+        schemaField.tolerance = field.validationRule.tolerance;
+      }
+      if (field.validationRule.type === 'contains' && field.validationRule.contains) {
+        schemaField.contains = field.validationRule.contains;
+      }
+      if (field.validationRule.type === 'contains_any' && field.validationRule.contains_any) {
+        schemaField.contains_any = field.validationRule.contains_any;
+      }
+      if (field.validationRule.type === 'contains_all' && field.validationRule.contains_all) {
+        schemaField.contains_all = field.validationRule.contains_all;
+      }
+    }
+
+    return schemaField;
+  }
+
+  /**
+   * Convert a SeriesField to schema field format.
+   */
+  private seriesFieldToSchemaField(field: any): any {
+    const schemaField: any = {
+      field: field.name || field.keyword || field.tag  // 'field' is required
+    };
+
+    if (field.tag) {
+      schemaField.tag = field.tag;
+    }
+
+    if (field.value !== undefined && field.value !== null && field.value !== '') {
+      schemaField.value = field.value;
+    }
+
+    if (field.validationRule) {
+      if (field.validationRule.type === 'tolerance' && field.validationRule.tolerance !== undefined) {
+        schemaField.tolerance = field.validationRule.tolerance;
+      }
+      if (field.validationRule.type === 'contains' && field.validationRule.contains) {
+        schemaField.contains = field.validationRule.contains;
+      }
+      if (field.validationRule.type === 'contains_any' && field.validationRule.contains_any) {
+        schemaField.contains_any = field.validationRule.contains_any;
+      }
+      if (field.validationRule.type === 'contains_all' && field.validationRule.contains_all) {
+        schemaField.contains_all = field.validationRule.contains_all;
+      }
+    }
+
+    return schemaField;
   }
 
   // ==========================================================================

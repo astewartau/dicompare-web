@@ -39,7 +39,7 @@ const SchemaReadmeModal: React.FC<SchemaReadmeModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-surface-primary rounded-lg w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
+      <div className="bg-surface-primary rounded-lg w-full max-w-5xl h-[80vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div className="flex items-center space-x-3">

@@ -166,7 +166,13 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
           </div>
           {(value.min !== undefined && value.min !== null) || (value.max !== undefined && value.max !== null) ? (
             <p className="mt-2 text-sm text-content-secondary">
-              Valid range: {value.min ?? '-∞'} to {value.max ?? '∞'}
+              Constraint: {
+                value.min !== undefined && value.min !== null && value.max !== undefined && value.max !== null
+                  ? `[${value.min}, ${value.max}]`
+                  : value.min !== undefined && value.min !== null
+                    ? `≥ ${value.min}`
+                    : `≤ ${value.max}`
+              }
             </p>
           ) : null}
         </div>

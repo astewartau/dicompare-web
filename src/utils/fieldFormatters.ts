@@ -13,7 +13,8 @@ export function buildValidationRuleFromField(field: any): ValidationRule | undef
 
   if (field.tolerance !== undefined) {
     return { type: 'tolerance', value: field.value, tolerance: field.tolerance };
-  } else if (field.min !== undefined && field.max !== undefined) {
+  } else if (field.min !== undefined || field.max !== undefined) {
+    // Handle range with min-only, max-only, or both
     return { type: 'range', min: field.min, max: field.max };
   } else if (field.contains !== undefined) {
     return { type: 'contains', contains: field.contains };
@@ -112,8 +113,8 @@ export function formatSeriesFieldValue(fieldValue: any, validationRule?: Validat
         // Show "value ±tolerance" format (same as acquisition fields)
         return `${validationRule.value ?? 0} ±${validationRule.tolerance ?? 0}`;
       case 'range':
-        // Show "min to max" format (same as acquisition fields)
-        return `${validationRule.min ?? '-∞'} to ${validationRule.max ?? '∞'}`;
+        // Show mathematical notation (same as acquisition fields)
+        return formatRangeConstraint(validationRule.min, validationRule.max);
       case 'contains':
         // Show "contains substring" format
         return `contains "${validationRule.contains || ''}"`;
@@ -161,14 +162,14 @@ export function formatValidationRule(rule?: ValidationRule): string {
   if (!rule) {
     return 'exact';
   }
-  
+
   switch (rule.type) {
     case 'exact':
       return 'exact';
     case 'tolerance':
       return `${rule.value || 0} ±${rule.tolerance || 0}`;
     case 'range':
-      return `${rule.min ?? '-∞'} to ${rule.max ?? '∞'}`;
+      return formatRangeConstraint(rule.min, rule.max);
     case 'contains':
       return `contains "${rule.contains || ''}"`;
     case 'contains_any':
@@ -178,6 +179,23 @@ export function formatValidationRule(rule?: ValidationRule): string {
     default:
       return rule.type;
   }
+}
+
+/**
+ * Format a range constraint using mathematical notation.
+ * - min only: "≥ min"
+ * - max only: "≤ max"
+ * - both: "[min, max]"
+ */
+export function formatRangeConstraint(min?: number, max?: number): string {
+  if (min !== undefined && min !== null && max !== undefined && max !== null) {
+    return `[${min}, ${max}]`;
+  } else if (min !== undefined && min !== null) {
+    return `≥ ${min}`;
+  } else if (max !== undefined && max !== null) {
+    return `≤ ${max}`;
+  }
+  return 'range (not set)';
 }
 
 export function formatFieldTypeInfo(dataType: string, validationRule?: ValidationRule): string {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Blocks, CheckCircle, Github, ShieldCheck } from 'lucide-react';
+import { Github, ShieldCheck, Layers } from 'lucide-react';
 import ThemeToggle from '../components/common/ThemeToggle';
 
 const LandingPage: React.FC = () => {
@@ -37,30 +37,18 @@ const LandingPage: React.FC = () => {
             Build DICOM schemas for your study or validate data against existing standards — all locally, so your data never leaves your computer.
           </p>
 
-          {/* Feature Cards */}
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-16">
+          {/* Feature Card */}
+          <div className="max-w-md mx-auto mb-16">
             <Link
-              to="/schema-builder"
-              className="bg-surface-primary rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-2 border-transparent hover:border-brand-100"
+              to="/workspace"
+              className="block bg-surface-primary rounded-lg shadow-md hover:shadow-lg transition-shadow p-8 border-2 border-brand-200 hover:border-brand-400 dark:border-brand-800 dark:hover:border-brand-600"
             >
-              <Blocks className="h-10 w-10 text-brand-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-content-primary mb-3">Schema Builder</h3>
-              <p className="text-content-secondary text-sm">
-                Use reference files to build a schema for your study.
+              <Layers className="h-12 w-12 text-brand-600 mx-auto mb-4" />
+              <h3 className="text-2xl font-semibold text-content-primary mb-3">Open Workspace</h3>
+              <p className="text-content-secondary">
+                Build schemas and check compliance in one unified interface. Start from schemas, data, or scratch.
               </p>
             </Link>
-
-            <Link
-              to="/compliance-checker"
-              className="bg-surface-primary rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-2 border-transparent hover:border-brand-100"
-            >
-              <CheckCircle className="h-10 w-10 text-brand-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-content-primary mb-3">Compliance Checker</h3>
-              <p className="text-content-secondary text-sm">
-                Validate incoming DICOMs against a schema.
-              </p>
-            </Link>
-
           </div>
         </div>
       </div>

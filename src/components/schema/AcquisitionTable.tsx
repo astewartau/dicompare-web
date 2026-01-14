@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText } from 'lucide-react';
+import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText, Eye, EyeOff } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { dicompareAPI } from '../../services/DicompareAPI';
@@ -26,6 +26,7 @@ interface AcquisitionTableProps {
   // Schema/compliance specific props
   schemaId?: string;
   schemaAcquisitionId?: string;
+  schemaAcquisition?: Acquisition; // For data-as-schema mode: the acquisition to use as schema (when no schemaId)
   getSchemaContent?: (id: string) => Promise<string | null>;
   title?: string;
   subtitle?: string;
@@ -62,6 +63,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   isDataProcessing = false,
   schemaId,
   schemaAcquisitionId,
+  schemaAcquisition,
   getSchemaContent,
   title,
   subtitle,
@@ -95,13 +97,9 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [isValidatingRules, setIsValidatingRules] = useState(false);
   const [validationRuleError, setValidationRuleError] = useState<string | null>(null);
   const [allComplianceResults, setAllComplianceResults] = useState<ComplianceFieldResult[]>([]);
-  const [isComplianceSummaryExpanded, setIsComplianceSummaryExpanded] = useState(false);
-  const [isErrorsExpanded, setIsErrorsExpanded] = useState(true);
-  const [isWarningsExpanded, setIsWarningsExpanded] = useState(true);
-  const [isNaExpanded, setIsNaExpanded] = useState(true);
-  const [isPassedExpanded, setIsPassedExpanded] = useState(false);
   const [showTestDicomGenerator, setShowTestDicomGenerator] = useState(false);
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
+  const [showRuleStatusMessages, setShowRuleStatusMessages] = useState(false);
   const { allTags } = useTagSuggestions();
 
   const isComplianceMode = mode === 'compliance';
@@ -125,26 +123,43 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   }, [isCollapsed]);
 
   // Validation rule compliance effect
+  // Can validate with either schemaId (external schema) or schemaAcquisition (data-as-schema)
+  const hasSchemaForValidation = schemaId || schemaAcquisition;
   useEffect(() => {
-    if (isComplianceMode && schemaId && realAcquisition && getSchemaContent && !isDataProcessing) {
+    if (isComplianceMode && hasSchemaForValidation && realAcquisition && !isDataProcessing) {
       performValidationRuleCompliance();
     }
-  }, [isComplianceMode, schemaId, realAcquisition, schemaAcquisitionId, validationFunctions.length, isDataProcessing]);
+  }, [isComplianceMode, schemaId, schemaAcquisition, realAcquisition, schemaAcquisitionId, validationFunctions.length, isDataProcessing]);
 
   const performValidationRuleCompliance = async () => {
-    if (!schemaId || !realAcquisition || !getSchemaContent) return;
+    if (!realAcquisition || (!schemaId && !schemaAcquisition)) return;
 
     setIsValidatingRules(true);
     setValidationRuleError(null);
+    // Clear old results to prevent showing stale data from previous item
+    setAllComplianceResults([]);
+    setValidationRuleResults([]);
 
     try {
       // For validation rules, we need to validate the actual functions against the real data
-      const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
-        realAcquisition,
-        schemaId,
-        getSchemaContent,
-        schemaAcquisitionId
-      );
+      let validationResults;
+      if (schemaAcquisition) {
+        // Data-as-schema mode: validate using the acquisition object directly
+        validationResults = await dicompareAPI.validateAcquisitionAgainstAcquisition(
+          realAcquisition,
+          schemaAcquisition
+        );
+      } else if (schemaId && getSchemaContent) {
+        // Normal mode: validate using schema ID
+        validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
+          realAcquisition,
+          schemaId,
+          getSchemaContent,
+          schemaAcquisitionId
+        );
+      } else {
+        throw new Error('No schema available for validation');
+      }
 
       // Store ALL validation results
       setAllComplianceResults(validationResults);
@@ -447,7 +462,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       {isExpanded && (
         <div className="p-3 space-y-3">
           {/* Validation Functions */}
-          {((isEditMode && !isComplianceMode) || (isComplianceMode && validationFunctions.length > 0)) && (
+          {((isEditMode && !isComplianceMode) || validationFunctions.length > 0) && (
             <div>
               {isEditMode && !isComplianceMode && (
                 <div className="flex items-center space-x-2 mb-2">
@@ -479,12 +494,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   )}
 
                   {/* Loading state */}
-                  {isComplianceMode && isValidatingRules && validationRuleResults.length === 0 && (
-                    <div className="border border-border rounded-md p-3 text-center mb-2">
-                      <Loader className="h-4 w-4 animate-spin mx-auto mb-2" />
-                      <p className="text-content-tertiary text-xs">Validating rules...</p>
-                    </div>
-                  )}
                   <div className="border border-border rounded-md overflow-hidden">
                     <table className="min-w-full divide-y divide-border">
                       <thead className="bg-surface-secondary">
@@ -496,11 +505,20 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                             Description
                           </th>
                           {isComplianceMode && (
-                            <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
-                              Status
+                            <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                              <div className="flex items-center justify-center gap-1">
+                                <span>Status</span>
+                                <button
+                                  onClick={() => setShowRuleStatusMessages(!showRuleStatusMessages)}
+                                  className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
+                                  title={showRuleStatusMessages ? "Hide status messages" : "Show status messages"}
+                                >
+                                  {showRuleStatusMessages ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                </button>
+                              </div>
                             </th>
                           )}
-                          {!isComplianceMode && (
+                          {isEditMode && !isComplianceMode && (
                             <th className="px-2 py-1.5 text-right text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
                               Actions
                             </th>
@@ -534,23 +552,32 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                 <p className="text-xs text-content-primary break-words">{func.customDescription || func.description}</p>
                               </td>
                               {isComplianceMode && ruleResult && (
-                                <td className="px-2 py-1.5 text-center">
+                                <td className="px-2 py-1.5">
                                   {isValidatingRules ? (
-                                    <Loader className="h-4 w-4 animate-spin mx-auto text-content-tertiary" />
+                                    <div className="flex justify-center">
+                                      <Loader className="h-4 w-4 animate-spin text-content-tertiary" />
+                                    </div>
                                   ) : (
-                                    <CustomTooltip
-                                      content={ruleResult.message}
-                                      position="top"
-                                      delay={100}
-                                    >
-                                      <div className="inline-flex items-center justify-center cursor-help">
-                                        {getStatusIcon(ruleResult.status)}
-                                      </div>
-                                    </CustomTooltip>
+                                    <div className={`flex items-center gap-2 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
+                                      <CustomTooltip
+                                        content={ruleResult.message}
+                                        position="top"
+                                        delay={100}
+                                      >
+                                        <div className="inline-flex items-center justify-center cursor-help flex-shrink-0">
+                                          {getStatusIcon(ruleResult.status)}
+                                        </div>
+                                      </CustomTooltip>
+                                      {showRuleStatusMessages && ruleResult.message && (
+                                        <span className="text-xs text-content-secondary break-words">
+                                          {ruleResult.message}
+                                        </span>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
                               )}
-                              {!isComplianceMode && (
+                              {isEditMode && !isComplianceMode && (
                                 <td className="px-2 py-1.5 text-right">
                                   <div className="flex items-center justify-end space-x-1">
                                     <button
@@ -625,302 +652,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'acquisition')}
                 onSeriesNameUpdate={onSeriesNameUpdate}
               />
-            </div>
-          )}
-
-          {/* Compliance Summary - Only show in compliance mode */}
-          {isComplianceMode && realAcquisition && (
-            <div className="mt-4 border-t border-border pt-4">
-              {(() => {
-                // Use all compliance results directly (no combination needed)
-                const allResults = allComplianceResults;
-
-                // Count by status
-                const statusCounts = {
-                  pass: allResults.filter(r => r.status === 'pass').length,
-                  fail: allResults.filter(r => r.status === 'fail').length,
-                  warning: allResults.filter(r => r.status === 'warning').length,
-                  na: allResults.filter(r => r.status === 'na').length,
-                  unknown: allResults.filter(r => r.status === 'unknown').length
-                };
-
-                // Get errors, warnings, N/A, and passed for detailed list
-                const errors = allResults.filter(r => r.status === 'fail');
-                const warnings = allResults.filter(r => r.status === 'warning');
-                const naResults = allResults.filter(r => r.status === 'na');
-                const passedResults = allResults.filter(r => r.status === 'pass');
-
-                return (
-                  <>
-                    {/* Summary Header with Toggle */}
-                    <div
-                      className="flex items-center justify-between cursor-pointer hover:bg-surface-secondary -mx-2 px-2 py-1 rounded"
-                      onClick={() => setIsComplianceSummaryExpanded(!isComplianceSummaryExpanded)}
-                    >
-                      <div className="flex items-center space-x-2">
-                        <button
-                          className="p-0.5 text-content-tertiary hover:text-content-secondary"
-                          aria-label={isComplianceSummaryExpanded ? "Collapse summary" : "Expand summary"}
-                        >
-                          {isComplianceSummaryExpanded ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </button>
-                        <h4 className="text-sm font-semibold text-content-primary">Compliance Summary</h4>
-                      </div>
-
-                      {/* Always show status counts in header */}
-                      <div className="flex items-center gap-2">
-                        {statusCounts.fail > 0 && (
-                          <div className="flex items-center space-x-1 bg-red-500/10 px-2 py-0.5 rounded-full">
-                            <XCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
-                            <span className="text-xs font-medium text-red-700 dark:text-red-300">{statusCounts.fail}</span>
-                          </div>
-                        )}
-                        {statusCounts.warning > 0 && (
-                          <div className="flex items-center space-x-1 bg-yellow-500/10 px-2 py-0.5 rounded-full">
-                            <AlertTriangle className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />
-                            <span className="text-xs font-medium text-yellow-700 dark:text-yellow-300">{statusCounts.warning}</span>
-                          </div>
-                        )}
-                        {statusCounts.pass > 0 && (
-                          <div className="flex items-center space-x-1 bg-green-500/10 px-2 py-0.5 rounded-full">
-                            <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
-                            <span className="text-xs font-medium text-green-700 dark:text-green-300">{statusCounts.pass}</span>
-                          </div>
-                        )}
-                        {statusCounts.na > 0 && (
-                          <div className="flex items-center space-x-1 bg-surface-secondary px-2 py-0.5 rounded-full">
-                            <HelpCircle className="h-3 w-3 text-content-tertiary" />
-                            <span className="text-xs font-medium text-content-secondary">{statusCounts.na}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Expandable Content */}
-                    {isComplianceSummaryExpanded && (
-                      <div className="mt-3">
-                        {/* Detailed Status Counts */}
-                        <div className="flex flex-wrap gap-3 mb-4">
-                          <div className="flex items-center space-x-1.5 bg-green-500/10 px-3 py-1.5 rounded-full">
-                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="text-sm font-medium text-green-700 dark:text-green-300">{statusCounts.pass} Passed</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 bg-red-500/10 px-3 py-1.5 rounded-full">
-                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                            <span className="text-sm font-medium text-red-700 dark:text-red-300">{statusCounts.fail} Failed</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 bg-yellow-500/10 px-3 py-1.5 rounded-full">
-                            <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                            <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">{statusCounts.warning} Warnings</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 bg-surface-secondary px-3 py-1.5 rounded-full">
-                            <HelpCircle className="h-4 w-4 text-content-tertiary" />
-                            <span className="text-sm font-medium text-content-secondary">{statusCounts.na} N/A</span>
-                          </div>
-                        </div>
-
-                        {/* Errors List */}
-                        {errors.length > 0 && (
-                          <div className="mb-3">
-                            <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-red-500/10 -mx-2 px-2 py-1 rounded mb-2"
-                              onClick={() => setIsErrorsExpanded(!isErrorsExpanded)}
-                            >
-                              <h5 className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center">
-                                <button
-                                  className="p-0.5 text-red-600 dark:text-red-400 hover:text-red-800 mr-1"
-                                  aria-label={isErrorsExpanded ? "Collapse errors" : "Expand errors"}
-                                >
-                                  {isErrorsExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                                <XCircle className="h-3.5 w-3.5 mr-1" />
-                                Errors ({errors.length})
-                              </h5>
-                            </div>
-                            {isErrorsExpanded && (
-                              <div className="space-y-1">
-                                {errors.map((error, idx) => (
-                                  <div key={idx} className="bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-red-800 dark:text-red-300">
-                                          {error.rule_name || error.fieldName}
-                                          {error.seriesName && (
-                                            <span className="ml-2 text-red-700 dark:text-red-400">({error.seriesName})</span>
-                                          )}
-                                        </p>
-                                        {error.rule_name && error.fieldName && (
-                                          <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{error.fieldName}</p>
-                                        )}
-                                        <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">{error.message}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Warnings List */}
-                        {warnings.length > 0 && (
-                          <div className="mb-3">
-                            <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-yellow-500/10 -mx-2 px-2 py-1 rounded mb-2"
-                              onClick={() => setIsWarningsExpanded(!isWarningsExpanded)}
-                            >
-                              <h5 className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 flex items-center">
-                                <button
-                                  className="p-0.5 text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 mr-1"
-                                  aria-label={isWarningsExpanded ? "Collapse warnings" : "Expand warnings"}
-                                >
-                                  {isWarningsExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                                <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-                                Warnings ({warnings.length})
-                              </h5>
-                            </div>
-                            {isWarningsExpanded && (
-                              <div className="space-y-1">
-                                {warnings.map((warning, idx) => (
-                                  <div key={idx} className="bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2">
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300">
-                                          {warning.rule_name || warning.fieldName}
-                                          {warning.seriesName && (
-                                            <span className="ml-2 text-yellow-700 dark:text-yellow-400">({warning.seriesName})</span>
-                                          )}
-                                        </p>
-                                        {warning.rule_name && warning.fieldName && (
-                                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-0.5">{warning.fieldName}</p>
-                                        )}
-                                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">{warning.message}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* N/A List */}
-                        {naResults.length > 0 && (
-                          <div className="mb-3">
-                            <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-surface-secondary -mx-2 px-2 py-1 rounded mb-2"
-                              onClick={() => setIsNaExpanded(!isNaExpanded)}
-                            >
-                              <h5 className="text-xs font-semibold text-content-secondary flex items-center">
-                                <button
-                                  className="p-0.5 text-content-tertiary hover:text-content-secondary mr-1"
-                                  aria-label={isNaExpanded ? "Collapse N/A" : "Expand N/A"}
-                                >
-                                  {isNaExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                                <HelpCircle className="h-3.5 w-3.5 mr-1" />
-                                N/A ({naResults.length})
-                              </h5>
-                            </div>
-                            {isNaExpanded && (
-                              <div className="space-y-1">
-                                {naResults.map((naResult, idx) => (
-                                  <div key={idx} className="bg-surface-secondary border border-border rounded px-3 py-2">
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-content-primary">
-                                          {naResult.seriesName ? `Series ${naResult.seriesName}:` : (naResult.rule_name || naResult.fieldName)}
-                                        </p>
-                                        {naResult.rule_name && naResult.fieldName && (
-                                          <p className="text-xs text-content-secondary mt-0.5">{naResult.fieldName}</p>
-                                        )}
-                                        <p className="text-xs text-content-secondary mt-0.5">{naResult.message}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Passed List */}
-                        {passedResults.length > 0 && (
-                          <div className="mb-3">
-                            <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-green-500/10 -mx-2 px-2 py-1 rounded mb-2"
-                              onClick={() => setIsPassedExpanded(!isPassedExpanded)}
-                            >
-                              <h5 className="text-xs font-semibold text-green-700 dark:text-green-400 flex items-center">
-                                <button
-                                  className="p-0.5 text-green-600 dark:text-green-400 hover:text-green-800 mr-1"
-                                  aria-label={isPassedExpanded ? "Collapse passed" : "Expand passed"}
-                                >
-                                  {isPassedExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                                Passed ({passedResults.length})
-                              </h5>
-                            </div>
-                            {isPassedExpanded && (
-                              <div className="space-y-1">
-                                {passedResults.map((passedResult, idx) => (
-                                  <div key={idx} className="bg-green-500/10 border border-green-500/20 rounded px-3 py-2">
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-green-800 dark:text-green-300">
-                                          {passedResult.seriesName ? passedResult.seriesName : (passedResult.rule_name || passedResult.fieldName)}
-                                        </p>
-                                        {!passedResult.seriesName && passedResult.rule_name && passedResult.fieldName && (
-                                          <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">{passedResult.fieldName}</p>
-                                        )}
-                                        <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">{passedResult.message}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Success message if all pass */}
-                        {errors.length === 0 && warnings.length === 0 && naResults.length === 0 && statusCounts.pass > 0 && (
-                          <div className="bg-green-500/10 border border-green-500/20 rounded px-4 py-3">
-                            <div className="flex items-center">
-                              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mr-2" />
-                              <p className="text-sm text-green-800 dark:text-green-300 font-medium">
-                                All compliance checks passed successfully!
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
             </div>
           )}
         </div>

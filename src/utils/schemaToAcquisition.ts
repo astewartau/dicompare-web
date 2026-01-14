@@ -93,6 +93,7 @@ export const convertSchemaToAcquisition = async (
         })
       })) || [],
       validationFunctions: acquisitionData.rules || acquisitionData.validationFunctions || [],
+      tags: acquisitionData.tags || [],
       metadata: {
         manufacturer: schema.authors?.join(', ') || 'Schema Template',
         notes: `Template from schema: ${schema.name} v${schema.version || '1.0.0'}`,

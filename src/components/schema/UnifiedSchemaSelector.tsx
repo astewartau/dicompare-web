@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen } from 'lucide-react';
+import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, Pencil } from 'lucide-react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
@@ -39,6 +39,9 @@ interface UnifiedSchemaSelectorProps {
   // README support
   onSchemaReadmeClick?: (schemaId: string, schemaName: string) => void;
   onAcquisitionReadmeClick?: (schemaId: string, schemaName: string, acquisitionIndex: number, acquisitionName: string) => void;
+
+  // Edit support (load schema into workspace for editing)
+  onSchemaEdit?: (schemaId: string) => void;
 }
 
 interface DeleteConfirmModalProps {
@@ -137,12 +140,18 @@ const DraggableSchema: React.FC<DraggableSchemaProps> = ({
 // Draggable wrapper for individual acquisition items
 interface DraggableAcquisitionProps {
   selection: AcquisitionSelection;
+  acquisition: Acquisition;
+  schemaName: string;
+  tags?: string[];
   enabled: boolean;
-  children: React.ReactNode;
+  children: (isDraggable: boolean) => React.ReactNode;
 }
 
 const DraggableAcquisition: React.FC<DraggableAcquisitionProps> = ({
   selection,
+  acquisition,
+  schemaName,
+  tags,
   enabled,
   children
 }) => {
@@ -150,23 +159,27 @@ const DraggableAcquisition: React.FC<DraggableAcquisitionProps> = ({
     id: `acq-drag-${selection.schemaId}-${selection.acquisitionIndex}`,
     data: {
       type: 'acquisition',
-      selection
+      selection,
+      acquisition,
+      schemaName,
+      tags
     },
     disabled: !enabled
   });
 
   const style = {
     transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0 : 1,  // Hide completely when dragging - overlay shows the preview
   };
 
   if (!enabled) {
-    return <>{children}</>;
+    return <>{children(false)}</>;
   }
 
+  // Apply listeners to the entire wrapper so dragging works from anywhere on the card
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      {children}
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
+      {children(true)}
     </div>
   );
 };
@@ -187,7 +200,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   getSchemaContent,
   enableDragDrop = false,
   onSchemaReadmeClick,
-  onAcquisitionReadmeClick
+  onAcquisitionReadmeClick,
+  onSchemaEdit
 }) => {
   const { deleteSchema } = useSchemaContext();
 
@@ -683,6 +697,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
               </div>
             </div>
             <div className="flex items-center space-x-2 ml-4">
+              {/* Edit button - load schema into workspace */}
+              {onSchemaEdit && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSchemaEdit(schema.id);
+                  }}
+                  className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
+                  title="Edit schema"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
+
               {/* README button */}
               {onSchemaReadmeClick && (
                 <button
@@ -767,20 +795,26 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                     <DraggableAcquisition
                       key={acquisition.id}
                       selection={acqSelection}
+                      acquisition={acquisition}
+                      schemaName={schema.name}
+                      tags={schema.acquisitions?.[index]?.tags}
                       enabled={enableDragDrop}
                     >
+                      {(isDraggable) => (
                       <div
                         onClick={() => onAcquisitionToggle?.(acqSelection)}
                         className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
                           isAcqSelected
                             ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                             : 'border-border-secondary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700'
-                        } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                        }`}
                       >
                       <div className="flex items-start space-x-3">
-                        {/* Drag handle icon */}
+                        {/* Drag handle visual indicator - entire card is draggable */}
                         {enableDragDrop && (
-                          <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
+                          <div className="p-1 -m-1">
+                            <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
+                          </div>
                         )}
                         <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
                           isAcqSelected
@@ -849,6 +883,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                         )}
                       </div>
                       </div>
+                      )}
                     </DraggableAcquisition>
                   ) : (
                     <button
@@ -1088,8 +1123,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
           {/* Schema list */}
           <div className="flex-1 overflow-y-auto p-4">
-            {/* Upload Area - inside scrollable region, show when Custom is enabled */}
-            {onSchemaUpload && showCustom && (
+            {/* Upload Area - always show when onSchemaUpload is provided */}
+            {onSchemaUpload && (
               <div className="mb-4">
                 <div
                   className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
@@ -1172,19 +1207,26 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                         <DraggableAcquisition
                           key={`${schema.id}-${index}`}
                           selection={flatAcqSelection}
+                          acquisition={acquisition}
+                          schemaName={schema.name}
+                          tags={schema.acquisitions?.[index]?.tags}
                           enabled={enableDragDrop}
                         >
+                          {(isDraggable) => (
                           <div
                             onClick={() => onAcquisitionToggle?.(flatAcqSelection)}
                             className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
                               isAcqSelected
                                 ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                                 : 'border-border-secondary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700'
-                            } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                            }`}
                           >
                           <div className="flex items-start space-x-3">
+                            {/* Drag handle visual indicator - entire card is draggable */}
                             {enableDragDrop && (
-                              <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
+                              <div className="p-1 -m-1">
+                                <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
+                              </div>
                             )}
                             <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
                               isAcqSelected
@@ -1254,6 +1296,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             )}
                           </div>
                           </div>
+                          )}
                         </DraggableAcquisition>
                       ) : (
                         <button

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, ArrowRightLeft, Loader } from 'lucide-react';
+import { Trash2, ArrowRightLeft, Loader, Eye, EyeOff } from 'lucide-react';
 import { DicomField, Acquisition } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
-import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
+import { formatFieldValue, formatFieldTypeInfo, formatFieldDisplay } from '../../utils/fieldFormatters';
 import { ComplianceFieldResult } from '../../types/schema';
 import CustomTooltip from '../common/CustomTooltip';
 import StatusIcon from '../common/StatusIcon';
@@ -47,6 +47,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
   onFieldDelete,
 }) => {
   const [editingField, setEditingField] = useState<DicomField | null>(null);
+  const [showStatusMessages, setShowStatusMessages] = useState(false);
   const isComplianceMode = mode === 'compliance';
 
   // Use compliance results from props instead of computing them
@@ -118,8 +119,22 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 {isComplianceMode ? 'Expected Value' : 'Value'}
               </th>
               {isComplianceMode && (
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
-                  Status
+                <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                  Actual Value
+                </th>
+              )}
+              {isComplianceMode && (
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Status</span>
+                    <button
+                      onClick={() => setShowStatusMessages(!showStatusMessages)}
+                      className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
+                      title={showStatusMessages ? "Hide status messages" : "Show status messages"}
+                    >
+                      {showStatusMessages ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </button>
+                  </div>
                 </th>
               )}
               {isEditMode && (
@@ -131,7 +146,10 @@ const FieldTable: React.FC<FieldTableProps> = ({
           </thead>
           <tbody className="bg-surface-primary divide-y divide-border">
             {fields.map((field, index) => {
-              const fieldIdentifier = field.tag || field.name;
+              // For unique identification: use tag for standard DICOM fields, name/keyword for derived fields
+              // Note: some derived fields have tag="derived" which is not unique
+              const isDerivedTag = !field.tag || field.tag === 'derived' || field.tag === null;
+              const fieldIdentifier = isDerivedTag ? (field.keyword || field.name) : field.tag;
               const fieldKey = `${acquisitionId}-${fieldIdentifier}`;
               const isIncomplete = incompleteFields.has(fieldKey);
 
@@ -170,25 +188,47 @@ const FieldTable: React.FC<FieldTableProps> = ({
                     onClick={() => isEditMode && setEditingField(field)}
                   >
                     <p className="text-xs text-content-primary break-words">{formatFieldValue(field)}</p>
-                    {(isEditMode || isComplianceMode) && (
-                      <p className="text-xs text-content-tertiary mt-0.5">{fieldTypeDisplay}</p>
-                    )}
-                    {!isEditMode && !isComplianceMode && (
-                      <p className="text-xs mt-0.5 invisible">&nbsp;</p>
-                    )}
+                    <p className="text-xs text-content-tertiary mt-0.5">{fieldTypeDisplay}</p>
                   </div>
                 </td>
+                {isComplianceMode && (
+                  <td className="px-2 py-1.5">
+                    {complianceResult?.actualValue !== undefined && complianceResult?.actualValue !== null ? (
+                      <p className="text-xs text-content-primary break-words">{formatFieldDisplay(complianceResult.actualValue)}</p>
+                    ) : realAcquisition ? (
+                      (() => {
+                        const actualField = realAcquisition.acquisitionFields?.find(
+                          f => f.tag === field.tag || f.keyword === field.keyword || f.name === field.name
+                        );
+                        return actualField ? (
+                          <p className="text-xs text-content-primary break-words">{formatFieldValue(actualField)}</p>
+                        ) : (
+                          <span className="text-xs text-content-muted italic">—</span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-xs text-content-muted italic">—</span>
+                    )}
+                  </td>
+                )}
                 {isComplianceMode && complianceResult && (
-                  <td className="px-2 py-1.5 text-center">
-                    <CustomTooltip
-                      content={complianceResult.message}
-                      position="top"
-                      delay={100}
-                    >
-                      <div className="inline-flex items-center justify-center cursor-help">
-                        <StatusIcon status={complianceResult.status} />
-                      </div>
-                    </CustomTooltip>
+                  <td className="px-2 py-1.5">
+                    <div className={`flex items-center gap-2 ${showStatusMessages ? 'justify-start' : 'justify-center'}`}>
+                      <CustomTooltip
+                        content={complianceResult.message}
+                        position="top"
+                        delay={100}
+                      >
+                        <div className="inline-flex items-center justify-center cursor-help flex-shrink-0">
+                          <StatusIcon status={complianceResult.status} />
+                        </div>
+                      </CustomTooltip>
+                      {showStatusMessages && complianceResult.message && (
+                        <span className="text-xs text-content-secondary break-words">
+                          {complianceResult.message}
+                        </span>
+                      )}
+                    </div>
                   </td>
                 )}
                 {isEditMode && (

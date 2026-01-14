@@ -18,7 +18,7 @@ interface ValidationFunctionEditorModalProps {
 const SYSTEM_FIELDS = {
   'Count': {
     name: 'Count',
-    description: 'Number of slices/images per row (typically from DICOM metadata)'
+    description: 'Number of unique slice locations per value combination (handles mosaic/enhanced DICOM)'
   }
 };
 
@@ -619,6 +619,13 @@ test_data = {${Object.entries(testCase.data).map(([field, values]) =>
 # Try to create DataFrame with better error handling
 try:
     value = pd.DataFrame(test_data)
+    # Compute smart Count if not already provided
+    # Count = actual slice count (handles mosaic/enhanced DICOM)
+    if "Count" not in value.columns:
+        if "SliceLocation" in value.columns:
+            value["Count"] = value["SliceLocation"].nunique()
+        else:
+            value["Count"] = len(value)
 except ValueError as e:
     if "All arrays must be of the same length" in str(e):
         # Provide more helpful error message

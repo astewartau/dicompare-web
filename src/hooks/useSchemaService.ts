@@ -18,6 +18,7 @@ export interface UnifiedSchema extends SchemaTemplate {
 export interface SchemaBinding {
   schemaId: string;
   acquisitionId?: string;
+  acquisitionName?: string;
   schema: UnifiedSchema;
 }
 

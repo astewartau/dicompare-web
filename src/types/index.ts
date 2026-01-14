@@ -71,6 +71,7 @@ export interface Acquisition {
   seriesDescription: string;
   detailedDescription?: string; // Extended markdown description (detailed_description in schema)
   totalFiles: number;
+  sliceCount?: number; // Number of unique slice locations (actual slices, handles mosaic/enhanced DICOM)
   acquisitionFields: DicomField[];
   // seriesFields removed - field definitions now embedded in series[].fields[]
   series?: Series[];

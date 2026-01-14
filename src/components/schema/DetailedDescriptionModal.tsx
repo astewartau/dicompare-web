@@ -36,6 +36,7 @@ const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
       onSave(editedDescription);
     }
     setIsEditMode(false);
+    onClose();
   };
 
   const handleClose = () => {
@@ -46,7 +47,7 @@ const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-surface-primary rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+      <div className="bg-surface-primary rounded-lg max-w-4xl w-full h-[80vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div className="flex items-center space-x-3">
@@ -56,32 +57,31 @@ const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
           <div className="flex items-center space-x-2">
             {!isReadOnly && (
               <>
-                {isEditMode ? (
-                  <>
-                    <button
-                      onClick={() => setIsEditMode(false)}
-                      className="flex items-center px-3 py-1.5 text-sm text-content-secondary hover:text-content-primary border border-border-secondary rounded-md hover:bg-surface-secondary"
-                    >
+                {/* Toggle between Edit and Preview */}
+                <button
+                  onClick={() => setIsEditMode(!isEditMode)}
+                  className="flex items-center px-3 py-1.5 text-sm text-content-secondary hover:text-content-primary border border-border-secondary rounded-md hover:bg-surface-secondary"
+                >
+                  {isEditMode ? (
+                    <>
                       <Eye className="h-4 w-4 mr-1" />
                       Preview
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      className="flex items-center px-3 py-1.5 text-sm text-white bg-brand-600 rounded-md hover:bg-brand-700"
-                    >
-                      <Save className="h-4 w-4 mr-1" />
-                      Save
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => setIsEditMode(true)}
-                    className="flex items-center px-3 py-1.5 text-sm text-content-secondary hover:text-content-primary border border-border-secondary rounded-md hover:bg-surface-secondary"
-                  >
-                    <Edit2 className="h-4 w-4 mr-1" />
-                    Edit
-                  </button>
-                )}
+                    </>
+                  ) : (
+                    <>
+                      <Edit2 className="h-4 w-4 mr-1" />
+                      Edit
+                    </>
+                  )}
+                </button>
+                {/* Save button always visible */}
+                <button
+                  onClick={handleSave}
+                  className="flex items-center px-3 py-1.5 text-sm text-white bg-brand-600 rounded-md hover:bg-brand-700"
+                >
+                  <Save className="h-4 w-4 mr-1" />
+                  Save
+                </button>
               </>
             )}
             <button
@@ -190,15 +190,6 @@ Add any technical details or vendor-specific information."
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-border bg-surface-secondary flex justify-end flex-shrink-0">
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 text-sm text-content-secondary hover:text-content-primary border border-border-secondary rounded-md hover:bg-surface-hover"
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   );
