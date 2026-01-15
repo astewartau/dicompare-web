@@ -15,7 +15,7 @@ import { convertSchemaToAcquisition } from '../../utils/schemaToAcquisition';
 import { buildReadmeItems } from '../../utils/readmeHelpers';
 import { getItemFlags } from '../../utils/workspaceHelpers';
 import { useDropZone } from '../../hooks/useDropZone';
-import { dicompareAPI } from '../../services/DicompareAPI';
+import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CodeMirror from '@uiw/react-codemirror';
