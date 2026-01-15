@@ -24,6 +24,7 @@ import WorkspaceSidebar, { SCHEMA_INFO_ID } from './WorkspaceSidebar';
 import WorkspaceDetailPanel from './WorkspaceDetailPanel';
 import AttachSchemaModal from './AttachSchemaModal';
 import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
+import { buildReadmeItems } from '../../utils/readmeHelpers';
 
 const ADD_NEW_ID = '__add_new__';
 
@@ -108,30 +109,6 @@ const UnifiedWorkspace: React.FC = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  // Build README items from schema data
-  const buildReadmeItems = (schemaData: any, schemaName: string): ReadmeItem[] => {
-    const items: ReadmeItem[] = [];
-
-    items.push({
-      id: 'schema',
-      type: 'schema',
-      name: schemaName,
-      description: schemaData.description || ''
-    });
-
-    Object.entries(schemaData.acquisitions || {}).forEach(([name, acqData]: [string, any], index) => {
-      items.push({
-        id: `acquisition-${index}`,
-        type: 'acquisition',
-        name: name,
-        description: acqData?.detailed_description || acqData?.description || '',
-        acquisitionIndex: index
-      });
-    });
-
-    return items;
-  };
 
   // README click handlers
   const handleSchemaReadmeClick = async (schemaId: string, schemaName: string) => {

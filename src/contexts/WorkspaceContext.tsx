@@ -1,11 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
 import { Acquisition, DicomField, Series, SeriesField, SelectedValidationFunction, AcquisitionSelection } from '../types';
 import { SchemaBinding, UnifiedSchema } from '../hooks/useSchemaService';
-import { searchDicomFields, suggestDataType, suggestValidationConstraint, isValidDicomTag } from '../services/dicomFieldService';
-import { convertValueToDataType, inferDataTypeFromValue } from '../utils/datatypeInference';
-import { getSuggestedToleranceValue } from '../utils/vrMapping';
+import { useFileProcessing } from '../hooks/useFileProcessing';
+import { useWorkspaceEditing } from '../hooks/useWorkspaceEditing';
 import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
-import { processUploadedFiles, getAllFilesFromDirectory } from '../utils/fileUploadUtils';
 import { generateDicomsFromAcquisition } from '../utils/testDataGeneration';
 import { convertSchemaToAcquisition } from '../utils/schemaToAcquisition';
 
@@ -151,14 +149,22 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   const [items, setItems] = useState<WorkspaceItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [schemaMetadata, setSchemaMetadata] = useState<SchemaMetadata>(DEFAULT_SCHEMA_METADATA);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingTarget, setProcessingTarget] = useState<'schema' | 'data' | 'addNew' | null>(null);
-  const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
-  const [processingError, setProcessingError] = useState<string | null>(null);
   const [pendingAttachmentSelection, setPendingAttachmentSelection] = useState<PendingAttachmentSelection | null>(null);
+
+  // Use file processing hook for all file operations
+  const {
+    isProcessing,
+    processingTarget,
+    processingProgress,
+    processingError,
+    processFiles,
+  } = useFileProcessing();
 
   // Cache for schema acquisitions
   const schemaAcquisitionsRef = useRef<Map<string, Acquisition>>(new Map());
+
+  // Use editing hook for field/series/validation mutations
+  const editing = useWorkspaceEditing(setItems);
 
   // Helper to get or load schema acquisition
   const getSchemaAcquisition = useCallback(async (
@@ -226,120 +232,25 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     // Do NOT auto-select - let user stay on "From schema" tab to continue adding
   }, []);
 
-  // Helper to detect protocol file type
-  const getProtocolFileType = (fileName: string): 'pro' | 'exar1' | 'examcard' | 'lxprotocol' | null => {
-    const lowerName = fileName.toLowerCase();
-    if (lowerName.endsWith('.pro')) return 'pro';
-    if (lowerName.endsWith('.exar1')) return 'exar1';
-    if (lowerName.endsWith('.examcard')) return 'examcard';
-    if (lowerName === 'lxprotocol') return 'lxprotocol';
-    return null;
-  };
-
   // Add items from DICOM files or protocol files
   const addFromData = useCallback(async (files: FileList, mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
-    setIsProcessing(true);
-    setProcessingTarget('addNew');
-    setProcessingError(null);
-    setProcessingProgress({
-      currentFile: 0,
-      totalFiles: files.length,
-      currentOperation: 'Initializing...',
-      percentage: 0
-    });
+    const newAcquisitions = await processFiles(files, 'addNew');
 
-    try {
-      // Check if files are protocol files
-      const fileArray = Array.from(files);
-      const protocolFiles = fileArray.filter(f => getProtocolFileType(f.name) !== null);
-      const dicomFiles = fileArray.filter(f => getProtocolFileType(f.name) === null);
+    const newItems: WorkspaceItem[] = newAcquisitions.map((acq, idx) => ({
+      id: `ws_${Date.now()}_${acq.id || idx}`,
+      acquisition: acq,
+      source: 'data' as const,
+      isEditing: false,
+      dataUsageMode: mode
+    }));
 
-      let newAcquisitions: Acquisition[] = [];
+    setItems(prev => [...prev, ...newItems]);
 
-      // Process protocol files
-      if (protocolFiles.length > 0) {
-        setProcessingProgress(prev => ({
-          ...prev!,
-          currentOperation: 'Processing protocol files...',
-          percentage: 10
-        }));
-
-        for (const file of protocolFiles) {
-          const fileType = getProtocolFileType(file.name)!;
-          const fileContent = await file.arrayBuffer();
-          const uint8Content = new Uint8Array(fileContent);
-
-          let acquisitions: Acquisition[] = [];
-          if (fileType === 'pro') {
-            const result = await dicompareAPI.loadProFile(uint8Content, file.name);
-            acquisitions = [result];
-          } else if (fileType === 'exar1') {
-            acquisitions = await dicompareAPI.loadExarFile(uint8Content, file.name);
-          } else if (fileType === 'examcard') {
-            acquisitions = await dicompareAPI.loadExamCardFile(uint8Content, file.name);
-          } else if (fileType === 'lxprotocol') {
-            acquisitions = await dicompareAPI.loadLxProtocolFile(uint8Content, file.name);
-          }
-
-          newAcquisitions.push(...acquisitions);
-        }
-      }
-
-      // Process DICOM files
-      if (dicomFiles.length > 0) {
-        const fileObjects = await processUploadedFiles(
-          // Convert back to FileList-like object
-          (() => {
-            const dt = new DataTransfer();
-            dicomFiles.forEach(f => dt.items.add(f));
-            return dt.files;
-          })(),
-          {
-            onProgress: (fileProgress) => {
-              setProcessingProgress(prev => ({
-                ...prev!,
-                currentOperation: `Reading file ${fileProgress.current} of ${fileProgress.total}`,
-                percentage: (fileProgress.current / fileProgress.total) * 5
-              }));
-            }
-          }
-        );
-
-        const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
-          setProcessingProgress({
-            currentFile: progress.currentFile,
-            totalFiles: progress.totalFiles,
-            currentOperation: progress.currentOperation,
-            percentage: progress.percentage
-          });
-        });
-
-        newAcquisitions.push(...(result || []));
-      }
-
-      const newItems: WorkspaceItem[] = newAcquisitions.map((acq, idx) => ({
-        id: `ws_${Date.now()}_${acq.id || idx}`,
-        acquisition: acq,
-        source: 'data' as const,
-        isEditing: false,
-        dataUsageMode: mode
-      }));
-
-      setItems(prev => [...prev, ...newItems]);
-
-      // Auto-select the first new item
-      if (newItems.length > 0) {
-        setSelectedId(newItems[0].id);
-      }
-    } catch (error) {
-      console.error('Failed to load data:', error);
-      setProcessingError(error instanceof Error ? error.message : 'Unknown error occurred');
+    // Auto-select the first new item
+    if (newItems.length > 0) {
+      setSelectedId(newItems[0].id);
     }
-
-    setIsProcessing(false);
-    setProcessingTarget(null);
-    setProcessingProgress(null);
-  }, []);
+  }, [processFiles]);
 
   // Add a new empty acquisition from scratch (treated as a schema entry)
   const addFromScratch = useCallback((): string => {
@@ -512,140 +423,23 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   // Attach data to a schema-sourced item
   const attachData = useCallback(async (id: string, files: FileList) => {
-    setIsProcessing(true);
-    setProcessingTarget('data');
-    setProcessingError(null);
-    setProcessingProgress({
-      currentFile: 0,
-      totalFiles: files.length,
-      currentOperation: 'Initializing...',
-      percentage: 0
-    });
+    // Process files using the shared hook
+    const allAcquisitions = await processFiles(files, 'data');
 
-    try {
-      // Check if files are protocol files
-      const fileArray = Array.from(files);
-      const protocolFiles = fileArray.filter(f => getProtocolFileType(f.name) !== null);
-      const dicomFiles = fileArray.filter(f => getProtocolFileType(f.name) === null);
-
-      let allAcquisitions: Acquisition[] = [];
-
-      // If protocol files, load them and generate test DICOMs
-      if (protocolFiles.length > 0) {
-        setProcessingProgress(prev => ({
-          ...prev!,
-          currentOperation: 'Loading protocol file...',
-          percentage: 10
-        }));
-
-        // Load the first protocol file
-        const file = protocolFiles[0];
-        const fileType = getProtocolFileType(file.name)!;
-        const fileContent = await file.arrayBuffer();
-        const uint8Content = new Uint8Array(fileContent);
-
-        let protocolAcquisitions: Acquisition[] = [];
-        if (fileType === 'pro') {
-          const result = await dicompareAPI.loadProFile(uint8Content, file.name);
-          protocolAcquisitions = [result];
-        } else if (fileType === 'exar1') {
-          protocolAcquisitions = await dicompareAPI.loadExarFile(uint8Content, file.name);
-        } else if (fileType === 'examcard') {
-          protocolAcquisitions = await dicompareAPI.loadExamCardFile(uint8Content, file.name);
-        } else if (fileType === 'lxprotocol') {
-          protocolAcquisitions = await dicompareAPI.loadLxProtocolFile(uint8Content, file.name);
-        }
-
-        if (protocolAcquisitions.length > 0) {
-          setProcessingProgress(prev => ({
-            ...prev!,
-            currentOperation: 'Generating test DICOMs from protocol...',
-            percentage: 30
-          }));
-
-          // Generate test DICOMs from each protocol acquisition
-          for (let i = 0; i < protocolAcquisitions.length; i++) {
-            const dicomFilesGenerated = await generateDicomsFromAcquisition(
-              protocolAcquisitions[i],
-              (message, pct) => {
-                const baseProgress = 30 + (i / protocolAcquisitions.length) * 50;
-                const itemProgress = (pct / 100) * (50 / protocolAcquisitions.length);
-                setProcessingProgress(prev => ({
-                  ...prev!,
-                  currentOperation: `${message} (${i + 1}/${protocolAcquisitions.length})`,
-                  percentage: baseProgress + itemProgress
-                }));
-              }
-            );
-
-            // Process generated DICOMs
-            const fileList = new DataTransfer();
-            dicomFilesGenerated.forEach(f => fileList.items.add(f));
-
-            const fileObjects = await processUploadedFiles(fileList.files, {});
-            const result = await dicompareAPI.analyzeFilesForUI(fileObjects, () => {});
-
-            if (result && result.length > 0) {
-              allAcquisitions.push(...result);
-            }
-          }
-        }
-      }
-
-      // If DICOM files (or no protocol files processed successfully), process as DICOMs
-      if (allAcquisitions.length === 0 && dicomFiles.length > 0) {
-        const fileObjects = await processUploadedFiles(
-          (() => {
-            const dt = new DataTransfer();
-            dicomFiles.forEach(f => dt.items.add(f));
-            return dt.files;
-          })(),
-          {
-            onProgress: (fileProgress) => {
-              setProcessingProgress(prev => ({
-                ...prev!,
-                currentOperation: `Reading file ${fileProgress.current} of ${fileProgress.total}`,
-                percentage: (fileProgress.current / fileProgress.total) * 5
-              }));
-            }
-          }
-        );
-
-        const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
-          setProcessingProgress(prev => ({
-            ...prev!,
-            currentOperation: progress.currentOperation,
-            percentage: progress.percentage
-          }));
-        });
-
-        if (result && result.length > 0) {
-          allAcquisitions.push(...result);
-        }
-      }
-
-      // Handle the results
-      if (allAcquisitions.length === 1) {
-        // Single acquisition - attach directly
-        setItems(prev => prev.map(item =>
-          item.id === id ? { ...item, attachedData: allAcquisitions[0] } : item
-        ));
-      } else if (allAcquisitions.length > 1) {
-        // Multiple acquisitions - prompt user to select
-        setPendingAttachmentSelection({
-          targetItemId: id,
-          acquisitions: allAcquisitions
-        });
-      }
-    } catch (error) {
-      console.error('Failed to attach data:', error);
-      setProcessingError(error instanceof Error ? error.message : 'Unknown error occurred');
+    // Handle the results
+    if (allAcquisitions.length === 1) {
+      // Single acquisition - attach directly
+      setItems(prev => prev.map(item =>
+        item.id === id ? { ...item, attachedData: allAcquisitions[0] } : item
+      ));
+    } else if (allAcquisitions.length > 1) {
+      // Multiple acquisitions - prompt user to select
+      setPendingAttachmentSelection({
+        targetItemId: id,
+        acquisitions: allAcquisitions
+      });
     }
-
-    setIsProcessing(false);
-    setProcessingTarget(null);
-    setProcessingProgress(null);
-  }, []);
+  }, [processFiles]);
 
   // Attach schema to an item (clears hasCreatedSchema if set)
   const attachSchema = useCallback((id: string, binding: SchemaBinding) => {
@@ -678,111 +472,27 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   // Upload files to build a schema for an existing item (preserves attachedData)
   const uploadSchemaForItem = useCallback(async (id: string, files: FileList) => {
-    setIsProcessing(true);
-    setProcessingTarget('schema');
-    setProcessingError(null);
-    setProcessingProgress({
-      currentFile: 0,
-      totalFiles: files.length,
-      currentOperation: 'Initializing...',
-      percentage: 0
-    });
+    const newAcquisitions = await processFiles(files, 'schema');
 
-    try {
-      // Check if files are protocol files
-      const fileArray = Array.from(files);
-      const protocolFiles = fileArray.filter(f => getProtocolFileType(f.name) !== null);
-      const dicomFiles = fileArray.filter(f => getProtocolFileType(f.name) === null);
-
-      let newAcquisitions: Acquisition[] = [];
-
-      // Process protocol files
-      if (protocolFiles.length > 0) {
-        setProcessingProgress(prev => ({
-          ...prev!,
-          currentOperation: 'Processing protocol files...',
-          percentage: 10
-        }));
-
-        for (const file of protocolFiles) {
-          const fileType = getProtocolFileType(file.name)!;
-          const fileContent = await file.arrayBuffer();
-          const uint8Content = new Uint8Array(fileContent);
-
-          let acquisitions: Acquisition[] = [];
-          if (fileType === 'pro') {
-            const result = await dicompareAPI.loadProFile(uint8Content, file.name);
-            acquisitions = [result];
-          } else if (fileType === 'exar1') {
-            acquisitions = await dicompareAPI.loadExarFile(uint8Content, file.name);
-          } else if (fileType === 'examcard') {
-            acquisitions = await dicompareAPI.loadExamCardFile(uint8Content, file.name);
-          } else if (fileType === 'lxprotocol') {
-            acquisitions = await dicompareAPI.loadLxProtocolFile(uint8Content, file.name);
-          }
-
-          newAcquisitions.push(...acquisitions);
-        }
-      }
-
-      // Process DICOM files
-      if (dicomFiles.length > 0) {
-        const fileObjects = await processUploadedFiles(
-          (() => {
-            const dt = new DataTransfer();
-            dicomFiles.forEach(f => dt.items.add(f));
-            return dt.files;
-          })(),
-          {
-            onProgress: (fileProgress) => {
-              setProcessingProgress(prev => ({
-                ...prev!,
-                currentOperation: `Reading file ${fileProgress.current} of ${fileProgress.total}`,
-                percentage: (fileProgress.current / fileProgress.total) * 5
-              }));
-            }
-          }
-        );
-
-        const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
-          setProcessingProgress({
-            currentFile: progress.currentFile,
-            totalFiles: progress.totalFiles,
-            currentOperation: progress.currentOperation,
-            percentage: progress.percentage
-          });
-        });
-
-        newAcquisitions.push(...(result || []));
-      }
-
-      // Use the first acquisition to set up the schema on this item
-      if (newAcquisitions.length > 0) {
-        const schemaAcquisition = newAcquisitions[0];
-        setItems(prev => prev.map(item => {
-          if (item.id !== id) return item;
-          return {
-            ...item,
-            source: 'data' as const,
-            dataUsageMode: 'schema-template' as const,
-            hasCreatedSchema: false,
-            attachedSchema: undefined,
-            isEditing: false,
-            acquisition: schemaAcquisition,
-            // Preserve attachedData!
-            attachedData: item.attachedData
-          };
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to upload schema for item:', error);
-      setProcessingError(error instanceof Error ? error.message : 'Unknown error occurred');
+    // Use the first acquisition to set up the schema on this item
+    if (newAcquisitions.length > 0) {
+      const schemaAcquisition = newAcquisitions[0];
+      setItems(prev => prev.map(item => {
+        if (item.id !== id) return item;
+        return {
+          ...item,
+          source: 'data' as const,
+          dataUsageMode: 'schema-template' as const,
+          hasCreatedSchema: false,
+          attachedSchema: undefined,
+          isEditing: false,
+          acquisition: schemaAcquisition,
+          // Preserve attachedData!
+          attachedData: item.attachedData
+        };
+      }));
     }
-
-    setIsProcessing(false);
-    setProcessingTarget(null);
-    setProcessingProgress(null);
-  }, []);
+  }, [processFiles]);
 
   // Detach data
   const detachData = useCallback((id: string) => {
@@ -936,422 +646,21 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     setProcessingProgress(null);
   }, [items]);
 
-  // Update acquisition properties
-  const updateAcquisition = useCallback((id: string, updates: Partial<Acquisition>) => {
-    setItems(prev => prev.map(item =>
-      item.id === id ? { ...item, acquisition: { ...item.acquisition, ...updates } } : item
-    ));
-  }, []);
-
-  // Update a field in an acquisition
-  const updateField = useCallback((id: string, fieldTagOrName: string, updates: Partial<DicomField>) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const acq = item.acquisition;
-      return {
-        ...item,
-        acquisition: {
-          ...acq,
-          acquisitionFields: acq.acquisitionFields.map(f =>
-            (f.tag === fieldTagOrName || f.name === fieldTagOrName) ? { ...f, ...updates } : f
-          ),
-          series: acq.series?.map(s => ({
-            ...s,
-            fields: Array.isArray(s.fields) ? s.fields.map(f =>
-              (f.tag === fieldTagOrName || f.name === fieldTagOrName) ? { ...f, ...updates } : f
-            ) : []
-          }))
-        }
-      };
-    }));
-  }, []);
-
-  // Delete a field
-  const deleteField = useCallback((id: string, fieldTagOrName: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const acq = item.acquisition;
-      return {
-        ...item,
-        acquisition: {
-          ...acq,
-          acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName),
-          series: acq.series?.map(s => ({
-            ...s,
-            fields: Array.isArray(s.fields) ? s.fields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName) : []
-          }))
-        }
-      };
-    }));
-  }, []);
-
-  // Convert field between acquisition and series level
-  const convertFieldLevel = useCallback((id: string, fieldTagOrName: string, toLevel: 'acquisition' | 'series', mode: 'separate-series' | 'single-series' = 'single-series') => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const acq = item.acquisition;
-
-      // Find field in acquisition level
-      const acquisitionField = acq.acquisitionFields.find(f => f.tag === fieldTagOrName || f.name === fieldTagOrName);
-
-      // Find field in any series
-      let seriesField: SeriesField | undefined;
-      for (const series of acq.series || []) {
-        if (Array.isArray(series.fields)) {
-          seriesField = series.fields.find(f => f.tag === fieldTagOrName || f.name === fieldTagOrName);
-        }
-        if (seriesField) break;
-      }
-
-      const field = acquisitionField || (seriesField ? {
-        tag: seriesField.tag,
-        name: seriesField.name,
-        keyword: seriesField.keyword,
-        value: seriesField.value,
-        vr: 'UN',
-        level: 'series' as const,
-        validationRule: seriesField.validationRule,
-        fieldType: seriesField.fieldType
-      } : null);
-
-      if (!field) return item;
-
-      if (toLevel === 'acquisition') {
-        const updatedSeries = (acq.series || []).map(series => ({
-          ...series,
-          fields: Array.isArray(series.fields)
-            ? series.fields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName)
-            : []
-        }));
-
-        return {
-          ...item,
-          acquisition: {
-            ...acq,
-            acquisitionFields: [...acq.acquisitionFields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName), { ...field, level: 'acquisition' }],
-            series: updatedSeries
-          }
-        };
-      } else {
-        const currentSeries = acq.series || [];
-        let updatedSeries: Series[] = [];
-
-        if (Array.isArray(field.value) && mode === 'separate-series') {
-          if (currentSeries.length > 0) {
-            let seriesCounter = 1;
-            for (const existingSeries of currentSeries) {
-              for (let i = 0; i < field.value.length; i++) {
-                updatedSeries.push({
-                  name: `Series ${String(seriesCounter).padStart(2, '0')}`,
-                  fields: [
-                    ...(Array.isArray(existingSeries.fields)
-                        ? existingSeries.fields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName)
-                        : []),
-                    {
-                      name: field.name,
-                      keyword: field.keyword,
-                      tag: field.tag,
-                      value: field.value[i],
-                      validationRule: field.validationRule,
-                      fieldType: field.fieldType
-                    }
-                  ]
-                });
-                seriesCounter++;
-              }
-            }
-          } else {
-            for (let i = 0; i < field.value.length; i++) {
-              updatedSeries.push({
-                name: `Series ${String(i + 1).padStart(2, '0')}`,
-                fields: [{
-                  name: field.name,
-                  keyword: field.keyword,
-                  tag: field.tag,
-                  value: field.value[i],
-                  validationRule: field.validationRule,
-                  fieldType: field.fieldType
-                }]
-              });
-            }
-          }
-        } else {
-          const seriesCount = Math.max(1, currentSeries.length);
-          for (let i = 0; i < seriesCount; i++) {
-            const existingSeries = currentSeries[i];
-            updatedSeries.push({
-              name: existingSeries?.name || `Series ${String(i + 1).padStart(2, '0')}`,
-              fields: [
-                ...(existingSeries && Array.isArray(existingSeries.fields)
-                    ? existingSeries.fields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName)
-                    : []),
-                {
-                  name: field.name,
-                  keyword: field.keyword,
-                  tag: field.tag,
-                  value: field.value,
-                  validationRule: field.validationRule,
-                  fieldType: field.fieldType
-                }
-              ]
-            });
-          }
-        }
-
-        return {
-          ...item,
-          acquisition: {
-            ...acq,
-            acquisitionFields: acq.acquisitionFields.filter(f => f.tag !== fieldTagOrName && f.name !== fieldTagOrName),
-            series: updatedSeries
-          }
-        };
-      }
-    }));
-  }, []);
-
-  // Add fields to an acquisition
-  const addFields = useCallback(async (id: string, fieldTags: string[]) => {
-    if (fieldTags.length === 0) return;
-
-    const newFieldsPromises = fieldTags.map(async (tagOrName) => {
-      try {
-        const isDicomFormat = isValidDicomTag(tagOrName);
-        const results = await searchDicomFields(tagOrName, 1);
-        const fieldDef = isDicomFormat
-          ? results.find(f => f.tag.replace(/[()]/g, '') === tagOrName)
-          : results.find(f => f.keyword?.toLowerCase() === tagOrName.toLowerCase() || f.name?.toLowerCase() === tagOrName.toLowerCase());
-
-        let fieldType: 'standard' | 'private' | 'custom';
-        if (fieldDef) {
-          fieldType = 'standard';
-        } else if (isDicomFormat) {
-          fieldType = 'private';
-        } else {
-          fieldType = 'custom';
-        }
-
-        const vr = fieldDef?.vr || fieldDef?.valueRepresentation || 'UN';
-        const tag = fieldDef?.tag?.replace(/[()]/g, '') || (isDicomFormat ? tagOrName : null);
-        const name = fieldDef?.name || tagOrName;
-        const keyword = fieldDef?.keyword || name;
-        const suggestedDataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
-        const constraintType = fieldDef ? suggestValidationConstraint(fieldDef) : 'exact' as const;
-        const defaultValue = convertValueToDataType('', suggestedDataType);
-
-        let validationRule: any = { type: constraintType };
-        if (constraintType === 'tolerance') {
-          const toleranceValue = getSuggestedToleranceValue(name, tag || '');
-          if (toleranceValue !== undefined) {
-            validationRule.tolerance = toleranceValue;
-            validationRule.value = defaultValue;
-          }
-        }
-
-        return {
-          tag,
-          name,
-          keyword,
-          value: defaultValue,
-          vr,
-          dataType: suggestedDataType,
-          level: 'acquisition' as const,
-          validationRule,
-          fieldType
-        };
-      } catch (error) {
-        const isDicomFormat = isValidDicomTag(tagOrName);
-        return {
-          tag: isDicomFormat ? tagOrName : null,
-          name: tagOrName,
-          keyword: tagOrName,
-          value: '',
-          vr: 'UN',
-          dataType: 'string',
-          level: 'acquisition' as const,
-          validationRule: { type: 'exact' as const },
-          fieldType: isDicomFormat ? 'private' as const : 'custom' as const
-        };
-      }
-    });
-
-    const newFields = await Promise.all(newFieldsPromises);
-
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const acq = item.acquisition;
-      const existingTags = new Set(acq.acquisitionFields.map(f => f.tag).filter(Boolean));
-      const existingNames = new Set(acq.acquisitionFields.map(f => f.name.toLowerCase()));
-
-      const uniqueNewFields = newFields.filter(newField => {
-        if (newField.tag && existingTags.has(newField.tag)) return false;
-        if (existingNames.has(newField.name.toLowerCase())) return false;
-        return true;
-      });
-
-      return {
-        ...item,
-        acquisition: {
-          ...acq,
-          acquisitionFields: [...acq.acquisitionFields, ...uniqueNewFields]
-        }
-      };
-    }));
-  }, []);
-
-  // Update a series field
-  const updateSeries = useCallback((id: string, seriesIndex: number, fieldTag: string, updates: Partial<SeriesField>) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const acq = item.acquisition;
-      const updatedSeries = [...(acq.series || [])];
-
-      if (!updatedSeries[seriesIndex]) {
-        updatedSeries[seriesIndex] = { name: `Series ${String(seriesIndex + 1).padStart(2, '0')}`, fields: [] };
-      }
-
-      const existingFieldIndex = updatedSeries[seriesIndex].fields.findIndex(f => f.tag === fieldTag);
-
-      if (existingFieldIndex >= 0) {
-        updatedSeries[seriesIndex].fields[existingFieldIndex] = {
-          ...updatedSeries[seriesIndex].fields[existingFieldIndex],
-          ...updates
-        };
-      } else {
-        const newField: SeriesField = {
-          tag: fieldTag,
-          name: updates.name || fieldTag,
-          value: updates.value || '',
-          validationRule: updates.validationRule
-        };
-        updatedSeries[seriesIndex].fields.push(newField);
-      }
-
-      return { ...item, acquisition: { ...acq, series: updatedSeries } };
-    }));
-  }, []);
-
-  // Add a new series
-  const addSeries = useCallback((id: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const acq = item.acquisition;
-      const currentSeries = acq.series || [];
-      let newFields: SeriesField[] = [];
-
-      if (currentSeries.length > 0) {
-        for (let i = currentSeries.length - 1; i >= 0; i--) {
-          if (currentSeries[i].fields.length > 0) {
-            newFields = currentSeries[i].fields.map(field => ({
-              ...field,
-              value: field.value
-            }));
-            break;
-          }
-        }
-      }
-
-      if (newFields.length === 0 && currentSeries.length > 0) {
-        const fieldMap = new Map<string, SeriesField>();
-        currentSeries.forEach(s => {
-          s.fields.forEach(f => {
-            const fieldKey = f.tag || f.name;
-            if (!fieldMap.has(fieldKey)) {
-              fieldMap.set(fieldKey, f);
-            }
-          });
-        });
-
-        fieldMap.forEach((field) => {
-          const defaultValue = inferDataTypeFromValue(field.value) === 'number' ? 0 :
-                              inferDataTypeFromValue(field.value) === 'list_number' ? [] :
-                              inferDataTypeFromValue(field.value) === 'list_string' ? [] :
-                              '';
-          newFields.push({ ...field, value: defaultValue });
-        });
-      }
-
-      const newSeries: Series = {
-        name: `Series ${String(currentSeries.length + 1).padStart(2, '0')}`,
-        fields: newFields
-      };
-
-      return { ...item, acquisition: { ...acq, series: [...currentSeries, newSeries] } };
-    }));
-  }, []);
-
-  // Delete a series
-  const deleteSeries = useCallback((id: string, seriesIndex: number) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const acq = item.acquisition;
-      const updatedSeries = [...(acq.series || [])];
-      updatedSeries.splice(seriesIndex, 1);
-
-      return { ...item, acquisition: { ...acq, series: updatedSeries } };
-    }));
-  }, []);
-
-  // Update series name
-  const updateSeriesName = useCallback((id: string, seriesIndex: number, name: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const acq = item.acquisition;
-      const updatedSeries = [...(acq.series || [])];
-      if (updatedSeries[seriesIndex]) {
-        updatedSeries[seriesIndex] = { ...updatedSeries[seriesIndex], name };
-      }
-
-      return { ...item, acquisition: { ...acq, series: updatedSeries } };
-    }));
-  }, []);
-
-  // Add validation function
-  const addValidationFunction = useCallback((id: string, func: SelectedValidationFunction) => {
-    setItems(prev => prev.map(item =>
-      item.id === id ? {
-        ...item,
-        acquisition: {
-          ...item.acquisition,
-          validationFunctions: [...(item.acquisition.validationFunctions || []), func]
-        }
-      } : item
-    ));
-  }, []);
-
-  // Update validation function
-  const updateValidationFunction = useCallback((id: string, index: number, func: SelectedValidationFunction) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const updatedFunctions = [...(item.acquisition.validationFunctions || [])];
-      if (updatedFunctions[index]) {
-        updatedFunctions[index] = func;
-      }
-
-      return { ...item, acquisition: { ...item.acquisition, validationFunctions: updatedFunctions } };
-    }));
-  }, []);
-
-  // Delete validation function
-  const deleteValidationFunction = useCallback((id: string, index: number) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      const updatedFunctions = [...(item.acquisition.validationFunctions || [])];
-      updatedFunctions.splice(index, 1);
-
-      return { ...item, acquisition: { ...item.acquisition, validationFunctions: updatedFunctions } };
-    }));
-  }, []);
+  // Destructure editing functions from hook
+  const {
+    updateAcquisition,
+    updateField,
+    deleteField,
+    convertFieldLevel,
+    addFields,
+    updateSeries,
+    addSeries,
+    deleteSeries,
+    updateSeriesName,
+    addValidationFunction,
+    updateValidationFunction,
+    deleteValidationFunction,
+  } = editing;
 
   // Get acquisitions for schema export
   const getSchemaExport = useCallback(() => {

@@ -5,6 +5,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { WorkspaceItem, SchemaMetadata } from '../../contexts/WorkspaceContext';
+import { getItemFlags } from '../../utils/workspaceHelpers';
 
 interface WorkspaceSidebarProps {
   items: WorkspaceItem[];
@@ -41,18 +42,8 @@ const SortableWorkspaceItem: React.FC<{
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Determine status indicators based on source and usage mode
-  const isEmptyItem = item.source === 'empty';
-  const hasCreatedSchema = item.hasCreatedSchema || false;
-
-  // When data is used as "schema template", it's effectively a schema
-  const isUsedAsSchema = item.source === 'schema' ||
-    (item.source === 'data' && (item.dataUsageMode === 'schema-template' || !item.dataUsageMode)) ||
-    (isEmptyItem && hasCreatedSchema);
-  const isUsedAsValidationData = item.source === 'data' && item.dataUsageMode === 'validation-subject';
-
-  const hasData = isUsedAsValidationData || item.attachedData !== undefined;
-  const hasSchema = isUsedAsSchema || item.attachedSchema !== undefined;
+  // Use shared helper for derived state
+  const { hasSchema, hasData } = getItemFlags(item);
 
   return (
     <div

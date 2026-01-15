@@ -11,8 +11,10 @@ import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { useTagSuggestions } from '../../hooks/useTagSuggestions';
-import { getAllFilesFromDirectory } from '../../utils/fileUploadUtils';
 import { convertSchemaToAcquisition } from '../../utils/schemaToAcquisition';
+import { buildReadmeItems } from '../../utils/readmeHelpers';
+import { getItemFlags } from '../../utils/workspaceHelpers';
+import { useDropZone } from '../../hooks/useDropZone';
 import { dicompareAPI } from '../../services/DicompareAPI';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -96,9 +98,24 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   const { uploadSchema, schemas, updateExistingSchema } = useSchemaContext();
   const { allTags } = useTagSuggestions();
   const { theme } = useTheme();
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [isDragOverReference, setIsDragOverReference] = useState(false);
-  const [isDragOverSchema, setIsDragOverSchema] = useState(false);
+
+  // Drop zones using shared hook
+  const mainDropZone = useDropZone({
+    onDrop: (files) => isAddNew ? onFileUpload(files) : onAttachData(files),
+    disabled: isProcessing,
+  });
+  const referenceDropZone = useDropZone({
+    onDrop: (files) => onFileUpload(files, 'schema-template'),
+    disabled: isProcessing,
+  });
+  const schemaDropZone = useDropZone({
+    onDrop: (files) => selectedItem?.source === 'empty' ? onUploadSchemaForItem(files) : onFileUpload(files, 'schema-template'),
+    disabled: isProcessing,
+  });
+  const testDropZone = useDropZone({
+    onDrop: (files) => onFileUpload(files, 'validation-subject'),
+    disabled: isProcessing,
+  });
 
   // Schema info editing state
   const [authorInput, setAuthorInput] = useState('');
@@ -112,7 +129,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
   const [pendingSaveJson, setPendingSaveJson] = useState<string | null>(null);
   const [existingSchemaId, setExistingSchemaId] = useState<string | null>(null);
-  const [isDragOverTest, setIsDragOverTest] = useState(false);
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
   const [loadedSchemaAcquisition, setLoadedSchemaAcquisition] = useState<Acquisition | null>(null);
 
@@ -140,32 +156,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       setLoadedSchemaAcquisition(null);
     }
   }, [selectedItem?.id, selectedItem?.source, selectedItem?.attachedSchema?.schemaId, selectedItem?.attachedSchema?.acquisitionId, getSchemaContent]);
-
-  // Build README items from schema data for the sidebar
-  const buildReadmeItems = (schemaData: any, schemaName: string): ReadmeItem[] => {
-    const items: ReadmeItem[] = [];
-
-    // Schema-level README
-    items.push({
-      id: 'schema',
-      type: 'schema',
-      name: schemaName,
-      description: schemaData.description || ''
-    });
-
-    // Acquisition READMEs
-    Object.entries(schemaData.acquisitions || {}).forEach(([name, acqData]: [string, any], index) => {
-      items.push({
-        id: `acquisition-${index}`,
-        type: 'acquisition',
-        name: name,
-        description: acqData?.detailed_description || acqData?.description || '',
-        acquisitionIndex: index
-      });
-    });
-
-    return items;
-  };
 
   // Open README with sidebar showing all acquisitions from the schema
   const openReadmeWithSidebar = async () => {
@@ -225,152 +215,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       console.error('Failed to upload schema:', error);
     }
   }, [uploadSchema]);
-
-  // Drag and drop handlers for file upload
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOver(false);
-    }
-  }, []);
-
-  // Helper to process dropped files
-  const processDroppedFiles = useCallback(async (e: React.DragEvent): Promise<File[]> => {
-    const items = Array.from(e.dataTransfer.items);
-    const files: File[] = [];
-
-    for (const item of items) {
-      if (item.kind === 'file') {
-        const entry = item.webkitGetAsEntry();
-        if (entry) {
-          if (entry.isDirectory) {
-            const dirFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
-            files.push(...dirFiles);
-          } else {
-            const file = item.getAsFile();
-            if (file) files.push(file);
-          }
-        } else {
-          const file = item.getAsFile();
-          if (file) files.push(file);
-        }
-      }
-    }
-    return files;
-  }, []);
-
-  // Convert files array to FileList-like object
-  const filesToFileList = useCallback((files: File[]): FileList => {
-    const fileList = {
-      length: files.length,
-      item: (index: number) => files[index] || null,
-      [Symbol.iterator]: function* () {
-        for (let i = 0; i < files.length; i++) {
-          yield files[i];
-        }
-      }
-    };
-    files.forEach((file, index) => {
-      (fileList as any)[index] = file;
-    });
-    return fileList as FileList;
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-
-    const files = await processDroppedFiles(e);
-    if (files.length > 0) {
-      const fileList = filesToFileList(files);
-      if (isAddNew) {
-        onFileUpload(fileList);
-      } else {
-        onAttachData(fileList);
-      }
-    }
-  }, [isAddNew, onFileUpload, onAttachData, processDroppedFiles, filesToFileList]);
-
-  // Reference Data zone handlers (for building schemas)
-  const handleReferenceDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOverReference(true);
-  }, []);
-
-  const handleReferenceDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOverReference(false);
-    }
-  }, []);
-
-  const handleReferenceDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOverReference(false);
-
-    const files = await processDroppedFiles(e);
-    if (files.length > 0) {
-      onFileUpload(filesToFileList(files), 'schema-template');
-    }
-  }, [onFileUpload, processDroppedFiles, filesToFileList]);
-
-  // Schema zone handlers (for empty items - uploading reference data to build schema)
-  const handleSchemaDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOverSchema(true);
-  }, []);
-
-  const handleSchemaDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOverSchema(false);
-    }
-  }, []);
-
-  const handleSchemaDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOverSchema(false);
-
-    const files = await processDroppedFiles(e);
-    if (files.length > 0) {
-      const fileList = filesToFileList(files);
-      // For empty items, upload to the current item (preserving attachedData)
-      // For other cases, create new items
-      if (selectedItem?.source === 'empty') {
-        onUploadSchemaForItem(fileList);
-      } else {
-        onFileUpload(fileList, 'schema-template');
-      }
-    }
-  }, [selectedItem?.source, onFileUpload, onUploadSchemaForItem, processDroppedFiles, filesToFileList]);
-
-  // Test Data zone handlers (for validation)
-  const handleTestDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOverTest(true);
-  }, []);
-
-  const handleTestDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOverTest(false);
-    }
-  }, []);
-
-  const handleTestDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOverTest(false);
-
-    const files = await processDroppedFiles(e);
-    if (files.length > 0) {
-      onFileUpload(filesToFileList(files), 'validation-subject');
-    }
-  }, [onFileUpload, processDroppedFiles, filesToFileList]);
 
   // Sync editedReadme with schemaMetadata when switching to schema info view
   useEffect(() => {
@@ -1108,33 +952,16 @@ Any additional technical details or vendor-specific information."
     );
   }
 
-  // Determine what actions are available based on source and mode
-  const isEmptyItem = selectedItem.source === 'empty';
-  const hasCreatedSchema = selectedItem.hasCreatedSchema || false;
-  const hasAttachedData = selectedItem.attachedData !== undefined;
-  const hasAttachedSchema = selectedItem.attachedSchema !== undefined;
-
-  // Item "has schema" if:
-  // - It's schema-sourced (from library)
-  // - It's data-sourced in schema-template mode
-  // - It's empty but user clicked "Create New" schema
-  // - It has an attached schema
-  const hasSchema = selectedItem.source === 'schema' ||
-    (selectedItem.source === 'data' && (selectedItem.dataUsageMode === 'schema-template' || !selectedItem.dataUsageMode)) ||
-    (isEmptyItem && hasCreatedSchema) ||
-    hasAttachedSchema;
-
-  // Item "has data" if:
-  // - It's data-sourced in validation-subject mode
-  // - It has attached data
-  const hasData = (selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject') ||
-    hasAttachedData;
-
-  // Legacy compatibility - isUsedAsSchema means the item's acquisition represents the schema side
-  const isUsedAsSchema = selectedItem.source === 'schema' ||
-    (selectedItem.source === 'data' && (selectedItem.dataUsageMode === 'schema-template' || !selectedItem.dataUsageMode)) ||
-    (isEmptyItem && hasCreatedSchema) ||
-    (isEmptyItem && hasAttachedSchema);
+  // Use shared helper for derived state
+  const {
+    isEmptyItem,
+    hasCreatedSchema,
+    hasAttachedData,
+    hasAttachedSchema,
+    hasSchema,
+    hasData,
+    isUsedAsSchema,
+  } = getItemFlags(selectedItem);
 
   const canAttachData = hasSchema;
   const canAttachSchema = !hasSchema && !hasCreatedSchema;
@@ -1260,13 +1087,11 @@ Any additional technical details or vendor-specific information."
         <div className="flex-1 min-w-0">
           <div
             className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-              isDragOverSchema
+              schemaDropZone.isDragOver
                 ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                 : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
             }`}
-            onDragOver={!isProcessing ? handleSchemaDragOver : undefined}
-            onDragLeave={!isProcessing ? handleSchemaDragLeave : undefined}
-            onDrop={!isProcessing ? handleSchemaDrop : undefined}
+            {...schemaDropZone.handlers}
           >
             {isProcessing && processingTarget === 'schema' ? (
               <>
@@ -1285,7 +1110,7 @@ Any additional technical details or vendor-specific information."
               </>
             ) : (
               <>
-                <Upload className={`h-6 w-6 mx-auto mb-2 ${isDragOverSchema ? 'text-brand-600' : 'text-content-muted'}`} />
+                <Upload className={`h-6 w-6 mx-auto mb-2 ${schemaDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
                 <p className="text-sm font-medium text-content-secondary mb-1">No schema</p>
                 <p className="text-xs text-content-tertiary mb-3">
                   Drop DICOMs or protocols to build a schema
@@ -1368,13 +1193,11 @@ Any additional technical details or vendor-specific information."
         <div className="flex-1 min-w-0">
           <div
             className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-              isDragOver
+              mainDropZone.isDragOver
                 ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                 : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
             }`}
-            onDragOver={!isProcessing ? handleDragOver : undefined}
-            onDragLeave={!isProcessing ? handleDragLeave : undefined}
-            onDrop={!isProcessing ? handleDrop : undefined}
+            {...mainDropZone.handlers}
           >
             {isProcessing && processingTarget === 'data' ? (
               <>
@@ -1393,7 +1216,7 @@ Any additional technical details or vendor-specific information."
               </>
             ) : (
               <>
-                <Upload className={`h-6 w-6 mx-auto mb-2 ${isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
+                <Upload className={`h-6 w-6 mx-auto mb-2 ${mainDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
                 <p className="text-sm font-medium text-content-secondary mb-1">No data</p>
                 <p className="text-xs text-content-tertiary mb-3">Drop DICOMs to validate against schema</p>
                 <div className="flex items-center justify-center gap-2">
