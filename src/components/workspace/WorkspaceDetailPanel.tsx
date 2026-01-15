@@ -27,9 +27,10 @@ export const SCHEMA_INFO_ID = '__schema_info__';
 interface WorkspaceDetailPanelProps {
   selectedItem: WorkspaceItem | undefined;
   isAddNew: boolean;
+  isAddFromData: boolean;
   isSchemaInfo: boolean;
-  activeTab: 'start' | 'schema' | 'data';
-  setActiveTab: (tab: 'start' | 'schema' | 'data') => void;
+  activeTab: 'schema' | 'data';
+  setActiveTab: (tab: 'schema' | 'data') => void;
   isProcessing: boolean;
   processingProgress: ProcessingProgress | null;
   pendingSchemaSelections: AcquisitionSelection[];
@@ -57,11 +58,15 @@ interface WorkspaceDetailPanelProps {
   onUpdateSchemaMetadata: (updates: Partial<SchemaMetadata>) => void;
   onSchemaReadmeClick: (schemaId: string, schemaName: string) => void;
   onAcquisitionReadmeClick: (schemaId: string, schemaName: string, acquisitionIndex: number) => void;
+  // Staged "from data" handlers - create item first, then perform action
+  onStagedCreateBlank: () => void;
+  onStagedAttachSchema: () => void;
 }
 
 const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   selectedItem,
   isAddNew,
+  isAddFromData,
   isSchemaInfo,
   activeTab,
   setActiveTab,
@@ -91,7 +96,9 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   onUpdateAcquisition,
   onUpdateSchemaMetadata,
   onSchemaReadmeClick,
-  onAcquisitionReadmeClick
+  onAcquisitionReadmeClick,
+  onStagedCreateBlank,
+  onStagedAttachSchema,
 }) => {
   const workspace = useWorkspace();
   const { processingTarget } = workspace;
@@ -109,7 +116,16 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     disabled: isProcessing,
   });
   const schemaDropZone = useDropZone({
-    onDrop: (files) => selectedItem?.source === 'empty' ? onUploadSchemaForItem(files) : onFileUpload(files, 'schema-template'),
+    onDrop: (files) => {
+      // For empty items or validation-subject items needing a schema, upload to current item
+      const shouldUploadToCurrentItem = selectedItem?.source === 'empty' ||
+        (selectedItem?.dataUsageMode === 'validation-subject' && !selectedItem?.attachedSchema);
+      if (shouldUploadToCurrentItem) {
+        onUploadSchemaForItem(files);
+      } else {
+        onFileUpload(files, 'schema-template');
+      }
+    },
     disabled: isProcessing,
   });
   const testDropZone = useDropZone({
@@ -223,6 +239,14 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     }
   }, [isSchemaInfo, schemaMetadata?.description]);
 
+  // Invalidate preview when workspace items change (including schema attachments/detachments)
+  const itemsKey = workspace.items.map(i =>
+    `${i.id}:${i.source}:${i.attachedSchema?.schemaId || ''}:${i.attachedSchema?.acquisitionId || ''}:${i.hasCreatedSchema || ''}`
+  ).join(',');
+  useEffect(() => {
+    setPreviewJson(null);
+  }, [itemsKey]);
+
   // Helper functions for author management
   const addAuthor = (name: string) => {
     const trimmed = name.trim();
@@ -264,7 +288,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   };
 
   // Generate preview JSON
-  const generatePreview = async () => {
+  const generatePreview = useCallback(async () => {
     // First, save any pending README edits
     const currentDescription = editedReadme || schemaMetadata?.description || '';
     if (editedReadme && editedReadme !== schemaMetadata?.description) {
@@ -273,7 +297,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
 
     setIsGeneratingPreview(true);
     try {
-      const { acquisitions } = workspace.getSchemaExport();
+      const { acquisitions } = await workspace.getSchemaExport(getSchemaContent);
       const schema = await dicompareAPI.generateSchemaJS(acquisitions, {
         name: schemaMetadata?.name || 'Untitled Schema',
         description: currentDescription,
@@ -287,7 +311,14 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     } finally {
       setIsGeneratingPreview(false);
     }
-  };
+  }, [editedReadme, schemaMetadata, workspace, getSchemaContent, onUpdateSchemaMetadata]);
+
+  // Auto-generate preview when on preview tab with no preview
+  useEffect(() => {
+    if (isSchemaInfo && schemaInfoTab === 'preview' && !previewJson && !isGeneratingPreview) {
+      generatePreview();
+    }
+  }, [isSchemaInfo, schemaInfoTab, previewJson, isGeneratingPreview, generatePreview]);
 
   // Handle tab switch to preview
   const handlePreviewTabClick = () => {
@@ -309,7 +340,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       }
 
       try {
-        const { acquisitions } = workspace.getSchemaExport();
+        const { acquisitions } = await workspace.getSchemaExport(getSchemaContent);
         const schema = await dicompareAPI.generateSchemaJS(acquisitions, {
           name: schemaMetadata?.name || 'Untitled Schema',
           description: currentDescription,
@@ -349,7 +380,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     }
 
     try {
-      const { acquisitions } = workspace.getSchemaExport();
+      const { acquisitions } = await workspace.getSchemaExport(getSchemaContent);
       const schema = await dicompareAPI.generateSchemaJS(acquisitions, {
         name: schemaMetadata?.name || 'Untitled Schema',
         description: currentDescription,
@@ -824,116 +855,232 @@ Any additional technical details or vendor-specific information."
     );
   }
 
-  // Render "Add New" tabbed interface
+  // Render Schema Library browser
   if (isAddNew) {
     return (
       <div className="border border-border rounded-lg bg-surface-primary shadow-sm flex flex-col h-full">
-        {/* Tab Headers - simplified to 2 options */}
-        <div className="flex border-b border-border">
-          <button
-            onClick={() => setActiveTab('start')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'start'
-                ? 'text-brand-600 border-b-2 border-brand-600 bg-surface-primary'
-                : 'text-content-secondary hover:text-content-primary bg-surface-secondary'
-            }`}
-          >
-            Start
-          </button>
-          <button
-            onClick={() => setActiveTab('schema')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'schema'
-                ? 'text-brand-600 border-b-2 border-brand-600 bg-surface-primary'
-                : 'text-content-secondary hover:text-content-primary bg-surface-secondary'
-            }`}
-          >
-            <FileText className="h-4 w-4 inline mr-2" />
-            From schema
-          </button>
-          <button
-            onClick={onAddEmpty}
-            className="flex-1 px-4 py-3 text-sm font-medium transition-colors text-content-secondary hover:text-content-primary bg-surface-secondary"
-          >
-            <Plus className="h-4 w-4 inline mr-2" />
-            Create new
-          </button>
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-border">
+          <h2 className="text-base font-semibold text-content-primary">Schema Library</h2>
+          <p className="text-sm text-content-secondary">Select acquisitions to add to your workspace</p>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {activeTab === 'start' ? (
-            <div className="flex-1 flex flex-col items-center pt-6 p-4">
-              <div className="text-center mb-4">
-                <h2 className="text-base font-semibold text-content-primary mb-1">Add to workspace</h2>
-                <p className="text-sm text-content-secondary">Choose how to add acquisitions</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4 max-w-md">
-                {/* Browse schemas */}
-                <button
-                  onClick={() => setActiveTab('schema')}
-                  className="flex flex-col items-center p-4 border border-border-secondary rounded-lg hover:border-brand-500 hover:shadow-md transition-all group bg-surface-primary"
-                >
-                  <div className="p-3 bg-brand-100 dark:bg-brand-900/30 rounded-full mb-2 group-hover:bg-brand-200 dark:group-hover:bg-brand-900/50 group-hover:scale-105 transition-all">
-                    <FileText className="h-5 w-5 text-brand-600" />
-                  </div>
-                  <span className="text-sm font-medium text-content-primary">From schema</span>
-                  <span className="text-xs text-content-tertiary mt-1 text-center">Choose from library</span>
-                </button>
+        {/* Schema Browser */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <UnifiedSchemaSelector
+            librarySchemas={librarySchemas}
+            uploadedSchemas={uploadedSchemas}
+            selectionMode="acquisition"
+            multiSelectMode={true}
+            selectedAcquisitions={pendingSchemaSelections}
+            onAcquisitionToggle={onSchemaToggle}
+            expandable={true}
+            getSchemaContent={getSchemaContent}
+            enableDragDrop={true}
+            onSchemaReadmeClick={onSchemaReadmeClick}
+            onAcquisitionReadmeClick={onAcquisitionReadmeClick}
+            onSchemaEdit={handleSchemaEdit}
+            onSchemaUpload={handleSchemaUpload}
+          />
+        </div>
 
-                {/* Create new */}
-                <button
-                  onClick={onAddEmpty}
-                  className="flex flex-col items-center p-4 border border-border-secondary rounded-lg hover:border-brand-500 hover:shadow-md transition-all group bg-surface-primary"
-                >
-                  <div className="p-3 bg-brand-100 dark:bg-brand-900/30 rounded-full mb-2 group-hover:bg-brand-200 dark:group-hover:bg-brand-900/50 group-hover:scale-105 transition-all">
-                    <Plus className="h-5 w-5 text-brand-600" />
-                  </div>
-                  <span className="text-sm font-medium text-content-primary">Create new</span>
-                  <span className="text-xs text-content-tertiary mt-1 text-center">Start from scratch</span>
-                </button>
-              </div>
-            </div>
-          ) : activeTab === 'schema' ? (
-            <div className="h-full flex flex-col">
-              {/* Inline Schema Browser */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <UnifiedSchemaSelector
-                  librarySchemas={librarySchemas}
-                  uploadedSchemas={uploadedSchemas}
-                  selectionMode="acquisition"
-                  multiSelectMode={true}
-                  selectedAcquisitions={pendingSchemaSelections}
-                  onAcquisitionToggle={onSchemaToggle}
-                  expandable={true}
-                  getSchemaContent={getSchemaContent}
-                  enableDragDrop={true}
-                  onSchemaReadmeClick={onSchemaReadmeClick}
-                  onAcquisitionReadmeClick={onAcquisitionReadmeClick}
-                  onSchemaEdit={handleSchemaEdit}
-                  onSchemaUpload={handleSchemaUpload}
-                />
-              </div>
+        {/* Footer with Add Button */}
+        <div className="px-4 py-3 border-t border-border flex items-center justify-between bg-surface-secondary">
+          <p className="text-sm text-content-secondary">
+            {pendingSchemaSelections.length} selected
+          </p>
+          <button
+            onClick={onConfirmSchemas}
+            disabled={pendingSchemaSelections.length === 0}
+            className={`px-4 py-2 rounded-lg ${
+              pendingSchemaSelections.length === 0
+                ? 'bg-surface-tertiary text-content-muted cursor-not-allowed'
+                : 'bg-brand-600 text-content-inverted hover:bg-brand-700'
+            }`}
+          >
+            Add {pendingSchemaSelections.length} Acquisition{pendingSchemaSelections.length !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-              {/* Footer with Add Button */}
-              <div className="px-4 py-3 border-t border-border flex items-center justify-between bg-surface-secondary">
-                <p className="text-sm text-content-secondary">
-                  {pendingSchemaSelections.length} selected
-                </p>
-                <button
-                  onClick={onConfirmSchemas}
-                  disabled={pendingSchemaSelections.length === 0}
-                  className={`px-4 py-2 rounded-lg ${
-                    pendingSchemaSelections.length === 0
-                      ? 'bg-surface-tertiary text-content-muted cursor-not-allowed'
-                      : 'bg-brand-600 text-content-inverted hover:bg-brand-700'
+  // Render staged "From Data" view - same layout as empty item but not yet in list
+  if (isAddFromData) {
+    return (
+      <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
+        {/* Header with split layout */}
+        <div className="px-6 py-4 border-b border-border">
+          {/* Split layout: Schema (left) | Data (right) */}
+          <div className="grid grid-cols-2 gap-6">
+            {/* Left side - Schema */}
+            <div className="border-r border-border pr-6">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Schema</div>
+              </div>
+              {/* Schema attachment zone */}
+              <div className="flex-1 min-w-0">
+                <div
+                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                    isProcessing && processingTarget !== 'schema'
+                      ? 'border-border-secondary bg-surface-tertiary/50 opacity-50 cursor-not-allowed'
+                      : schemaDropZone.isDragOver
+                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                        : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
                   }`}
+                  {...(isProcessing && processingTarget !== 'schema' ? {} : schemaDropZone.handlers)}
                 >
-                  Add {pendingSchemaSelections.length} Acquisition{pendingSchemaSelections.length !== 1 ? 's' : ''}
-                </button>
+                  {isProcessing && processingTarget === 'schema' ? (
+                    <>
+                      <Loader className="h-6 w-6 text-brand-600 mx-auto mb-2 animate-spin" />
+                      <p className="text-sm font-medium text-content-secondary mb-1">Processing...</p>
+                      {processingProgress && (
+                        <div className="w-full max-w-[120px] mx-auto">
+                          <div className="w-full bg-surface-tertiary rounded-full h-1.5">
+                            <div
+                              className="bg-brand-600 h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${processingProgress.percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Upload className={`h-6 w-6 mx-auto mb-2 ${schemaDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
+                      <p className="text-sm font-medium text-content-secondary mb-1">No schema</p>
+                      <p className="text-xs text-content-tertiary mb-3">
+                        Drop DICOMs or protocols to build a schema
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        <input
+                          type="file"
+                          multiple
+                          webkitdirectory=""
+                          accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
+                          className="hidden"
+                          id="staged-upload-schema"
+                          disabled={isProcessing}
+                          onChange={(e) => {
+                            if (e.target.files) {
+                              onFileUpload(e.target.files, 'schema-template');
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor="staged-upload-schema"
+                          className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md ${
+                            isProcessing
+                              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                              : 'text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer'
+                          }`}
+                        >
+                          <Upload className="h-4 w-4 mr-1" />
+                          Upload
+                        </label>
+                        <button
+                          onClick={onStagedAttachSchema}
+                          disabled={isProcessing}
+                          className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border ${
+                            isProcessing
+                              ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                              : 'border-brand-600 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+                          }`}
+                        >
+                          Choose
+                        </button>
+                        <button
+                          onClick={onStagedCreateBlank}
+                          disabled={isProcessing}
+                          className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border ${
+                            isProcessing
+                              ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                              : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
+                          }`}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Blank
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          ) : null}
+
+            {/* Right side - Test Data */}
+            <div className="pl-0">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Test Data</div>
+              </div>
+              {/* Data attachment zone */}
+              <div className="flex-1 min-w-0">
+                <div
+                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                    isProcessing && processingTarget !== 'data'
+                      ? 'border-border-secondary bg-surface-tertiary/50 opacity-50 cursor-not-allowed'
+                      : testDropZone.isDragOver
+                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                        : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
+                  }`}
+                  {...(isProcessing && processingTarget !== 'data' ? {} : testDropZone.handlers)}
+                >
+                  {isProcessing && processingTarget === 'data' ? (
+                    <>
+                      <Loader className="h-6 w-6 text-brand-600 mx-auto mb-2 animate-spin" />
+                      <p className="text-sm font-medium text-content-secondary mb-1">Processing...</p>
+                      {processingProgress && (
+                        <div className="w-full max-w-[120px] mx-auto">
+                          <div className="w-full bg-surface-tertiary rounded-full h-1.5">
+                            <div
+                              className="bg-brand-600 h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${processingProgress.percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Upload className={`h-6 w-6 mx-auto mb-2 ${testDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
+                      <p className="text-sm font-medium text-content-secondary mb-1">No data</p>
+                      <p className="text-xs text-content-tertiary mb-3">Drop DICOMs to add test data</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <input
+                          type="file"
+                          multiple
+                          webkitdirectory=""
+                          className="hidden"
+                          id="staged-upload-data"
+                          disabled={isProcessing}
+                          onChange={(e) => {
+                            if (e.target.files) {
+                              onFileUpload(e.target.files, 'validation-subject');
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor="staged-upload-data"
+                          className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md ${
+                            isProcessing
+                              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                              : 'text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer'
+                          }`}
+                        >
+                          Browse
+                        </label>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Empty content area with hint */}
+        <div className="p-6 text-center text-content-tertiary">
+          <p className="text-sm">Upload data or select a schema to create a new acquisition</p>
         </div>
       </div>
     );
@@ -1087,11 +1234,13 @@ Any additional technical details or vendor-specific information."
         <div className="flex-1 min-w-0">
           <div
             className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-              schemaDropZone.isDragOver
-                ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
+              isProcessing && processingTarget !== 'schema'
+                ? 'border-border-secondary bg-surface-tertiary/50 opacity-50 cursor-not-allowed'
+                : schemaDropZone.isDragOver
+                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                  : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
             }`}
-            {...schemaDropZone.handlers}
+            {...(isProcessing && processingTarget !== 'schema' ? {} : schemaDropZone.handlers)}
           >
             {isProcessing && processingTarget === 'schema' ? (
               <>
@@ -1123,11 +1272,15 @@ Any additional technical details or vendor-specific information."
                     accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
                     className="hidden"
                     id={`upload-schema-ref-${selectedItem.id}`}
+                    disabled={isProcessing}
                     onChange={(e) => {
                       if (!e.target.files) return;
-                      // For empty items, upload to the current item (preserving attachedData)
+                      // For empty items or validation-subject items needing a schema,
+                      // upload to the current item (preserving attachedData)
                       // For other cases, create new items
-                      if (isEmptyItem) {
+                      const shouldUploadToCurrentItem = isEmptyItem ||
+                        (selectedItem.dataUsageMode === 'validation-subject' && !hasSchema);
+                      if (shouldUploadToCurrentItem) {
                         onUploadSchemaForItem(e.target.files);
                       } else {
                         onFileUpload(e.target.files, 'schema-template');
@@ -1136,14 +1289,23 @@ Any additional technical details or vendor-specific information."
                   />
                   <label
                     htmlFor={`upload-schema-ref-${selectedItem.id}`}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer"
+                    className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md ${
+                      isProcessing
+                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                        : 'text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer'
+                    }`}
                   >
                     <Upload className="h-4 w-4 mr-1" />
                     Upload
                   </label>
                   <button
                     onClick={onAttachSchema}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-brand-600 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20"
+                    disabled={isProcessing}
+                    className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border ${
+                      isProcessing
+                        ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                        : 'border-brand-600 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+                    }`}
                   >
                     Choose
                   </button>
@@ -1151,7 +1313,12 @@ Any additional technical details or vendor-specific information."
                   {!hasAttachedData && (
                     <button
                       onClick={onCreateSchema}
-                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-border-secondary text-content-secondary hover:bg-surface-secondary"
+                      disabled={isProcessing}
+                      className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border ${
+                        isProcessing
+                          ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                          : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
+                      }`}
                     >
                       <Plus className="h-4 w-4 mr-1" />
                       Blank
@@ -1193,11 +1360,13 @@ Any additional technical details or vendor-specific information."
         <div className="flex-1 min-w-0">
           <div
             className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-              mainDropZone.isDragOver
-                ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
+              isProcessing && processingTarget !== 'data'
+                ? 'border-border-secondary bg-surface-tertiary/50 opacity-50 cursor-not-allowed'
+                : mainDropZone.isDragOver
+                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                  : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
             }`}
-            {...mainDropZone.handlers}
+            {...(isProcessing && processingTarget !== 'data' ? {} : mainDropZone.handlers)}
           >
             {isProcessing && processingTarget === 'data' ? (
               <>
@@ -1226,17 +1395,27 @@ Any additional technical details or vendor-specific information."
                     webkitdirectory=""
                     className="hidden"
                     id={`attach-data-header-${selectedItem.id}`}
+                    disabled={isProcessing}
                     onChange={(e) => e.target.files && onAttachData(e.target.files)}
                   />
                   <label
                     htmlFor={`attach-data-header-${selectedItem.id}`}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer"
+                    className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md ${
+                      isProcessing
+                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                        : 'text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer'
+                    }`}
                   >
                     Browse
                   </label>
                   <button
                     onClick={onGenerateTestData}
-                    className="inline-flex items-center px-3 py-1.5 border border-border-secondary text-content-secondary text-sm rounded-md hover:bg-surface-secondary"
+                    disabled={isProcessing}
+                    className={`inline-flex items-center px-3 py-1.5 border text-sm rounded-md ${
+                      isProcessing
+                        ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                        : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
+                    }`}
                     title="Generate test data"
                   >
                     <Database className="h-4 w-4" />

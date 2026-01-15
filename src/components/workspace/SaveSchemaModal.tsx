@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Download, Save, Loader2, CheckCircle, User, Plus, Tag } from 'lucide-react';
 import { useWorkspace, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../contexts/SchemaContext';
+import { useSchemaService } from '../../hooks/useSchemaService';
 import { dicompareAPI } from '../../services/DicompareAPI';
 
 interface SaveSchemaModalProps {
@@ -12,6 +13,7 @@ interface SaveSchemaModalProps {
 const SaveSchemaModal: React.FC<SaveSchemaModalProps> = ({ isOpen, onClose }) => {
   const { items, schemaMetadata, setSchemaMetadata, getSchemaExport } = useWorkspace();
   const { uploadSchema } = useSchemaContext();
+  const { getSchemaContent } = useSchemaService();
 
   const [metadata, setMetadata] = useState<SchemaMetadata>({
     name: '',
@@ -96,7 +98,7 @@ const SaveSchemaModal: React.FC<SaveSchemaModalProps> = ({ isOpen, onClose }) =>
     setGenerateError(null);
 
     try {
-      const { acquisitions } = getSchemaExport();
+      const { acquisitions } = await getSchemaExport(getSchemaContent);
 
       const schema = await dicompareAPI.generateSchemaJS(acquisitions, {
         name: metadata.name,

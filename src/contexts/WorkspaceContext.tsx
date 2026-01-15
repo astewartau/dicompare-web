@@ -122,7 +122,7 @@ interface WorkspaceContextType {
   setSchemaMetadata: (metadata: SchemaMetadata) => void;
 
   // Export
-  getSchemaExport: () => { acquisitions: Acquisition[]; metadata: SchemaMetadata };
+  getSchemaExport: (getSchemaContent: (id: string) => Promise<string | null>) => Promise<{ acquisitions: Acquisition[]; metadata: SchemaMetadata }>;
 
   // Helpers
   getSchemaAcquisition: (binding: SchemaBinding, getSchemaContent: (id: string) => Promise<string | null>) => Promise<Acquisition | null>;
@@ -234,7 +234,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   // Add items from DICOM files or protocol files
   const addFromData = useCallback(async (files: FileList, mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
-    const newAcquisitions = await processFiles(files, 'addNew');
+    // Use appropriate processing target based on mode
+    const target = mode === 'validation-subject' ? 'data' : 'schema';
+    const newAcquisitions = await processFiles(files, target);
 
     const newItems: WorkspaceItem[] = newAcquisitions.map((acq, idx) => ({
       id: `ws_${Date.now()}_${acq.id || idx}`,
@@ -311,7 +313,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         ...item,
         hasCreatedSchema: true,
         attachedSchema: undefined,  // Clear any attached schema
-        isEditing: false,  // Don't start in edit mode
+        isEditing: true,  // Start in edit mode so user can immediately add fields
         acquisition: {
           ...item.acquisition,
           protocolName: item.acquisition.protocolName || 'New Acquisition',
@@ -470,7 +472,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }));
   }, []);
 
-  // Upload files to build a schema for an existing item (preserves attachedData)
+  // Upload files to build a schema for an existing item (preserves test data)
   const uploadSchemaForItem = useCallback(async (id: string, files: FileList) => {
     const newAcquisitions = await processFiles(files, 'schema');
 
@@ -479,6 +481,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       const schemaAcquisition = newAcquisitions[0];
       setItems(prev => prev.map(item => {
         if (item.id !== id) return item;
+
+        // If this was a validation-subject item, move its data to attachedData
+        // so we don't lose the test data when replacing acquisition with schema
+        const preservedData = item.dataUsageMode === 'validation-subject'
+          ? item.acquisition
+          : item.attachedData;
+
         return {
           ...item,
           source: 'data' as const,
@@ -487,8 +496,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           attachedSchema: undefined,
           isEditing: false,
           acquisition: schemaAcquisition,
-          // Preserve attachedData!
-          attachedData: item.attachedData
+          attachedData: preservedData
         };
       }));
     }
@@ -663,8 +671,43 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   } = editing;
 
   // Get acquisitions for schema export
-  const getSchemaExport = useCallback(() => {
-    const acquisitions = items.map(item => item.acquisition);
+  const getSchemaExport = useCallback(async (getSchemaContent: (id: string) => Promise<string | null>) => {
+    const acquisitions: Acquisition[] = [];
+
+    for (const item of items) {
+      // Skip empty items without meaningful schema content
+      const hasSchemaContent =
+        item.attachedSchema ||                                    // Has attached schema from library
+        item.hasCreatedSchema ||                                  // User created a blank schema
+        item.source === 'schema' ||                               // Sourced from schema library
+        (item.source === 'data' && item.dataUsageMode !== 'validation-subject');  // Data used as schema template
+
+      if (!hasSchemaContent) {
+        continue;
+      }
+
+      // For items with attachedSchema (via "Choose"), convert the schema to acquisition
+      if (item.attachedSchema) {
+        const schemaAcq = await convertSchemaToAcquisition(
+          item.attachedSchema.schema,
+          item.attachedSchema.acquisitionId || '0',
+          getSchemaContent
+        );
+        if (schemaAcq) {
+          // Merge with any local edits from item.acquisition (name, tags, etc.)
+          acquisitions.push({
+            ...schemaAcq,
+            protocolName: item.acquisition.protocolName || schemaAcq.protocolName,
+            seriesDescription: item.acquisition.seriesDescription || schemaAcq.seriesDescription,
+            tags: item.acquisition.tags || schemaAcq.tags,
+          });
+        }
+      } else {
+        // For other items (schema-sourced, data-sourced, created blank), use acquisition directly
+        acquisitions.push(item.acquisition);
+      }
+    }
+
     return { acquisitions, metadata: schemaMetadata };
   }, [items, schemaMetadata]);
 

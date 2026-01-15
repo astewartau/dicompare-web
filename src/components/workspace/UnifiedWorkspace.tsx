@@ -20,7 +20,7 @@ import {
 import { useWorkspace, WorkspaceItem, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { AcquisitionSelection } from '../../types';
-import WorkspaceSidebar, { SCHEMA_INFO_ID } from './WorkspaceSidebar';
+import WorkspaceSidebar, { SCHEMA_INFO_ID, ADD_FROM_DATA_ID } from './WorkspaceSidebar';
 import WorkspaceDetailPanel from './WorkspaceDetailPanel';
 import AttachSchemaModal from './AttachSchemaModal';
 import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
@@ -69,8 +69,9 @@ const UnifiedWorkspace: React.FC = () => {
   } = useSchemaService();
 
   // Local UI state
-  const [activeTab, setActiveTab] = useState<'start' | 'schema' | 'data'>('start');
+  const [activeTab, setActiveTab] = useState<'schema' | 'data'>('schema');
   const [showAttachSchemaModal, setShowAttachSchemaModal] = useState(false);
+  const [isAttachModalFromStaged, setIsAttachModalFromStaged] = useState(false); // Track if modal opened from staged view
   const [pendingSchemaSelections, setPendingSchemaSelections] = useState<AcquisitionSelection[]>([]);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [activeDragData, setActiveDragData] = useState<any>(null);
@@ -191,6 +192,17 @@ const UnifiedWorkspace: React.FC = () => {
     }
   }, [selectedId, createSchemaForItem]);
 
+  // Staged handlers - create item first, then perform action
+  const handleStagedCreateBlank = useCallback(() => {
+    const newId = addEmpty();
+    createSchemaForItem(newId);
+  }, [addEmpty, createSchemaForItem]);
+
+  const handleStagedAttachSchema = useCallback(() => {
+    setIsAttachModalFromStaged(true); // Mark that we're opening from staged view
+    setShowAttachSchemaModal(true);
+  }, []);
+
   // Detach created schema from current item
   const handleDetachCreatedSchema = useCallback(() => {
     if (selectedId && selectedId !== ADD_NEW_ID) {
@@ -200,11 +212,16 @@ const UnifiedWorkspace: React.FC = () => {
 
   // Attach schema handler
   const handleAttachSchema = useCallback((binding: SchemaBinding) => {
-    if (selectedId && selectedId !== ADD_NEW_ID) {
+    if (isAttachModalFromStaged) {
+      // Create item first, then attach schema
+      const newId = addEmpty();
+      attachSchema(newId, binding);
+    } else if (selectedId && selectedId !== ADD_NEW_ID) {
       attachSchema(selectedId, binding);
     }
     setShowAttachSchemaModal(false);
-  }, [selectedId, attachSchema]);
+    setIsAttachModalFromStaged(false);
+  }, [selectedId, attachSchema, isAttachModalFromStaged, addEmpty]);
 
   // Detach schema handler
   const handleDetachSchema = useCallback(() => {
@@ -361,6 +378,7 @@ const UnifiedWorkspace: React.FC = () => {
             <WorkspaceDetailPanel
               selectedItem={selectedItem}
               isAddNew={selectedId === ADD_NEW_ID || !selectedId}
+              isAddFromData={selectedId === ADD_FROM_DATA_ID}
               isSchemaInfo={selectedId === SCHEMA_INFO_ID}
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -397,6 +415,8 @@ const UnifiedWorkspace: React.FC = () => {
               })}
               onSchemaReadmeClick={handleSchemaReadmeClick}
               onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
+              onStagedCreateBlank={handleStagedCreateBlank}
+              onStagedAttachSchema={handleStagedAttachSchema}
             />
           </div>
         </div>
@@ -522,7 +542,10 @@ const UnifiedWorkspace: React.FC = () => {
       {/* Attach Schema Modal */}
       <AttachSchemaModal
         isOpen={showAttachSchemaModal}
-        onClose={() => setShowAttachSchemaModal(false)}
+        onClose={() => {
+          setShowAttachSchemaModal(false);
+          setIsAttachModalFromStaged(false);
+        }}
         onSelect={handleAttachSchema}
         librarySchemas={librarySchemas}
         uploadedSchemas={uploadedSchemas}

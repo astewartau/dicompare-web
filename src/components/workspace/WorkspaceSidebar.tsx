@@ -18,6 +18,7 @@ interface WorkspaceSidebarProps {
 }
 
 const ADD_NEW_ID = '__add_new__';
+export const ADD_FROM_DATA_ID = '__add_from_data__';
 export const SCHEMA_INFO_ID = '__schema_info__';
 
 // Sortable workspace item
@@ -126,12 +127,13 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   schemaMetadata,
   onSelect,
   onRemove,
-  onReset
+  onReset,
 }) => {
   const { setNodeRef } = useDroppable({ id: 'sidebar-drop-zone' });
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  const isAddNewSelected = selectedId === ADD_NEW_ID || !selectedId;
+  const isFromDataSelected = selectedId === ADD_FROM_DATA_ID;
+  const isSchemaLibrarySelected = selectedId === ADD_NEW_ID;
   const isSchemaInfoSelected = selectedId === SCHEMA_INFO_ID;
 
   // Determine if schema has a name set
@@ -238,21 +240,33 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
       {/* Content */}
       <div className="p-2 space-y-2 max-h-[700px] overflow-y-auto">
-        {/* Add New Item */}
-        <div
-          onClick={() => onSelect(ADD_NEW_ID)}
-          className={`border rounded-lg p-3 cursor-pointer transition-all ${
-            isAddNewSelected
-              ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 shadow-md'
-              : 'border-dashed border-border-secondary hover:border-brand-300 dark:hover:border-brand-700 hover:bg-surface-secondary'
-          }`}
-        >
-          <div className="flex items-center space-x-2">
-            <Plus className="h-4 w-4 text-brand-500 flex-shrink-0" />
-            <h3 className="text-sm font-medium text-content-primary">
-              Add acquisitions
-            </h3>
-          </div>
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          {/* From Data Button */}
+          <button
+            onClick={() => onSelect(ADD_FROM_DATA_ID)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 border rounded-lg transition-all group ${
+              isFromDataSelected
+                ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 shadow-md'
+                : 'border-dashed border-border-secondary hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+            }`}
+          >
+            <Plus className="h-3.5 w-3.5 text-brand-500 group-hover:scale-110 transition-transform flex-shrink-0" />
+            <span className="text-xs font-medium text-content-primary whitespace-nowrap">From data</span>
+          </button>
+
+          {/* From Schema Button */}
+          <button
+            onClick={() => onSelect(ADD_NEW_ID)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 border rounded-lg transition-all group ${
+              isSchemaLibrarySelected
+                ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 shadow-md'
+                : 'border-dashed border-border-secondary hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5 text-brand-500 group-hover:scale-110 transition-transform flex-shrink-0" />
+            <span className="text-xs font-medium text-content-primary whitespace-nowrap">From schema</span>
+          </button>
         </div>
 
         {/* Drop zone indicator */}
