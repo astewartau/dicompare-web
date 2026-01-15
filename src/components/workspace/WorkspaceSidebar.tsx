@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, FileText, FlaskConical, X, GripVertical, Pencil, Trash2 } from 'lucide-react';
+import { Plus, FileText, FlaskConical, X, GripVertical, Pencil, Trash2, Home } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -12,12 +12,14 @@ interface WorkspaceSidebarProps {
   selectedId: string | null;
   isOverDropZone: boolean;
   schemaMetadata: SchemaMetadata;
+  schemaInfoTab: 'welcome' | 'metadata' | 'preview';
   onSelect: (id: string | null) => void;
+  onSelectSchemaInfo: (tab: 'welcome' | 'metadata') => void;
   onRemove: (id: string) => void;
   onReset: () => void;
 }
 
-const ADD_NEW_ID = '__add_new__';
+export const ADD_NEW_ID = '__add_new__';
 export const ADD_FROM_DATA_ID = '__add_from_data__';
 export const SCHEMA_INFO_ID = '__schema_info__';
 
@@ -125,7 +127,9 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   selectedId,
   isOverDropZone,
   schemaMetadata,
+  schemaInfoTab,
   onSelect,
+  onSelectSchemaInfo,
   onRemove,
   onReset,
 }) => {
@@ -134,7 +138,7 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
   const isFromDataSelected = selectedId === ADD_FROM_DATA_ID;
   const isSchemaLibrarySelected = selectedId === ADD_NEW_ID;
-  const isSchemaInfoSelected = selectedId === SCHEMA_INFO_ID;
+  const isSchemaInfoSelected = selectedId === SCHEMA_INFO_ID || (!selectedId && items.length === 0) || !selectedId;
 
   // Determine if schema has a name set
   const hasSchemaName = schemaMetadata.name && schemaMetadata.name.trim() !== '';
@@ -162,7 +166,7 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
             : 'border-border hover:bg-surface-secondary'
         }`}
-        onClick={() => onSelect(SCHEMA_INFO_ID)}
+        onClick={() => onSelectSchemaInfo('welcome')}
       >
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
@@ -179,6 +183,34 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                onSelectSchemaInfo('welcome');
+              }}
+              className={`p-1.5 rounded transition-colors ${
+                isSchemaInfoSelected && schemaInfoTab === 'welcome'
+                  ? 'text-brand-600 bg-brand-100 dark:bg-brand-800/30'
+                  : 'text-content-tertiary hover:text-content-secondary hover:bg-surface-tertiary'
+              }`}
+              title="Go to welcome screen"
+            >
+              <Home className="h-4 w-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectSchemaInfo('metadata');
+              }}
+              className={`p-1.5 rounded transition-colors ${
+                isSchemaInfoSelected && schemaInfoTab === 'metadata'
+                  ? 'text-brand-600 bg-brand-100 dark:bg-brand-800/30'
+                  : 'text-content-tertiary hover:text-content-secondary hover:bg-surface-tertiary'
+              }`}
+              title="Edit schema metadata"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                 if (hasContent) {
                   setShowResetConfirm(true);
                 }
@@ -192,16 +224,6 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               title="Reset workspace"
             >
               <Trash2 className="h-4 w-4" />
-            </button>
-            <button
-              className={`p-1.5 rounded transition-colors ${
-                isSchemaInfoSelected
-                  ? 'text-brand-600 bg-brand-100 dark:bg-brand-800/30'
-                  : 'text-content-tertiary hover:text-content-secondary hover:bg-surface-tertiary'
-              }`}
-              title="Edit schema metadata"
-            >
-              <Pencil className="h-4 w-4" />
             </button>
           </div>
         </div>

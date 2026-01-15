@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { Upload, FileText, Plus, Edit2, Save, Database, Loader, X, Book, Pencil, FlaskConical, ShieldCheck, Eye, Download, Code, Settings, Check, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, Plus, Edit2, Save, Database, Loader, X, Book, Pencil, FlaskConical, ShieldCheck, Eye, Download, Code, Settings, Check, AlertTriangle, Layers, ArrowRight } from 'lucide-react';
 import { WorkspaceItem, ProcessingProgress, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { Acquisition, AcquisitionSelection } from '../../types';
@@ -21,14 +21,17 @@ import remarkGfm from 'remark-gfm';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { useTheme } from '../../contexts/ThemeContext';
+import { ADD_NEW_ID, ADD_FROM_DATA_ID, SCHEMA_INFO_ID } from './WorkspaceSidebar';
 
-export const SCHEMA_INFO_ID = '__schema_info__';
+export type SchemaInfoTab = 'welcome' | 'metadata' | 'preview';
 
 interface WorkspaceDetailPanelProps {
   selectedItem: WorkspaceItem | undefined;
   isAddNew: boolean;
   isAddFromData: boolean;
   isSchemaInfo: boolean;
+  schemaInfoTab: SchemaInfoTab;
+  setSchemaInfoTab: (tab: SchemaInfoTab) => void;
   activeTab: 'schema' | 'data';
   setActiveTab: (tab: 'schema' | 'data') => void;
   isProcessing: boolean;
@@ -68,6 +71,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   isAddNew,
   isAddFromData,
   isSchemaInfo,
+  schemaInfoTab,
+  setSchemaInfoTab,
   activeTab,
   setActiveTab,
   isProcessing,
@@ -137,7 +142,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   const [authorInput, setAuthorInput] = useState('');
   const [isEditingReadme, setIsEditingReadme] = useState(true);  // Default to edit tab
   const [editedReadme, setEditedReadme] = useState('');
-  const [schemaInfoTab, setSchemaInfoTab] = useState<'metadata' | 'preview'>('metadata');
   const [previewJson, setPreviewJson] = useState<string | null>(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
@@ -600,6 +604,17 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
           {/* Tabs */}
           <div className="flex gap-1">
             <button
+              onClick={() => setSchemaInfoTab('welcome')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                schemaInfoTab === 'welcome'
+                  ? 'bg-surface-primary text-brand-600 border border-b-0 border-border -mb-px'
+                  : 'text-content-tertiary hover:text-content-secondary'
+              }`}
+            >
+              <Layers className="h-4 w-4 inline mr-1.5" />
+              Welcome
+            </button>
+            <button
               onClick={() => setSchemaInfoTab('metadata')}
               className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                 schemaInfoTab === 'metadata'
@@ -625,7 +640,96 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         </div>
 
         {/* Content */}
-        {schemaInfoTab === 'metadata' ? (
+        {schemaInfoTab === 'welcome' ? (
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Quick Start */}
+            <div className="mb-8">
+              <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider mb-4">Get Started</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* From Data */}
+                <button
+                  onClick={() => workspace.selectItem(ADD_FROM_DATA_ID)}
+                  className="flex items-start gap-4 p-5 rounded-xl border-2 border-border hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-all text-left group"
+                >
+                  <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg group-hover:scale-105 transition-transform">
+                    <Upload className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-content-primary mb-1 flex items-center">
+                      From Data
+                      <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </h4>
+                    <p className="text-sm text-content-secondary">
+                      Upload DICOM files or protocol exports to automatically extract acquisition parameters
+                    </p>
+                  </div>
+                </button>
+
+                {/* From Schema */}
+                <button
+                  onClick={() => workspace.selectItem(ADD_NEW_ID)}
+                  className="flex items-start gap-4 p-5 rounded-xl border-2 border-border hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-all text-left group"
+                >
+                  <div className="p-3 bg-brand-100 dark:bg-brand-900/30 rounded-lg group-hover:scale-105 transition-transform">
+                    <FileText className="h-6 w-6 text-brand-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-content-primary mb-1 flex items-center">
+                      From Schema
+                      <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </h4>
+                    <p className="text-sm text-content-secondary">
+                      Browse the schema library and add existing acquisitions to your workspace
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* How it works */}
+            <div>
+              <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider mb-4">How It Works</h3>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-sm font-medium">
+                    1
+                  </div>
+                  <div>
+                    <p className="text-content-primary font-medium">Add acquisitions</p>
+                    <p className="text-sm text-content-secondary">Upload data to extract parameters, or select from existing schemas in the library</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-sm font-medium">
+                    2
+                  </div>
+                  <div>
+                    <p className="text-content-primary font-medium">Edit and refine</p>
+                    <p className="text-sm text-content-secondary">Customize field requirements, add validation rules, and document your schema</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-sm font-medium">
+                    3
+                  </div>
+                  <div>
+                    <p className="text-content-primary font-medium">Validate data</p>
+                    <p className="text-sm text-content-secondary">Attach test data to verify compliance before exporting your schema</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-sm font-medium">
+                    4
+                  </div>
+                  <div>
+                    <p className="text-content-primary font-medium">Save and share</p>
+                    <p className="text-sm text-content-secondary">Download as JSON or save to your library for reuse</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : schemaInfoTab === 'metadata' ? (
         <div className="flex-1 overflow-y-auto p-6">
           {/* Basic Info Section */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
@@ -1081,19 +1185,6 @@ Any additional technical details or vendor-specific information."
         {/* Empty content area with hint */}
         <div className="p-6 text-center text-content-tertiary">
           <p className="text-sm">Upload data or select a schema to create a new acquisition</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Render selected item details
-  if (!selectedItem) {
-    return (
-      <div className="bg-surface-primary rounded-lg border border-border shadow-sm p-6 h-full flex items-center justify-center">
-        <div className="text-center">
-          <FileText className="h-12 w-12 text-content-muted mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-content-primary mb-2">No Acquisition Selected</h3>
-          <p className="text-content-secondary">Select an acquisition from the sidebar</p>
         </div>
       </div>
     );

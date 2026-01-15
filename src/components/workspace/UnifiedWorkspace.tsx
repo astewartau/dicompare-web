@@ -20,13 +20,11 @@ import {
 import { useWorkspace, WorkspaceItem, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { AcquisitionSelection } from '../../types';
-import WorkspaceSidebar, { SCHEMA_INFO_ID, ADD_FROM_DATA_ID } from './WorkspaceSidebar';
-import WorkspaceDetailPanel from './WorkspaceDetailPanel';
+import WorkspaceSidebar, { SCHEMA_INFO_ID, ADD_FROM_DATA_ID, ADD_NEW_ID } from './WorkspaceSidebar';
+import WorkspaceDetailPanel, { SchemaInfoTab } from './WorkspaceDetailPanel';
 import AttachSchemaModal from './AttachSchemaModal';
 import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
 import { buildReadmeItems } from '../../utils/readmeHelpers';
-
-const ADD_NEW_ID = '__add_new__';
 
 const UnifiedWorkspace: React.FC = () => {
   const {
@@ -70,6 +68,7 @@ const UnifiedWorkspace: React.FC = () => {
 
   // Local UI state
   const [activeTab, setActiveTab] = useState<'schema' | 'data'>('schema');
+  const [schemaInfoTab, setSchemaInfoTab] = useState<SchemaInfoTab>('welcome');
   const [showAttachSchemaModal, setShowAttachSchemaModal] = useState(false);
   const [isAttachModalFromStaged, setIsAttachModalFromStaged] = useState(false); // Track if modal opened from staged view
   const [pendingSchemaSelections, setPendingSchemaSelections] = useState<AcquisitionSelection[]>([]);
@@ -367,7 +366,12 @@ const UnifiedWorkspace: React.FC = () => {
               selectedId={selectedId}
               isOverDropZone={isOverDropZone}
               schemaMetadata={schemaMetadata}
+              schemaInfoTab={schemaInfoTab}
               onSelect={selectItem}
+              onSelectSchemaInfo={(tab) => {
+                selectItem(SCHEMA_INFO_ID);
+                setSchemaInfoTab(tab);
+              }}
               onRemove={removeItem}
               onReset={clearAll}
             />
@@ -377,9 +381,11 @@ const UnifiedWorkspace: React.FC = () => {
           <div className="col-span-12 md:col-span-9">
             <WorkspaceDetailPanel
               selectedItem={selectedItem}
-              isAddNew={selectedId === ADD_NEW_ID || !selectedId}
+              isAddNew={selectedId === ADD_NEW_ID}
               isAddFromData={selectedId === ADD_FROM_DATA_ID}
-              isSchemaInfo={selectedId === SCHEMA_INFO_ID}
+              isSchemaInfo={selectedId === SCHEMA_INFO_ID || (!selectedId && !selectedItem)}
+              schemaInfoTab={schemaInfoTab}
+              setSchemaInfoTab={setSchemaInfoTab}
               activeTab={activeTab}
               setActiveTab={setActiveTab}
               isProcessing={isProcessing}
