@@ -43,7 +43,6 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
     fieldTag?: string;
     fieldName?: string;
   } | null>(null);
-  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
   const [showStatusMessages, setShowStatusMessages] = useState(false);
 
@@ -175,8 +174,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 </th>
               ))}
               {isComplianceMode && (
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider">
-                  <div className="flex items-center justify-center gap-1">
+                <th className={`px-2 py-1.5 text-xs font-medium text-content-tertiary uppercase tracking-wider ${showStatusMessages ? 'min-w-[100px] text-left' : 'text-center'}`}>
+                  <div className={`flex items-center gap-1 ${showStatusMessages ? 'justify-start' : 'justify-center'}`}>
                     <span>Status</span>
                     <button
                       onClick={() => setShowStatusMessages(!showStatusMessages)}
@@ -202,8 +201,6 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 className={`${seriesIndex % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
                   isEditMode ? 'hover:bg-surface-hover transition-colors' : ''
                 }`}
-                onMouseEnter={() => setHoveredRow(seriesIndex)}
-                onMouseLeave={() => setHoveredRow(null)}
               >
                 <td className="px-2 py-1.5 whitespace-nowrap font-medium text-content-primary sticky left-0 bg-inherit min-w-[140px]">
                   {isEditMode && onSeriesNameUpdate ? (
@@ -238,7 +235,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''
                     }`}>
                       <div
-                        className={`${isEditMode ? 'cursor-pointer hover:bg-brand-500/10 rounded px-1 -mx-1' : ''}`}
+                        className={`${isEditMode ? 'cursor-pointer hover:bg-brand-500/20 rounded px-1 -mx-1' : ''}`}
                         onClick={() => {
                           if (isEditMode) {
                             // If field doesn't exist in this series, we'll handle creating it
@@ -293,7 +290,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                             </div>
                           </CustomTooltip>
                           {showStatusMessages && message && (
-                            <span className="text-xs text-content-secondary break-words">
+                            <span className="text-xs text-content-secondary">
                               {message}
                             </span>
                           )}
@@ -304,9 +301,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 )}
                 {isEditMode && (
                   <td className="px-2 py-1.5 text-right">
-                    <div className={`${
-                      hoveredRow === seriesIndex ? 'opacity-100' : 'opacity-0'
-                    } transition-opacity`}>
+                    <div>
                       <button
                         onClick={() => onSeriesDelete(seriesIndex)}
                         className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"

@@ -40,12 +40,16 @@ const UnifiedWorkspace: React.FC = () => {
     addFromSchema,
     addFromData,
     addFromScratch,
+    addEmpty,
+    createSchemaForItem,
+    detachCreatedSchema,
     selectItem,
     removeItem,
     reorderItems,
     toggleEditing,
     attachData,
     attachSchema,
+    uploadSchemaForItem,
     detachData,
     detachSchema,
     confirmAttachmentSelection,
@@ -193,10 +197,29 @@ const UnifiedWorkspace: React.FC = () => {
     await addFromData(files, mode);
   }, [addFromData]);
 
-  // Scratch handler
+  // Scratch handler (legacy, for backwards compatibility)
   const handleAddFromScratch = useCallback(() => {
     addFromScratch();
   }, [addFromScratch]);
+
+  // Empty handler - creates a truly empty item
+  const handleAddEmpty = useCallback(() => {
+    addEmpty();
+  }, [addEmpty]);
+
+  // Create schema for current empty item
+  const handleCreateSchema = useCallback(() => {
+    if (selectedId && selectedId !== ADD_NEW_ID) {
+      createSchemaForItem(selectedId);
+    }
+  }, [selectedId, createSchemaForItem]);
+
+  // Detach created schema from current item
+  const handleDetachCreatedSchema = useCallback(() => {
+    if (selectedId && selectedId !== ADD_NEW_ID) {
+      detachCreatedSchema(selectedId);
+    }
+  }, [selectedId, detachCreatedSchema]);
 
   // Attach schema handler
   const handleAttachSchema = useCallback((binding: SchemaBinding) => {
@@ -219,6 +242,13 @@ const UnifiedWorkspace: React.FC = () => {
       await attachData(selectedId, files);
     }
   }, [selectedId, attachData]);
+
+  // Upload schema for current item handler
+  const handleUploadSchemaForItem = useCallback(async (files: FileList) => {
+    if (selectedId && selectedId !== ADD_NEW_ID) {
+      await uploadSchemaForItem(selectedId, files);
+    }
+  }, [selectedId, uploadSchemaForItem]);
 
   // Detach data handler
   const handleDetachData = useCallback(() => {
@@ -369,8 +399,12 @@ const UnifiedWorkspace: React.FC = () => {
               onConfirmSchemas={confirmSchemaSelections}
               onFileUpload={handleFileUpload}
               onAddFromScratch={handleAddFromScratch}
+              onAddEmpty={handleAddEmpty}
+              onCreateSchema={handleCreateSchema}
+              onDetachCreatedSchema={handleDetachCreatedSchema}
               onToggleEditing={() => selectedId && toggleEditing(selectedId)}
               onAttachData={handleAttachData}
+              onUploadSchemaForItem={handleUploadSchemaForItem}
               onDetachData={handleDetachData}
               onAttachSchema={() => setShowAttachSchemaModal(true)}
               onDetachSchema={handleDetachSchema}
@@ -396,8 +430,11 @@ const UnifiedWorkspace: React.FC = () => {
             // For workspace items being reordered
             const draggedItem = items.find(i => i.id === activeDragId);
             if (draggedItem) {
-              const hasData = draggedItem.source === 'data' || draggedItem.attachedData !== undefined;
-              const hasSchema = draggedItem.source === 'schema' || draggedItem.attachedSchema !== undefined;
+              const hasData = (draggedItem.source === 'data' && draggedItem.dataUsageMode === 'validation-subject') || draggedItem.attachedData !== undefined;
+              const hasSchema = draggedItem.source === 'schema' ||
+                (draggedItem.source === 'data' && draggedItem.dataUsageMode !== 'validation-subject') ||
+                (draggedItem.source === 'empty' && draggedItem.hasCreatedSchema) ||
+                draggedItem.attachedSchema !== undefined;
               return (
                 <div className="border rounded-lg p-3 bg-surface-primary shadow-lg border-brand-500 w-64">
                   <div className="flex items-start">

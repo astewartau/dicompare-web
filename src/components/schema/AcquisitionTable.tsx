@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText, Eye, EyeOff } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
@@ -100,6 +100,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [showTestDicomGenerator, setShowTestDicomGenerator] = useState(false);
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
   const [showRuleStatusMessages, setShowRuleStatusMessages] = useState(false);
+  const [showUncheckedFields, setShowUncheckedFields] = useState(false);
   const { allTags } = useTagSuggestions();
 
   const isComplianceMode = mode === 'compliance';
@@ -116,6 +117,62 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
     });
 
   const validationFunctions = acquisition.validationFunctions || [];
+
+  // Calculate fields in realAcquisition that aren't checked by the schema
+  const uncheckedFields = useMemo((): DicomField[] => {
+    if (!isComplianceMode) return [];
+    if (!realAcquisition) return [];
+
+    const realFields = realAcquisition.acquisitionFields || [];
+    const schemaFields = acquisition?.acquisitionFields || [];
+
+    // If no real fields, nothing to show
+    if (realFields.length === 0) return [];
+
+    // Normalize tag format: remove parentheses, spaces, commas and convert to uppercase
+    const normalizeTag = (tag: string | null | undefined): string | null => {
+      if (!tag) return null;
+      return tag.replace(/[(), ]/g, '').toUpperCase();
+    };
+
+    // Get all field identifiers from the schema (normalized)
+    const schemaFieldIds = new Set<string>();
+    const schemaKeywords = new Set<string>();
+    const schemaNames = new Set<string>();
+
+    schemaFields.forEach(f => {
+      const normalizedTag = normalizeTag(f.tag);
+      if (normalizedTag) schemaFieldIds.add(normalizedTag);
+      if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
+      if (f.name) schemaNames.add(f.name.toLowerCase());
+    });
+
+    // Also include series fields from schema
+    (acquisition?.series || []).forEach(s => {
+      const fields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+      fields.forEach((f: any) => {
+        const normalizedTag = normalizeTag(f.tag);
+        if (normalizedTag) schemaFieldIds.add(normalizedTag);
+        if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
+        if (f.name) schemaNames.add(f.name.toLowerCase());
+      });
+    });
+
+    // If schema has no fields defined, all real fields are "unchecked"
+    // but this is likely a loading state, so return empty
+    if (schemaFieldIds.size === 0 && schemaKeywords.size === 0 && schemaNames.size === 0) {
+      return [];
+    }
+
+    // Find fields in realAcquisition that aren't in the schema
+    return realFields.filter(f => {
+      const normalizedTag = normalizeTag(f.tag);
+      const hasTag = normalizedTag && schemaFieldIds.has(normalizedTag);
+      const hasKeyword = f.keyword && schemaKeywords.has(f.keyword.toLowerCase());
+      const hasName = f.name && schemaNames.has(f.name.toLowerCase());
+      return !hasTag && !hasKeyword && !hasName;
+    });
+  }, [isComplianceMode, realAcquisition, acquisition?.acquisitionFields, acquisition?.series]);
 
   // Update expanded state when isCollapsed prop changes
   useEffect(() => {
@@ -498,15 +555,15 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                     <table className="min-w-full divide-y divide-border">
                       <thead className="bg-surface-secondary">
                         <tr>
-                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider w-1/3">
+                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
                             Validation Rule
                           </th>
-                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider w-1/2">
+                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
                             Description
                           </th>
                           {isComplianceMode && (
-                            <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider">
-                              <div className="flex items-center justify-center gap-1">
+                            <th className={`px-2 py-1.5 text-xs font-medium text-content-tertiary uppercase tracking-wider ${showRuleStatusMessages ? 'min-w-[150px] text-left' : 'text-center'}`}>
+                              <div className={`flex items-center gap-1 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
                                 <span>Status</span>
                                 <button
                                   onClick={() => setShowRuleStatusMessages(!showRuleStatusMessages)}
@@ -533,7 +590,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                             <tr
                               key={`${func.id}-${index}`}
                               className={`${index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
-                                !isComplianceMode ? 'hover:bg-surface-hover transition-colors' : ''
+                                isEditMode && !isComplianceMode ? 'hover:bg-surface-hover transition-colors' : ''
                               }`}
                             >
                               <td className="px-2 py-1.5">
@@ -569,7 +626,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                         </div>
                                       </CustomTooltip>
                                       {showRuleStatusMessages && ruleResult.message && (
-                                        <span className="text-xs text-content-secondary break-words">
+                                        <span className="text-xs text-content-secondary">
                                           {ruleResult.message}
                                         </span>
                                       )}
@@ -582,14 +639,14 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                   <div className="flex items-center justify-end space-x-1">
                                     <button
                                       onClick={() => handleValidationFunctionEdit(index)}
-                                      className="p-1 text-content-muted hover:text-brand-600"
+                                      className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
                                       title="Edit function"
                                     >
                                       <Edit2 className="h-3 w-3" />
                                     </button>
                                     <button
                                       onClick={() => handleValidationFunctionDelete(index)}
-                                      className="p-1 text-content-muted hover:text-status-error"
+                                      className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"
                                       title="Remove function"
                                     >
                                       <Trash2 className="h-3 w-3" />
@@ -652,6 +709,66 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'acquisition')}
                 onSeriesNameUpdate={onSeriesNameUpdate}
               />
+            </div>
+          )}
+
+          {/* Unchecked Fields (fields in data but not in schema) */}
+          {isComplianceMode && uncheckedFields.length > 0 && (
+            <div className="border border-border-secondary rounded-md overflow-hidden">
+              <button
+                onClick={() => setShowUncheckedFields(!showUncheckedFields)}
+                className="w-full px-3 py-2 bg-surface-secondary hover:bg-surface-tertiary transition-colors flex items-center justify-between text-left"
+              >
+                <span className="text-xs text-content-tertiary">
+                  <span className="font-medium">{uncheckedFields.length} field{uncheckedFields.length !== 1 ? 's' : ''}</span> in data not validated by schema
+                </span>
+                <ChevronDown className={`h-4 w-4 text-content-tertiary transition-transform ${showUncheckedFields ? 'rotate-180' : ''}`} />
+              </button>
+              {showUncheckedFields && (
+                <div className="border-t border-border">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-surface-tertiary">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                          Field
+                        </th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                          Value in Data
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-surface-primary divide-y divide-border">
+                      {uncheckedFields.map((field, index) => (
+                        <tr
+                          key={field.tag || field.name || index}
+                          className={index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'}
+                        >
+                          <td className="px-2 py-1.5">
+                            <div>
+                              <p className="text-xs font-medium text-content-secondary">
+                                {field.keyword || field.name}
+                              </p>
+                              <p className="text-xs text-content-muted font-mono">
+                                {field.fieldType === 'derived' ? 'Derived field' :
+                                 field.fieldType === 'custom' ? 'Custom field' :
+                                 field.fieldType === 'private' ? 'Private field' :
+                                 (field.tag || 'Unknown tag')}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <p className="text-xs text-content-secondary break-words">
+                              {Array.isArray(field.value)
+                                ? field.value.join(', ')
+                                : String(field.value ?? '')}
+                            </p>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

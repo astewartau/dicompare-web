@@ -42,9 +42,13 @@ const SortableWorkspaceItem: React.FC<{
   };
 
   // Determine status indicators based on source and usage mode
+  const isEmptyItem = item.source === 'empty';
+  const hasCreatedSchema = item.hasCreatedSchema || false;
+
   // When data is used as "schema template", it's effectively a schema
   const isUsedAsSchema = item.source === 'schema' ||
-    (item.source === 'data' && (item.dataUsageMode === 'schema-template' || !item.dataUsageMode));
+    (item.source === 'data' && (item.dataUsageMode === 'schema-template' || !item.dataUsageMode)) ||
+    (isEmptyItem && hasCreatedSchema);
   const isUsedAsValidationData = item.source === 'data' && item.dataUsageMode === 'validation-subject';
 
   const hasData = isUsedAsValidationData || item.attachedData !== undefined;

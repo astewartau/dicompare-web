@@ -40,8 +40,12 @@ interface WorkspaceDetailPanelProps {
   onConfirmSchemas: () => void;
   onFileUpload: (files: FileList | null, mode?: 'schema-template' | 'validation-subject') => void;
   onAddFromScratch: () => void;
+  onAddEmpty: () => void;
+  onCreateSchema: () => void;  // Create schema for current empty item
+  onDetachCreatedSchema: () => void;  // Detach created schema from current item
   onToggleEditing: () => void;
   onAttachData: (files: FileList) => void;
+  onUploadSchemaForItem: (files: FileList) => void;  // Upload DICOMs to build schema for current item
   onDetachData: () => void;
   onAttachSchema: () => void;
   onDetachSchema: () => void;
@@ -71,8 +75,12 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   onConfirmSchemas,
   onFileUpload,
   onAddFromScratch,
+  onAddEmpty,
+  onCreateSchema,
+  onDetachCreatedSchema,
   onToggleEditing,
   onAttachData,
+  onUploadSchemaForItem,
   onDetachData,
   onAttachSchema,
   onDetachSchema,
@@ -84,11 +92,13 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   onAcquisitionReadmeClick
 }) => {
   const workspace = useWorkspace();
+  const { processingTarget } = workspace;
   const { uploadSchema, schemas, updateExistingSchema } = useSchemaContext();
   const { allTags } = useTagSuggestions();
   const { theme } = useTheme();
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDragOverReference, setIsDragOverReference] = useState(false);
+  const [isDragOverSchema, setIsDragOverSchema] = useState(false);
 
   // Schema info editing state
   const [authorInput, setAuthorInput] = useState('');
@@ -114,9 +124,9 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     initialSelection: string;
   } | null>(null);
 
-  // Load schema acquisition when attachedSchema changes (for data-sourced items)
+  // Load schema acquisition when attachedSchema changes (for data-sourced or empty items)
   useEffect(() => {
-    if (selectedItem?.source === 'data' && selectedItem?.attachedSchema) {
+    if ((selectedItem?.source === 'data' || selectedItem?.source === 'empty') && selectedItem?.attachedSchema) {
       const loadSchemaAcquisition = async () => {
         const schemaAcq = await convertSchemaToAcquisition(
           selectedItem.attachedSchema!.schema,
@@ -308,6 +318,36 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       onFileUpload(filesToFileList(files), 'schema-template');
     }
   }, [onFileUpload, processDroppedFiles, filesToFileList]);
+
+  // Schema zone handlers (for empty items - uploading reference data to build schema)
+  const handleSchemaDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOverSchema(true);
+  }, []);
+
+  const handleSchemaDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOverSchema(false);
+    }
+  }, []);
+
+  const handleSchemaDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOverSchema(false);
+
+    const files = await processDroppedFiles(e);
+    if (files.length > 0) {
+      const fileList = filesToFileList(files);
+      // For empty items, upload to the current item (preserving attachedData)
+      // For other cases, create new items
+      if (selectedItem?.source === 'empty') {
+        onUploadSchemaForItem(fileList);
+      } else {
+        onFileUpload(fileList, 'schema-template');
+      }
+    }
+  }, [selectedItem?.source, onFileUpload, onUploadSchemaForItem, processDroppedFiles, filesToFileList]);
 
   // Test Data zone handlers (for validation)
   const handleTestDragOver = useCallback((e: React.DragEvent) => {
@@ -944,7 +984,7 @@ Any additional technical details or vendor-specific information."
   if (isAddNew) {
     return (
       <div className="border border-border rounded-lg bg-surface-primary shadow-sm flex flex-col h-full">
-        {/* Tab Headers */}
+        {/* Tab Headers - simplified to 2 options */}
         <div className="flex border-b border-border">
           <button
             onClick={() => setActiveTab('start')}
@@ -968,22 +1008,11 @@ Any additional technical details or vendor-specific information."
             From schema
           </button>
           <button
-            onClick={() => setActiveTab('data')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'data'
-                ? 'text-brand-600 border-b-2 border-brand-600 bg-surface-primary'
-                : 'text-content-secondary hover:text-content-primary bg-surface-secondary'
-            }`}
-          >
-            <Upload className="h-4 w-4 inline mr-2" />
-            From data
-          </button>
-          <button
-            onClick={onAddFromScratch}
+            onClick={onAddEmpty}
             className="flex-1 px-4 py-3 text-sm font-medium transition-colors text-content-secondary hover:text-content-primary bg-surface-secondary"
           >
             <Plus className="h-4 w-4 inline mr-2" />
-            From scratch
+            Create new
           </button>
         </div>
 
@@ -995,7 +1024,7 @@ Any additional technical details or vendor-specific information."
                 <h2 className="text-base font-semibold text-content-primary mb-1">Add to workspace</h2>
                 <p className="text-sm text-content-secondary">Choose how to add acquisitions</p>
               </div>
-              <div className="grid grid-cols-3 gap-4 max-w-lg">
+              <div className="grid grid-cols-2 gap-4 max-w-md">
                 {/* Browse schemas */}
                 <button
                   onClick={() => setActiveTab('schema')}
@@ -1004,32 +1033,20 @@ Any additional technical details or vendor-specific information."
                   <div className="p-3 bg-brand-100 dark:bg-brand-900/30 rounded-full mb-2 group-hover:bg-brand-200 dark:group-hover:bg-brand-900/50 group-hover:scale-105 transition-all">
                     <FileText className="h-5 w-5 text-brand-600" />
                   </div>
-                  <span className="text-sm font-medium text-content-primary">Browse schemas</span>
-                  <span className="text-xs text-content-tertiary mt-1 text-center">Start from the library</span>
+                  <span className="text-sm font-medium text-content-primary">From schema</span>
+                  <span className="text-xs text-content-tertiary mt-1 text-center">Choose from library</span>
                 </button>
 
-                {/* Upload */}
+                {/* Create new */}
                 <button
-                  onClick={() => setActiveTab('data')}
-                  className="flex flex-col items-center p-4 border border-border-secondary rounded-lg hover:border-brand-500 hover:shadow-md transition-all group bg-surface-primary"
-                >
-                  <div className="p-3 bg-brand-100 dark:bg-brand-900/30 rounded-full mb-2 group-hover:bg-brand-200 dark:group-hover:bg-brand-900/50 group-hover:scale-105 transition-all">
-                    <Upload className="h-5 w-5 text-brand-600" />
-                  </div>
-                  <span className="text-sm font-medium text-content-primary">Load data</span>
-                  <span className="text-xs text-content-tertiary mt-1 text-center">Analyse DICOMs or protocols</span>
-                </button>
-
-                {/* Blank */}
-                <button
-                  onClick={onAddFromScratch}
+                  onClick={onAddEmpty}
                   className="flex flex-col items-center p-4 border border-border-secondary rounded-lg hover:border-brand-500 hover:shadow-md transition-all group bg-surface-primary"
                 >
                   <div className="p-3 bg-brand-100 dark:bg-brand-900/30 rounded-full mb-2 group-hover:bg-brand-200 dark:group-hover:bg-brand-900/50 group-hover:scale-105 transition-all">
                     <Plus className="h-5 w-5 text-brand-600" />
                   </div>
-                  <span className="text-sm font-medium text-content-primary">Blank</span>
-                  <span className="text-xs text-content-tertiary mt-1 text-center">Create from scratch</span>
+                  <span className="text-sm font-medium text-content-primary">Create new</span>
+                  <span className="text-xs text-content-tertiary mt-1 text-center">Start from scratch</span>
                 </button>
               </div>
             </div>
@@ -1072,124 +1089,6 @@ Any additional technical details or vendor-specific information."
                 </button>
               </div>
             </div>
-          ) : activeTab === 'data' ? (
-            <div className="p-4 flex-1 overflow-y-auto flex flex-col">
-              {/* Privacy notice */}
-              <div className="mb-3 px-3 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-                <p className="text-xs text-green-800 dark:text-green-200">
-                  Your data stays private. Files are analysed locally and never uploaded.
-                </p>
-              </div>
-
-              {isProcessing ? (
-                <div className="flex-1 flex flex-col items-center justify-center">
-                  <Loader className="h-10 w-10 text-brand-600 mx-auto mb-3 animate-spin" />
-                  <h3 className="text-base font-semibold text-content-primary mb-1">Processing Files</h3>
-                  <p className="text-sm text-content-secondary mb-3">{processingProgress?.currentOperation}</p>
-
-                  {processingProgress && (
-                    <div className="space-y-2 w-full max-w-xs">
-                      <div className="w-full bg-surface-secondary rounded-full h-1.5">
-                        <div
-                          className="bg-brand-600 h-1.5 rounded-full transition-all duration-500"
-                          style={{ width: `${processingProgress.percentage}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-content-secondary text-center">
-                        {Math.round(processingProgress.percentage)}% complete
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Reference Data Zone */}
-                  <div
-                    className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors flex flex-col items-center justify-center ${
-                      isDragOverReference
-                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                        : 'border-border-secondary hover:border-brand-500'
-                    }`}
-                    onDragOver={handleReferenceDragOver}
-                    onDragLeave={handleReferenceDragLeave}
-                    onDrop={handleReferenceDrop}
-                  >
-                    <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-full mb-2">
-                      <FileText className="h-5 w-5 text-brand-600" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-content-primary mb-0.5">
-                      Reference Data
-                    </h3>
-                    <p className="text-content-secondary text-xs mb-1">
-                      For building or editing schemas
-                    </p>
-                    <p className="text-content-tertiary text-xs mb-2">
-                      DICOMs, protocols (.pro), exam cards
-                    </p>
-
-                    <input
-                      type="file"
-                      multiple
-                      webkitdirectory=""
-                      accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
-                      className="hidden"
-                      id="file-upload-reference"
-                      onChange={(e) => onFileUpload(e.target.files, 'schema-template')}
-                    />
-                    <label
-                      htmlFor="file-upload-reference"
-                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer"
-                    >
-                      <Upload className="h-4 w-4 mr-1.5" />
-                      Browse
-                    </label>
-                  </div>
-
-                  {/* Test Data Zone */}
-                  <div
-                    className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors flex flex-col items-center justify-center ${
-                      isDragOverTest
-                        ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                        : 'border-border-secondary hover:border-amber-500'
-                    }`}
-                    onDragOver={handleTestDragOver}
-                    onDragLeave={handleTestDragLeave}
-                    onDrop={handleTestDrop}
-                  >
-                    <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-full mb-2">
-                      <FlaskConical className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-content-primary mb-0.5">
-                      Test Data
-                    </h3>
-                    <p className="text-content-secondary text-xs mb-1">
-                      For validating against a schema
-                    </p>
-                    <p className="text-content-tertiary text-xs mb-2">
-                      DICOM files only
-                    </p>
-
-                    <input
-                      type="file"
-                      multiple
-                      webkitdirectory=""
-                      accept=".dcm,.dicom,.zip"
-                      className="hidden"
-                      id="file-upload-test"
-                      onChange={(e) => onFileUpload(e.target.files, 'validation-subject')}
-                    />
-                    <label
-                      htmlFor="file-upload-test"
-                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-amber-600 hover:bg-amber-700 cursor-pointer"
-                    >
-                      <Upload className="h-4 w-4 mr-1.5" />
-                      Browse
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
           ) : null}
         </div>
       </div>
@@ -1210,16 +1109,36 @@ Any additional technical details or vendor-specific information."
   }
 
   // Determine what actions are available based on source and mode
-  // Items used as schema (either schema-sourced or data used as schema template) can have data attached
-  const isUsedAsSchema = selectedItem.source === 'schema' ||
-    (selectedItem.source === 'data' && (selectedItem.dataUsageMode === 'schema-template' || !selectedItem.dataUsageMode));
-  const canAttachData = isUsedAsSchema;
-  // Only allow attaching schema when in validation-subject mode
-  const canAttachSchema = selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject';
+  const isEmptyItem = selectedItem.source === 'empty';
+  const hasCreatedSchema = selectedItem.hasCreatedSchema || false;
   const hasAttachedData = selectedItem.attachedData !== undefined;
   const hasAttachedSchema = selectedItem.attachedSchema !== undefined;
-  // For data-sourced items, only allow editing in schema-template mode
-  const canEdit = isUsedAsSchema;
+
+  // Item "has schema" if:
+  // - It's schema-sourced (from library)
+  // - It's data-sourced in schema-template mode
+  // - It's empty but user clicked "Create New" schema
+  // - It has an attached schema
+  const hasSchema = selectedItem.source === 'schema' ||
+    (selectedItem.source === 'data' && (selectedItem.dataUsageMode === 'schema-template' || !selectedItem.dataUsageMode)) ||
+    (isEmptyItem && hasCreatedSchema) ||
+    hasAttachedSchema;
+
+  // Item "has data" if:
+  // - It's data-sourced in validation-subject mode
+  // - It has attached data
+  const hasData = (selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject') ||
+    hasAttachedData;
+
+  // Legacy compatibility - isUsedAsSchema means the item's acquisition represents the schema side
+  const isUsedAsSchema = selectedItem.source === 'schema' ||
+    (selectedItem.source === 'data' && (selectedItem.dataUsageMode === 'schema-template' || !selectedItem.dataUsageMode)) ||
+    (isEmptyItem && hasCreatedSchema) ||
+    (isEmptyItem && hasAttachedSchema);
+
+  const canAttachData = hasSchema;
+  const canAttachSchema = !hasSchema && !hasCreatedSchema;
+  const canEdit = hasSchema;
 
   // Helper to render acquisition info panel
   const renderAcquisitionInfo = (isSchema: boolean) => {
@@ -1229,6 +1148,11 @@ Any additional technical details or vendor-specific information."
     ) : (
       <Database className="h-5 w-5 text-amber-600" />
     );
+
+    // For items with attached schema, use the loaded schema acquisition for display
+    const displayAcquisition = (isSchema && hasAttachedSchema && loadedSchemaAcquisition)
+      ? loadedSchemaAcquisition
+      : selectedItem.acquisition;
 
     return (
       <div className="flex-1 min-w-0">
@@ -1257,10 +1181,10 @@ Any additional technical details or vendor-specific information."
             ) : (
               <>
                 <h4 className="text-lg font-semibold text-content-primary truncate">
-                  {selectedItem.acquisition.protocolName || 'Untitled Acquisition'}
+                  {displayAcquisition.protocolName || 'Untitled Acquisition'}
                 </h4>
                 <p className="text-sm text-content-secondary truncate">
-                  {selectedItem.acquisition.seriesDescription || 'No description'}
+                  {displayAcquisition.seriesDescription || 'No description'}
                 </p>
               </>
             )}
@@ -1268,6 +1192,12 @@ Any additional technical details or vendor-specific information."
             {isSchema && selectedItem.schemaOrigin && (
               <p className="text-xs text-content-tertiary mt-1 truncate">
                 From {selectedItem.schemaOrigin.schemaName}
+              </p>
+            )}
+            {/* Origin info for items with attached schema */}
+            {isSchema && hasAttachedSchema && selectedItem.attachedSchema && (
+              <p className="text-xs text-content-tertiary mt-1 truncate">
+                From {selectedItem.attachedSchema.schema?.name || 'Schema'}
               </p>
             )}
             {/* Source indicator for data items */}
@@ -1321,34 +1251,90 @@ Any additional technical details or vendor-specific information."
                   Schema attached for validation
                 </p>
               </div>
-              <button
-                onClick={onDetachSchema}
-                className="flex-shrink-0 p-1.5 text-content-tertiary hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                title="Detach schema"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
           </div>
         );
       }
-      // Show schema attachment prompt
+      // Show schema attachment/creation prompt with upload option
       return (
         <div className="flex-1 min-w-0">
           <div
             className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-              'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
+              isDragOverSchema
+                ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                : 'border-border-secondary hover:border-brand-400 bg-surface-secondary/50'
             }`}
+            onDragOver={!isProcessing ? handleSchemaDragOver : undefined}
+            onDragLeave={!isProcessing ? handleSchemaDragLeave : undefined}
+            onDrop={!isProcessing ? handleSchemaDrop : undefined}
           >
-            <FileText className="h-6 w-6 text-content-muted mx-auto mb-2" />
-            <p className="text-sm font-medium text-content-secondary mb-1">No schema selected</p>
-            <p className="text-xs text-content-tertiary mb-3">Choose a schema to validate against</p>
-            <button
-              onClick={onAttachSchema}
-              className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-content-inverted bg-brand-600 hover:bg-brand-700"
-            >
-              Choose Schema
-            </button>
+            {isProcessing && processingTarget === 'schema' ? (
+              <>
+                <Loader className="h-6 w-6 text-brand-600 mx-auto mb-2 animate-spin" />
+                <p className="text-sm font-medium text-content-secondary mb-1">Processing...</p>
+                {processingProgress && (
+                  <div className="w-full max-w-[120px] mx-auto">
+                    <div className="w-full bg-surface-tertiary rounded-full h-1.5">
+                      <div
+                        className="bg-brand-600 h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: `${processingProgress.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <Upload className={`h-6 w-6 mx-auto mb-2 ${isDragOverSchema ? 'text-brand-600' : 'text-content-muted'}`} />
+                <p className="text-sm font-medium text-content-secondary mb-1">No schema</p>
+                <p className="text-xs text-content-tertiary mb-3">
+                  Drop DICOMs or protocols to build a schema
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <input
+                    type="file"
+                    multiple
+                    webkitdirectory=""
+                    accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
+                    className="hidden"
+                    id={`upload-schema-ref-${selectedItem.id}`}
+                    onChange={(e) => {
+                      if (!e.target.files) return;
+                      // For empty items, upload to the current item (preserving attachedData)
+                      // For other cases, create new items
+                      if (isEmptyItem) {
+                        onUploadSchemaForItem(e.target.files);
+                      } else {
+                        onFileUpload(e.target.files, 'schema-template');
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor={`upload-schema-ref-${selectedItem.id}`}
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer"
+                  >
+                    <Upload className="h-4 w-4 mr-1" />
+                    Upload
+                  </label>
+                  <button
+                    onClick={onAttachSchema}
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-brand-600 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20"
+                  >
+                    Choose
+                  </button>
+                  {/* Only show Blank option if no data is attached - can't create blank schema when data exists */}
+                  {!hasAttachedData && (
+                    <button
+                      onClick={onCreateSchema}
+                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-border-secondary text-content-secondary hover:bg-surface-secondary"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Blank
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       );
@@ -1364,22 +1350,15 @@ Any additional technical details or vendor-specific information."
               </div>
               <div className="flex-1 min-w-0">
                 <h4 className="text-lg font-semibold text-content-primary">
-                  {selectedItem.attachedData.totalFiles} {selectedItem.attachedData.totalFiles === 1 ? 'file' : 'files'}
+                  {selectedItem.attachedData.protocolName || 'DICOM Data'}
                 </h4>
                 <p className="text-sm text-content-secondary truncate">
-                  {selectedItem.attachedData.acquisitions?.[0]?.seriesDescription || 'DICOM data'}
+                  {selectedItem.attachedData.seriesDescription || `${selectedItem.attachedData.totalFiles || 0} files`}
                 </p>
                 <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                   Data attached for validation
                 </p>
               </div>
-              <button
-                onClick={onDetachData}
-                className="flex-shrink-0 p-1.5 text-content-tertiary hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                title="Detach data"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
           </div>
         );
@@ -1397,7 +1376,7 @@ Any additional technical details or vendor-specific information."
             onDragLeave={!isProcessing ? handleDragLeave : undefined}
             onDrop={!isProcessing ? handleDrop : undefined}
           >
-            {isProcessing ? (
+            {isProcessing && processingTarget === 'data' ? (
               <>
                 <Loader className="h-6 w-6 text-brand-600 mx-auto mb-2 animate-spin" />
                 <p className="text-sm font-medium text-content-secondary mb-1">Processing...</p>
@@ -1415,8 +1394,8 @@ Any additional technical details or vendor-specific information."
             ) : (
               <>
                 <Upload className={`h-6 w-6 mx-auto mb-2 ${isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
-                <p className="text-sm font-medium text-content-secondary mb-1">No data attached</p>
-                <p className="text-xs text-content-tertiary mb-3">Drop files or browse to validate</p>
+                <p className="text-sm font-medium text-content-secondary mb-1">No data</p>
+                <p className="text-xs text-content-tertiary mb-3">Drop DICOMs to validate against schema</p>
                 <div className="flex items-center justify-center gap-2">
                   <input
                     type="file"
@@ -1493,14 +1472,18 @@ Any additional technical details or vendor-specific information."
                   ) : null}
 
                   {/* Edit toggle */}
-                  {canEdit && !hasAttachedData && !hasAttachedSchema && (
+                  {canEdit && (
                     <button
                       onClick={onToggleEditing}
+                      disabled={hasAttachedData}
                       className={`inline-flex items-center px-2 py-1 border text-xs rounded ${
-                        selectedItem.isEditing
-                          ? 'border-brand-500 text-brand-600 bg-brand-50 dark:bg-brand-900/20'
-                          : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
+                        hasAttachedData
+                          ? 'border-border-secondary text-content-muted cursor-not-allowed opacity-50'
+                          : selectedItem.isEditing
+                            ? 'border-brand-500 text-brand-600 bg-brand-50 dark:bg-brand-900/20'
+                            : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
                       }`}
+                      title={hasAttachedData ? "Detach data to edit" : undefined}
                     >
                       {selectedItem.isEditing ? (
                         <>
@@ -1513,6 +1496,50 @@ Any additional technical details or vendor-specific information."
                           Edit
                         </>
                       )}
+                    </button>
+                  )}
+
+                  {/* Detach button for empty items with created schemas */}
+                  {isEmptyItem && hasCreatedSchema && !selectedItem.isEditing && (
+                    <button
+                      onClick={onDetachCreatedSchema}
+                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      title="Remove schema"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                  {/* Detach button for empty items with attached schemas */}
+                  {isEmptyItem && hasAttachedSchema && !selectedItem.isEditing && (
+                    <button
+                      onClick={onDetachSchema}
+                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      title="Detach schema"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                  {/* Detach button for data-sourced items used as schema template */}
+                  {selectedItem.source === 'data' && selectedItem.dataUsageMode !== 'validation-subject' && !selectedItem.isEditing && (
+                    <button
+                      onClick={onDetachSchema}
+                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      title="Detach schema"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                  {/* Detach button for schema-sourced items (from library) */}
+                  {selectedItem.source === 'schema' && !selectedItem.isEditing && (
+                    <button
+                      onClick={onDetachSchema}
+                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      title="Detach schema"
+                    >
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </div>
@@ -1529,12 +1556,29 @@ Any additional technical details or vendor-specific information."
 
           {/* Right side - Data */}
           <div className="pl-0">
-            <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider mb-3">Data</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Test data</div>
+              {/* Data actions - X button when data is attached */}
+              {hasAttachedData && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={onDetachData}
+                    className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    title="Detach data"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
             {isUsedAsSchema ? (
               // This item is schema - show data attachment zone
               renderAttachmentZone('data')
+            ) : isEmptyItem ? (
+              // Empty item - always show data attachment zone (whether data attached or not)
+              renderAttachmentZone('data')
             ) : (
-              // This item IS the data - show its info
+              // This item IS the data (data-sourced) - show its info
               renderAcquisitionInfo(false)
             )}
           </div>
@@ -1545,14 +1589,24 @@ Any additional technical details or vendor-specific information."
       <div className="px-6 py-4 space-y-4">
         <AcquisitionTable
             acquisition={
-              // For validation-subject items with attached schema, show the schema as "expected"
-              // For schema items (including data-as-schema), show the item's acquisition
-              !isUsedAsSchema && hasAttachedSchema && loadedSchemaAcquisition
+              // For items with attached schema (empty or data-sourced), show the loaded schema acquisition
+              // For schema items (schema-sourced or data-as-schema), show the item's own acquisition
+              // For empty items with only attached data (no schema), show the attached data
+              hasAttachedSchema && loadedSchemaAcquisition
                 ? loadedSchemaAcquisition
-                : selectedItem.acquisition
+                : (isEmptyItem && !hasCreatedSchema && !hasAttachedSchema && hasAttachedData && selectedItem.attachedData)
+                  ? selectedItem.attachedData
+                  : selectedItem.acquisition
             }
             isEditMode={selectedItem.isEditing}
-            mode={hasAttachedData || hasAttachedSchema ? 'compliance' : 'edit'}
+            mode={
+              // Compliance mode requires BOTH schema and data to compare
+              // - If item is used as schema: need attachedData for compliance
+              // - If item is used as data: need attachedSchema for compliance
+              (isUsedAsSchema && hasAttachedData) || (!isUsedAsSchema && hasAttachedSchema)
+                ? 'compliance'
+                : 'edit'
+            }
             realAcquisition={
               // For items used as schema, attached data is the "real" data to validate
               // For validation-subject items, the acquisition itself is the real data
@@ -1561,21 +1615,21 @@ Any additional technical details or vendor-specific information."
                 : selectedItem.acquisition      // Validation mode: acquisition is real data
             }
             schemaId={
-              // Schema-sourced items have a schemaOrigin
-              // Data-as-schema items don't have a schemaId (we'll handle this separately)
-              // Validation-subject items use attachedSchema
-              isUsedAsSchema
-                ? selectedItem.schemaOrigin?.schemaId             // From schema origin (may be undefined for data-as-schema)
-                : selectedItem.attachedSchema?.schemaId           // From attached schema
+              // Priority: attachedSchema > schemaOrigin
+              // Empty items with attachedSchema use attachedSchema
+              // Schema-sourced items use schemaOrigin
+              // Data-as-schema items don't have a schemaId
+              selectedItem.attachedSchema?.schemaId ||
+              selectedItem.schemaOrigin?.schemaId
             }
             schemaAcquisitionId={
-              isUsedAsSchema
-                ? selectedItem.schemaOrigin?.acquisitionIndex?.toString()  // From schema origin
-                : selectedItem.attachedSchema?.acquisitionId      // From attached schema
+              // Priority: attachedSchema > schemaOrigin
+              selectedItem.attachedSchema?.acquisitionId ||
+              selectedItem.schemaOrigin?.acquisitionIndex?.toString()
             }
             schemaAcquisition={
-              // For data-as-schema items without a schemaId, pass the acquisition directly
-              isUsedAsSchema && !selectedItem.schemaOrigin?.schemaId
+              // For data-as-schema items without a schemaId or attachedSchema, pass the acquisition directly
+              isUsedAsSchema && !selectedItem.schemaOrigin?.schemaId && !selectedItem.attachedSchema?.schemaId
                 ? selectedItem.acquisition
                 : undefined
             }

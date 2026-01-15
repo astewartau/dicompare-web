@@ -43,7 +43,7 @@
   --color-surface: 17 24 39; /* gray-900 */
   --color-surface-primary: 31 41 55; /* gray-800 */
   --color-surface-secondary: 55 65 81; /* gray-700 */
-  --color-surface-hover: 30 58 138; /* blue-900 */
+  --color-surface-hover: 7 89 133; /* sky-800 - more visible blue hover */
   --color-surface-alt: 24 32 48; /* slightly lighter than surface */
 
   /* Text */

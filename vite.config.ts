@@ -12,6 +12,9 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true
   },
+  worker: {
+    format: 'es',
+  },
   resolve: {
     alias: {
       '@': '/src',

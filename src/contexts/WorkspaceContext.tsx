@@ -13,7 +13,7 @@ import { convertSchemaToAcquisition } from '../utils/schemaToAcquisition';
 export interface WorkspaceItem {
   id: string;
   acquisition: Acquisition;
-  source: 'schema' | 'data';
+  source: 'schema' | 'data' | 'empty';  // 'empty' = created without initial content
   isEditing: boolean;
 
   // For data-sourced items: how should the data be used?
@@ -22,8 +22,11 @@ export interface WorkspaceItem {
   dataUsageMode?: 'schema-template' | 'validation-subject';
 
   // For compliance - one of these may be set
-  attachedData?: Acquisition;         // Real DICOM data (when source is schema)
-  attachedSchema?: SchemaBinding;     // Schema to validate against (when source is data)
+  attachedData?: Acquisition;         // Real DICOM data (when item has schema)
+  attachedSchema?: SchemaBinding;     // Schema to validate against (when item has data)
+
+  // Does this item have a user-created schema? (for empty items that got a schema created)
+  hasCreatedSchema?: boolean;
 
   // Track origin for schema-sourced items
   schemaOrigin?: {
@@ -63,6 +66,7 @@ interface WorkspaceContextType {
   selectedId: string | null;
   schemaMetadata: SchemaMetadata;
   isProcessing: boolean;
+  processingTarget: 'schema' | 'data' | 'addNew' | null;  // Which zone is processing
   processingProgress: ProcessingProgress | null;
   processingError: string | null;
   pendingAttachmentSelection: PendingAttachmentSelection | null;
@@ -71,6 +75,11 @@ interface WorkspaceContextType {
   addFromSchema: (selections: AcquisitionSelection[], getSchemaContent: (id: string) => Promise<string | null>, getUnifiedSchema: (id: string) => UnifiedSchema | null) => Promise<void>;
   addFromData: (files: FileList, mode?: 'schema-template' | 'validation-subject') => Promise<void>;
   addFromScratch: () => string;
+  addEmpty: () => string;  // Create truly empty item (no schema, no data)
+
+  // Schema management for empty items
+  createSchemaForItem: (id: string) => void;  // Create empty schema for an item
+  detachCreatedSchema: (id: string) => void;  // Remove created schema from item
 
   // Item management
   selectItem: (id: string | null) => void;
@@ -88,6 +97,7 @@ interface WorkspaceContextType {
   // Attachments
   attachData: (id: string, files: FileList) => Promise<void>;
   attachSchema: (id: string, binding: SchemaBinding) => void;
+  uploadSchemaForItem: (id: string, files: FileList) => Promise<void>;  // Upload DICOMs to build schema for existing item
   detachData: (id: string) => void;
   detachSchema: (id: string) => void;
   generateTestData: (id: string, getSchemaContent: (id: string) => Promise<string | null>) => Promise<void>;
@@ -142,6 +152,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [schemaMetadata, setSchemaMetadata] = useState<SchemaMetadata>(DEFAULT_SCHEMA_METADATA);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingTarget, setProcessingTarget] = useState<'schema' | 'data' | 'addNew' | null>(null);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [pendingAttachmentSelection, setPendingAttachmentSelection] = useState<PendingAttachmentSelection | null>(null);
@@ -228,6 +239,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   // Add items from DICOM files or protocol files
   const addFromData = useCallback(async (files: FileList, mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
     setIsProcessing(true);
+    setProcessingTarget('addNew');
     setProcessingError(null);
     setProcessingProgress({
       currentFile: 0,
@@ -325,6 +337,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }
 
     setIsProcessing(false);
+    setProcessingTarget(null);
     setProcessingProgress(null);
   }, []);
 
@@ -353,6 +366,75 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     return newId;
   }, []);
 
+  // Add a truly empty item (no schema, no data)
+  const addEmpty = useCallback((): string => {
+    const newId = `ws_${Date.now()}_empty`;
+    const emptyAcquisition: Acquisition = {
+      id: newId,
+      protocolName: '',
+      seriesDescription: '',
+      totalFiles: 0,
+      acquisitionFields: [],
+      series: [],
+      metadata: {}
+    };
+
+    const newItem: WorkspaceItem = {
+      id: newId,
+      acquisition: emptyAcquisition,
+      source: 'empty',
+      isEditing: false
+    };
+
+    setItems(prev => [...prev, newItem]);
+    setSelectedId(newId);
+    return newId;
+  }, []);
+
+  // Create empty schema for an empty item (user clicked "Blank" on schema side)
+  const createSchemaForItem = useCallback((id: string) => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+
+      return {
+        ...item,
+        hasCreatedSchema: true,
+        attachedSchema: undefined,  // Clear any attached schema
+        isEditing: false,  // Don't start in edit mode
+        acquisition: {
+          ...item.acquisition,
+          protocolName: item.acquisition.protocolName || 'New Acquisition',
+        }
+      };
+    }));
+  }, []);
+
+  // Remove created schema from an item (detach the schema side, preserves attachedData)
+  const detachCreatedSchema = useCallback((id: string) => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+
+      return {
+        ...item,
+        hasCreatedSchema: false,
+        isEditing: false,
+        schemaOrigin: undefined,
+        // Note: attachedData is preserved, attachedSchema should already be undefined
+        // since hasCreatedSchema and attachedSchema are mutually exclusive
+        acquisition: {
+          ...item.acquisition,
+          protocolName: '',
+          seriesDescription: '',
+          acquisitionFields: [],
+          series: [],
+          validationFunctions: [],
+          detailedDescription: undefined,
+          tags: undefined
+        }
+      };
+    }));
+  }, []);
+
   // Select an item
   const selectItem = useCallback((id: string | null) => {
     setSelectedId(id);
@@ -360,10 +442,22 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   // Remove an item
   const removeItem = useCallback((id: string) => {
-    setItems(prev => prev.filter(item => item.id !== id));
-    if (selectedId === id) {
-      setSelectedId(null);
-    }
+    setItems(prev => {
+      const index = prev.findIndex(item => item.id === id);
+      const newItems = prev.filter(item => item.id !== id);
+
+      // If the removed item was selected, select another item
+      if (selectedId === id && newItems.length > 0) {
+        // Select the item at the same index, or the last item if we removed the last one
+        const newIndex = Math.min(index, newItems.length - 1);
+        setSelectedId(newItems[newIndex].id);
+      } else if (selectedId === id) {
+        // No items left, keep selection as is (will show Add New)
+        setSelectedId(null);
+      }
+
+      return newItems;
+    });
   }, [selectedId]);
 
   // Reorder items
@@ -419,6 +513,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   // Attach data to a schema-sourced item
   const attachData = useCallback(async (id: string, files: FileList) => {
     setIsProcessing(true);
+    setProcessingTarget('data');
     setProcessingError(null);
     setProcessingProgress({
       currentFile: 0,
@@ -548,14 +643,145 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }
 
     setIsProcessing(false);
+    setProcessingTarget(null);
     setProcessingProgress(null);
   }, []);
 
-  // Attach schema to a data-sourced item
+  // Attach schema to an item (clears hasCreatedSchema if set)
   const attachSchema = useCallback((id: string, binding: SchemaBinding) => {
-    setItems(prev => prev.map(item =>
-      item.id === id ? { ...item, attachedSchema: binding } : item
-    ));
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+
+      // When attaching a schema to an empty item, update the acquisition name and tags from the schema
+      let updatedAcquisition = item.acquisition;
+      if (item.source === 'empty') {
+        // Find the acquisition in the schema to get tags
+        const acquisitionIndex = binding.acquisitionId ? parseInt(binding.acquisitionId) : 0;
+        const schemaAcquisition = binding.schema.acquisitions?.[acquisitionIndex];
+
+        updatedAcquisition = {
+          ...item.acquisition,
+          protocolName: binding.acquisitionName || item.acquisition.protocolName,
+          seriesDescription: schemaAcquisition?.seriesDescription || item.acquisition.seriesDescription || '',
+          tags: schemaAcquisition?.tags || item.acquisition.tags
+        };
+      }
+
+      return {
+        ...item,
+        attachedSchema: binding,
+        hasCreatedSchema: false,
+        acquisition: updatedAcquisition
+      };
+    }));
+  }, []);
+
+  // Upload files to build a schema for an existing item (preserves attachedData)
+  const uploadSchemaForItem = useCallback(async (id: string, files: FileList) => {
+    setIsProcessing(true);
+    setProcessingTarget('schema');
+    setProcessingError(null);
+    setProcessingProgress({
+      currentFile: 0,
+      totalFiles: files.length,
+      currentOperation: 'Initializing...',
+      percentage: 0
+    });
+
+    try {
+      // Check if files are protocol files
+      const fileArray = Array.from(files);
+      const protocolFiles = fileArray.filter(f => getProtocolFileType(f.name) !== null);
+      const dicomFiles = fileArray.filter(f => getProtocolFileType(f.name) === null);
+
+      let newAcquisitions: Acquisition[] = [];
+
+      // Process protocol files
+      if (protocolFiles.length > 0) {
+        setProcessingProgress(prev => ({
+          ...prev!,
+          currentOperation: 'Processing protocol files...',
+          percentage: 10
+        }));
+
+        for (const file of protocolFiles) {
+          const fileType = getProtocolFileType(file.name)!;
+          const fileContent = await file.arrayBuffer();
+          const uint8Content = new Uint8Array(fileContent);
+
+          let acquisitions: Acquisition[] = [];
+          if (fileType === 'pro') {
+            const result = await dicompareAPI.loadProFile(uint8Content, file.name);
+            acquisitions = [result];
+          } else if (fileType === 'exar1') {
+            acquisitions = await dicompareAPI.loadExarFile(uint8Content, file.name);
+          } else if (fileType === 'examcard') {
+            acquisitions = await dicompareAPI.loadExamCardFile(uint8Content, file.name);
+          } else if (fileType === 'lxprotocol') {
+            acquisitions = await dicompareAPI.loadLxProtocolFile(uint8Content, file.name);
+          }
+
+          newAcquisitions.push(...acquisitions);
+        }
+      }
+
+      // Process DICOM files
+      if (dicomFiles.length > 0) {
+        const fileObjects = await processUploadedFiles(
+          (() => {
+            const dt = new DataTransfer();
+            dicomFiles.forEach(f => dt.items.add(f));
+            return dt.files;
+          })(),
+          {
+            onProgress: (fileProgress) => {
+              setProcessingProgress(prev => ({
+                ...prev!,
+                currentOperation: `Reading file ${fileProgress.current} of ${fileProgress.total}`,
+                percentage: (fileProgress.current / fileProgress.total) * 5
+              }));
+            }
+          }
+        );
+
+        const result = await dicompareAPI.analyzeFilesForUI(fileObjects, (progress) => {
+          setProcessingProgress({
+            currentFile: progress.currentFile,
+            totalFiles: progress.totalFiles,
+            currentOperation: progress.currentOperation,
+            percentage: progress.percentage
+          });
+        });
+
+        newAcquisitions.push(...(result || []));
+      }
+
+      // Use the first acquisition to set up the schema on this item
+      if (newAcquisitions.length > 0) {
+        const schemaAcquisition = newAcquisitions[0];
+        setItems(prev => prev.map(item => {
+          if (item.id !== id) return item;
+          return {
+            ...item,
+            source: 'data' as const,
+            dataUsageMode: 'schema-template' as const,
+            hasCreatedSchema: false,
+            attachedSchema: undefined,
+            isEditing: false,
+            acquisition: schemaAcquisition,
+            // Preserve attachedData!
+            attachedData: item.attachedData
+          };
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to upload schema for item:', error);
+      setProcessingError(error instanceof Error ? error.message : 'Unknown error occurred');
+    }
+
+    setIsProcessing(false);
+    setProcessingTarget(null);
+    setProcessingProgress(null);
   }, []);
 
   // Detach data
@@ -565,11 +791,79 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     ));
   }, []);
 
-  // Detach schema
+  // Detach schema (handles all item types, preserves attachedData)
   const detachSchema = useCallback((id: string) => {
-    setItems(prev => prev.map(item =>
-      item.id === id ? { ...item, attachedSchema: undefined } : item
-    ));
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+
+      // For schema-sourced items, convert to empty item (preserving any attached data)
+      if (item.source === 'schema') {
+        return {
+          ...item,
+          source: 'empty' as const,
+          schemaOrigin: undefined,
+          attachedSchema: undefined,
+          hasCreatedSchema: false,
+          isEditing: false,
+          acquisition: {
+            id: item.id,
+            protocolName: '',
+            seriesDescription: '',
+            totalFiles: 0,
+            acquisitionFields: [],
+            series: [],
+            metadata: {}
+          },
+          // Keep the attached data if present
+          attachedData: item.attachedData
+        };
+      }
+
+      // For data-sourced items used as schema template, convert to empty (with or without attached data)
+      if (item.source === 'data' && item.dataUsageMode !== 'validation-subject') {
+        return {
+          ...item,
+          source: 'empty' as const,
+          dataUsageMode: undefined,
+          attachedSchema: undefined,
+          hasCreatedSchema: false,
+          isEditing: false,
+          acquisition: {
+            id: item.id,
+            protocolName: '',
+            seriesDescription: '',
+            totalFiles: 0,
+            acquisitionFields: [],
+            series: [],
+            metadata: {}
+          },
+          // Keep any attached data if present
+          attachedData: item.attachedData
+        };
+      }
+
+      // For empty items with attached schema, reset acquisition properties
+      if (item.source === 'empty' && item.attachedSchema) {
+        return {
+          ...item,
+          attachedSchema: undefined,
+          acquisition: {
+            ...item.acquisition,
+            protocolName: '',
+            seriesDescription: '',
+            tags: undefined
+          },
+          attachedData: item.attachedData
+        };
+      }
+
+      // For other items, just clear attachedSchema and preserve attachedData
+      return {
+        ...item,
+        attachedSchema: undefined,
+        attachedData: item.attachedData
+      };
+    }));
   }, []);
 
   // Confirm attachment selection (when multiple acquisitions were found)
@@ -602,6 +896,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     if (!item || !item.schemaOrigin) return;
 
     setIsProcessing(true);
+    setProcessingTarget('data');
     setProcessingError(null);
     setProcessingProgress({
       currentFile: 0,
@@ -637,6 +932,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }
 
     setIsProcessing(false);
+    setProcessingTarget(null);
     setProcessingProgress(null);
   }, [items]);
 
@@ -1128,12 +1424,16 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     selectedId,
     schemaMetadata,
     isProcessing,
+    processingTarget,
     processingProgress,
     processingError,
     pendingAttachmentSelection,
     addFromSchema,
     addFromData,
     addFromScratch,
+    addEmpty,
+    createSchemaForItem,
+    detachCreatedSchema,
     selectItem,
     removeItem,
     reorderItems,
@@ -1143,6 +1443,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     setDataUsageMode,
     attachData,
     attachSchema,
+    uploadSchemaForItem,
     detachData,
     detachSchema,
     confirmAttachmentSelection,
