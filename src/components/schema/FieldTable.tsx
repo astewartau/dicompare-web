@@ -18,7 +18,6 @@ interface FieldTableProps {
   schemaId?: string;
   schemaAcquisitionId?: string;
   acquisition?: Acquisition;
-  realAcquisition?: Acquisition; // The actual DICOM data for compliance validation
   getSchemaContent?: (id: string) => Promise<string | null>;
   isDataProcessing?: boolean; // Prevent validation during DICOM upload
   // Pass validation results from parent instead of computing them here
@@ -38,7 +37,6 @@ const FieldTable: React.FC<FieldTableProps> = ({
   schemaId,
   schemaAcquisitionId,
   acquisition,
-  realAcquisition,
   getSchemaContent,
   isDataProcessing = false,
   complianceResultsProp,
@@ -132,7 +130,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                       className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
                       title={showStatusMessages ? "Hide status messages" : "Show status messages"}
                     >
-                      {showStatusMessages ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      {showStatusMessages ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                     </button>
                   </div>
                 </th>
@@ -195,17 +193,6 @@ const FieldTable: React.FC<FieldTableProps> = ({
                   <td className="px-2 py-1.5">
                     {complianceResult?.actualValue !== undefined && complianceResult?.actualValue !== null ? (
                       <p className="text-xs text-content-primary break-words">{formatFieldDisplay(complianceResult.actualValue)}</p>
-                    ) : realAcquisition ? (
-                      (() => {
-                        const actualField = realAcquisition.acquisitionFields?.find(
-                          f => f.tag === field.tag || f.keyword === field.keyword || f.name === field.name
-                        );
-                        return actualField ? (
-                          <p className="text-xs text-content-primary break-words">{formatFieldValue(actualField)}</p>
-                        ) : (
-                          <span className="text-xs text-content-muted italic">—</span>
-                        );
-                      })()
                     ) : (
                       <span className="text-xs text-content-muted italic">—</span>
                     )}

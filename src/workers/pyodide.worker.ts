@@ -23,6 +23,21 @@ declare function loadPyodide(options: { indexURL: string }): Promise<PyodideInst
 
 let pyodide: PyodideInstance | null = null;
 
+// Validation cache to avoid re-running validation for the same inputs
+const validationCache = new Map<string, any>();
+
+// Simple hash function for cache keys
+function hashValidationInput(acquisition: any, schemaContent: string, acquisitionIndex?: number): string {
+  const input = JSON.stringify({ acquisition, schemaContent, acquisitionIndex });
+  // Simple hash - sum of char codes with position weighting
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i);
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return hash.toString(16);
+}
+
 // Helper to send responses
 function sendResponse(response: WorkerResponse): void {
   self.postMessage(response);
@@ -44,11 +59,24 @@ function sendProgress(id: string, progress: ProgressPayload): void {
 // Initialization
 // ============================================================================
 
-async function initializePyodide(): Promise<{ pyodideVersion: string; dicompareVersion: string }> {
+async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: string; dicompareVersion: string }> {
   console.log('[Worker] Initializing Pyodide...');
   const startTime = Date.now();
 
+  // Helper to send init progress
+  const reportProgress = (message: string, percentage: number) => {
+    if (requestId) {
+      sendProgress(requestId, {
+        percentage,
+        currentOperation: message,
+        totalFiles: 0,
+        totalProcessed: 0
+      });
+    }
+  };
+
   // Load Pyodide from CDN
+  reportProgress('Loading Python runtime...', 10);
   importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js');
 
   pyodide = await loadPyodide({
@@ -58,7 +86,8 @@ async function initializePyodide(): Promise<{ pyodideVersion: string; dicompareV
   const loadTime = Date.now() - startTime;
   console.log(`[Worker] Pyodide loaded in ${loadTime}ms`);
 
-  // Install dicompare package
+  // Install core packages
+  reportProgress('Installing core packages...', 40);
   await pyodide.loadPackage(['micropip', 'sqlite3']);
 
   // Detect environment - in worker, check if we're on localhost
@@ -71,6 +100,7 @@ async function initializePyodide(): Promise<{ pyodideVersion: string; dicompareV
 
   console.log(`[Worker] Installing dicompare from ${isDevelopment ? 'local' : 'PyPI'}...`);
 
+  reportProgress('Loading DICOM analysis tools...', 60);
   await pyodide.runPythonAsync(`
 import micropip
 await micropip.install('${packageSource}')
@@ -86,6 +116,8 @@ from typing import List, Dict, Any
 print("[Worker] dicompare modules imported successfully")
   `);
 
+  reportProgress('Finalizing...', 90);
+
   // Get versions
   const versionResult = await pyodide.runPython(`
 import json
@@ -100,6 +132,7 @@ json.dumps({
   const versions = JSON.parse(versionResult);
   console.log(`[Worker] Ready - Python ${versions.pyodide}, dicompare ${versions.dicompare}`);
 
+  reportProgress('Ready', 100);
   return { pyodideVersion: versions.pyodide, dicompareVersion: versions.dicompare };
 }
 
@@ -169,6 +202,15 @@ async function handleValidateAcquisition(
 
   const { acquisition, schemaContent, acquisitionIndex } = payload;
 
+  // Check cache first
+  const cacheKey = hashValidationInput(acquisition, schemaContent, acquisitionIndex);
+  const cachedResult = validationCache.get(cacheKey);
+  if (cachedResult) {
+    console.log('[Worker] Returning cached validation result');
+    sendSuccess(id, cachedResult);
+    return;
+  }
+
   pyodide.globals.set('acquisition_data', acquisition);
   pyodide.globals.set('schema_content', schemaContent);
   pyodide.globals.set('schema_acquisition_index', acquisitionIndex ?? null);
@@ -185,7 +227,26 @@ results = validate_acquisition_direct(acq_data, schema_str, acq_index)
 json.dumps(results, default=str)
   `);
 
-  sendSuccess(id, JSON.parse(result as string));
+  const parsedResult = JSON.parse(result as string);
+
+  // Debug: Log validation results to help identify wrong actualValue issues
+  console.log('[Worker] Validation results:', JSON.stringify(parsedResult, null, 2));
+
+  // Log any suspicious actualValue values (like simple numbers that might be counts/indices)
+  const suspiciousResults = parsedResult.filter((r: any) =>
+    r.actualValue !== undefined &&
+    typeof r.actualValue === 'number' &&
+    r.actualValue >= 0 && r.actualValue <= 10
+  );
+  if (suspiciousResults.length > 0) {
+    console.warn('[Worker] Suspicious actualValue results (might be counts/indices instead of values):', suspiciousResults);
+  }
+
+  // Store in cache
+  validationCache.set(cacheKey, parsedResult);
+  console.log('[Worker] Cached validation result');
+
+  sendSuccess(id, parsedResult);
 }
 
 async function handleLoadProtocolFile(
@@ -384,6 +445,10 @@ json.dumps({
 async function handleClearCache(id: string): Promise<void> {
   if (!pyodide) throw new Error('Pyodide not initialized');
 
+  // Clear validation cache
+  validationCache.clear();
+  console.log('[Worker] Validation cache cleared');
+
   await pyodide.runPython(`
 from dicompare.interface.web_utils import _cache_session
 _cache_session(None, {}, {})
@@ -391,6 +456,17 @@ print("[Worker] Session cache cleared")
   `);
 
   sendSuccess(id, { cleared: true });
+}
+
+async function handleRunPython(
+  id: string,
+  payload: { code: string }
+): Promise<void> {
+  if (!pyodide) throw new Error('Pyodide not initialized');
+
+  const { code } = payload;
+  const result = await pyodide.runPython(code);
+  sendSuccess(id, result);
 }
 
 // ============================================================================
@@ -404,7 +480,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   try {
     switch (type) {
       case 'initialize': {
-        const versions = await initializePyodide();
+        const versions = await initializePyodide(id);
         sendResponse({ type: 'ready', payload: versions });
         sendSuccess(id, versions);
         break;
@@ -435,6 +511,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break;
       case 'clearCache':
         await handleClearCache(id);
+        break;
+      case 'runPython':
+        await handleRunPython(id, request.payload);
         break;
       default:
         sendError(id, new Error(`Unknown message type: ${(request as any).type}`));

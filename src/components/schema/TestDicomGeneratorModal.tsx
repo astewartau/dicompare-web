@@ -4,8 +4,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { Acquisition, DicomField } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
-import { dicompareAPI } from '../../services/DicompareAPI';
-import { pyodideManager } from '../../services/PyodideManager';
+import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import { getFieldByKeyword } from '../../services/dicomFieldService';
 import { extractValidationFieldValues, generateTestDataFromSchema, generateValueFromField } from '../../utils/testDataGeneration';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -388,9 +387,8 @@ return test_data`;
     setCodeExecutionResult({ loading: true });
 
     try {
-      // Initialize Pyodide if needed
+      // Worker will be initialized automatically if needed
       if (!pyodideReady) {
-        await pyodideManager.initialize();
         setPyodideReady(true);
       }
 
@@ -444,7 +442,7 @@ except Exception as e:
 output
 `;
 
-      const result = await pyodideManager.runPython(wrappedCode);
+      const result = await dicompareAPI.runPython(wrappedCode);
 
       if (result === undefined || result === null) {
         throw new Error('No output from Python code execution');

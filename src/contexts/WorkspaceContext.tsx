@@ -33,6 +33,9 @@ export interface WorkspaceItem {
     schemaName: string;
     acquisitionName: string;
   };
+
+  // User notes about test data (for print report only, not exported to schema)
+  testDataNotes?: string;
 }
 
 // Schema metadata for export
@@ -98,6 +101,7 @@ interface WorkspaceContextType {
   uploadSchemaForItem: (id: string, files: FileList) => Promise<void>;  // Upload DICOMs to build schema for existing item
   detachData: (id: string) => void;
   detachSchema: (id: string) => void;
+  detachValidationData: (id: string) => void;  // Convert validation-subject to empty item (keeping attached schema if any)
   generateTestData: (id: string, getSchemaContent: (id: string) => Promise<string | null>) => Promise<void>;
 
   // Attachment selection (when multiple acquisitions found)
@@ -117,6 +121,9 @@ interface WorkspaceContextType {
   addValidationFunction: (id: string, func: SelectedValidationFunction) => void;
   updateValidationFunction: (id: string, index: number, func: SelectedValidationFunction) => void;
   deleteValidationFunction: (id: string, index: number) => void;
+
+  // Test data notes (for print report only)
+  updateTestDataNotes: (id: string, notes: string) => void;
 
   // Schema metadata
   setSchemaMetadata: (metadata: SchemaMetadata) => void;
@@ -191,6 +198,16 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       console.error('Failed to get schema acquisition:', error);
       return null;
     }
+  }, []);
+
+  // Helper to check if an item is completely empty and should be auto-removed
+  const isItemCompletelyEmpty = useCallback((item: WorkspaceItem): boolean => {
+    return (
+      item.source === 'empty' &&
+      !item.hasCreatedSchema &&
+      !item.attachedSchema &&
+      !item.attachedData
+    );
   }, []);
 
   // Add items from schema selections
@@ -323,30 +340,46 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   // Remove created schema from an item (detach the schema side, preserves attachedData)
+  // Auto-removes the item if it becomes completely empty
   const detachCreatedSchema = useCallback((id: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
+    setItems(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== id) return item;
 
-      return {
-        ...item,
-        hasCreatedSchema: false,
-        isEditing: false,
-        schemaOrigin: undefined,
-        // Note: attachedData is preserved, attachedSchema should already be undefined
-        // since hasCreatedSchema and attachedSchema are mutually exclusive
-        acquisition: {
-          ...item.acquisition,
-          protocolName: '',
-          seriesDescription: '',
-          acquisitionFields: [],
-          series: [],
-          validationFunctions: [],
-          detailedDescription: undefined,
-          tags: undefined
+        return {
+          ...item,
+          hasCreatedSchema: false,
+          isEditing: false,
+          schemaOrigin: undefined,
+          // Note: attachedData is preserved, attachedSchema should already be undefined
+          // since hasCreatedSchema and attachedSchema are mutually exclusive
+          acquisition: {
+            ...item.acquisition,
+            protocolName: '',
+            seriesDescription: '',
+            acquisitionFields: [],
+            series: [],
+            validationFunctions: [],
+            detailedDescription: undefined,
+            tags: undefined
+          }
+        };
+      });
+
+      // Check if item is now completely empty and needs removal
+      const targetItem = updated.find(item => item.id === id);
+      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
+
+      if (shouldRemove) {
+        // Navigate to "From data" view (queued with the items update)
+        if (selectedId === id) {
+          setSelectedId('__add_from_data__');
         }
-      };
-    }));
-  }, []);
+        return updated.filter(item => item.id !== id);
+      }
+      return updated;
+    });
+  }, [isItemCompletelyEmpty, selectedId]);
 
   // Select an item
   const selectItem = useCallback((id: string | null) => {
@@ -503,85 +536,164 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, [processFiles]);
 
   // Detach data
+  // Auto-removes the item if it becomes completely empty
   const detachData = useCallback((id: string) => {
-    setItems(prev => prev.map(item =>
-      item.id === id ? { ...item, attachedData: undefined } : item
-    ));
-  }, []);
+    setItems(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== id) return item;
+        return { ...item, attachedData: undefined };
+      });
 
-  // Detach schema (handles all item types, preserves attachedData)
-  const detachSchema = useCallback((id: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
+      // Check if item is now completely empty and needs removal
+      const targetItem = updated.find(item => item.id === id);
+      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
 
-      // For schema-sourced items, convert to empty item (preserving any attached data)
-      if (item.source === 'schema') {
-        return {
-          ...item,
-          source: 'empty' as const,
-          schemaOrigin: undefined,
-          attachedSchema: undefined,
-          hasCreatedSchema: false,
-          isEditing: false,
-          acquisition: {
-            id: item.id,
-            protocolName: '',
-            seriesDescription: '',
-            totalFiles: 0,
-            acquisitionFields: [],
-            series: [],
-            metadata: {}
-          },
-          // Keep the attached data if present
-          attachedData: item.attachedData
-        };
+      if (shouldRemove) {
+        // Navigate to "From data" view (queued with the items update)
+        if (selectedId === id) {
+          setSelectedId('__add_from_data__');
+        }
+        return updated.filter(item => item.id !== id);
       }
+      return updated;
+    });
+  }, [isItemCompletelyEmpty, selectedId]);
 
-      // For data-sourced items used as schema template, convert to empty (with or without attached data)
-      if (item.source === 'data' && item.dataUsageMode !== 'validation-subject') {
+  // Detach validation data (for validation-subject items)
+  // Converts to empty item, keeping attached schema if any
+  // Auto-removes the item if it becomes completely empty
+  const detachValidationData = useCallback((id: string) => {
+    setItems(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== id) return item;
+        if (item.source !== 'data' || item.dataUsageMode !== 'validation-subject') return item;
+
         return {
           ...item,
           source: 'empty' as const,
           dataUsageMode: undefined,
-          attachedSchema: undefined,
-          hasCreatedSchema: false,
-          isEditing: false,
           acquisition: {
             id: item.id,
-            protocolName: '',
+            protocolName: item.attachedSchema ? (item.acquisition.protocolName || '') : '',
             seriesDescription: '',
             totalFiles: 0,
             acquisitionFields: [],
             series: [],
             metadata: {}
           },
-          // Keep any attached data if present
-          attachedData: item.attachedData
-        };
-      }
+          // Keep the attached schema if present
+          attachedSchema: item.attachedSchema
+        } as WorkspaceItem;
+      });
 
-      // For empty items with attached schema, reset acquisition properties
-      if (item.source === 'empty' && item.attachedSchema) {
+      // Check if item is now completely empty and needs removal
+      const targetItem = updated.find(item => item.id === id);
+      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
+
+      if (shouldRemove) {
+        // Navigate to "From data" view (queued with the items update)
+        if (selectedId === id) {
+          setSelectedId('__add_from_data__');
+        }
+        return updated.filter(item => item.id !== id);
+      }
+      return updated;
+    });
+  }, [isItemCompletelyEmpty, selectedId]);
+
+  // Detach schema (handles all item types, preserves attachedData)
+  // Auto-removes the item if it becomes completely empty
+  const detachSchema = useCallback((id: string) => {
+    setItems(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== id) return item;
+
+        // For schema-sourced items, convert to empty item (preserving any attached data)
+        if (item.source === 'schema') {
+          return {
+            ...item,
+            source: 'empty' as const,
+            schemaOrigin: undefined,
+            attachedSchema: undefined,
+            hasCreatedSchema: false,
+            isEditing: false,
+            acquisition: {
+              id: item.id,
+              protocolName: '',
+              seriesDescription: '',
+              totalFiles: 0,
+              acquisitionFields: [],
+              series: [],
+              metadata: {}
+            },
+            // Keep the attached data if present
+            attachedData: item.attachedData
+          };
+        }
+        // For data-sourced items used as schema template, convert to empty (with or without attached data)
+        if (item.source === 'data' && item.dataUsageMode !== 'validation-subject') {
+          return {
+            ...item,
+            source: 'empty' as const,
+            dataUsageMode: undefined,
+            attachedSchema: undefined,
+            hasCreatedSchema: false,
+            isEditing: false,
+            acquisition: {
+              id: item.id,
+              protocolName: '',
+              seriesDescription: '',
+              totalFiles: 0,
+              acquisitionFields: [],
+              series: [],
+              metadata: {}
+            },
+            // Keep any attached data if present
+            attachedData: item.attachedData
+          };
+        }
+        // For empty items with attached schema, reset acquisition properties
+        if (item.source === 'empty' && item.attachedSchema) {
+          return {
+            ...item,
+            attachedSchema: undefined,
+            acquisition: {
+              ...item.acquisition,
+              protocolName: '',
+              seriesDescription: '',
+              tags: undefined
+            },
+            attachedData: item.attachedData
+          };
+        }
+        // For other items, just clear attachedSchema and preserve attachedData
         return {
           ...item,
           attachedSchema: undefined,
-          acquisition: {
-            ...item.acquisition,
-            protocolName: '',
-            seriesDescription: '',
-            tags: undefined
-          },
           attachedData: item.attachedData
         };
-      }
+      });
 
-      // For other items, just clear attachedSchema and preserve attachedData
-      return {
-        ...item,
-        attachedSchema: undefined,
-        attachedData: item.attachedData
-      };
-    }));
+      // Check if item is now completely empty and needs removal
+      const targetItem = updated.find(item => item.id === id);
+      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
+
+      if (shouldRemove) {
+        // Navigate to "From data" view (queued with the items update)
+        if (selectedId === id) {
+          setSelectedId('__add_from_data__');
+        }
+        return updated.filter(item => item.id !== id);
+      }
+      return updated;
+    });
+  }, [isItemCompletelyEmpty, selectedId]);
+
+  // Update test data notes (for print report only, not exported to schema)
+  const updateTestDataNotes = useCallback((id: string, notes: string) => {
+    setItems(prev => prev.map(item =>
+      item.id === id ? { ...item, testDataNotes: notes } : item
+    ));
   }, []);
 
   // Confirm attachment selection (when multiple acquisitions were found)
@@ -798,6 +910,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     uploadSchemaForItem,
     detachData,
     detachSchema,
+    detachValidationData,
     confirmAttachmentSelection,
     cancelAttachmentSelection,
     generateTestData,
@@ -813,6 +926,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     addValidationFunction,
     updateValidationFunction,
     deleteValidationFunction,
+    updateTestDataNotes,
     setSchemaMetadata,
     getSchemaExport,
     getSchemaAcquisition,

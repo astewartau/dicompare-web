@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSchemaContext } from '../contexts/SchemaContext';
 import { SchemaTemplate } from '../types/schema';
-import { dicompareAPI } from '../services/DicompareAPI';
+import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
 
 export interface SchemaAcquisition {
   id: string;

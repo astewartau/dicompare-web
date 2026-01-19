@@ -182,7 +182,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
                       title={showStatusMessages ? "Hide status messages" : "Show status messages"}
                     >
-                      {showStatusMessages ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      {showStatusMessages ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                     </button>
                   </div>
                 </th>

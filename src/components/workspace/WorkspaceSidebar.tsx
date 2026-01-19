@@ -84,16 +84,16 @@ const SortableWorkspaceItem: React.FC<{
             {hasSchema ? (
               <span className="text-brand-600 dark:text-brand-400 flex items-center">
                 <FileText className="h-3 w-3 mr-1" />
-                Schema
+                Reference
               </span>
             ) : (
               <span className="text-content-muted flex items-center">
                 <FileText className="h-3 w-3 mr-1" />
-                No schema
+                No reference
               </span>
             )}
             {hasData ? (
-              <span className="text-brand-600 dark:text-brand-400 flex items-center">
+              <span className="text-amber-600 dark:text-amber-400 flex items-center">
                 <FlaskConical className="h-3 w-3 mr-1" />
                 Data
               </span>
@@ -291,9 +291,13 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           </button>
         </div>
 
-        {/* Drop zone indicator */}
-        {isOverDropZone && items.length === 0 && (
-          <div className="p-3 text-center text-brand-600 dark:text-brand-400 text-sm border-2 border-dashed border-brand-500 rounded-lg bg-brand-50 dark:bg-brand-900/30">
+        {/* Drop zone indicator - always visible when From schema is open, highlighted when dragging */}
+        {(isSchemaLibrarySelected || isOverDropZone) && items.length === 0 && (
+          <div className={`p-3 text-center text-sm border-2 border-dashed rounded-lg transition-colors ${
+            isOverDropZone
+              ? 'text-brand-600 dark:text-brand-400 border-brand-500 bg-brand-50 dark:bg-brand-900/30'
+              : 'text-content-tertiary border-border-secondary bg-surface-secondary'
+          }`}>
             Drop to add
           </div>
         )}
@@ -314,9 +318,13 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           ))}
         </SortableContext>
 
-        {/* Drop zone indicator when items exist */}
-        {isOverDropZone && items.length > 0 && (
-          <div className="p-3 text-center text-brand-600 dark:text-brand-400 text-sm border-2 border-dashed border-brand-500 rounded-lg bg-brand-50 dark:bg-brand-900/30">
+        {/* Drop zone indicator when items exist - always visible when From schema is open */}
+        {(isSchemaLibrarySelected || isOverDropZone) && items.length > 0 && (
+          <div className={`p-3 text-center text-sm border-2 border-dashed rounded-lg transition-colors ${
+            isOverDropZone
+              ? 'text-brand-600 dark:text-brand-400 border-brand-500 bg-brand-50 dark:bg-brand-900/30'
+              : 'text-content-tertiary border-border-secondary bg-surface-secondary'
+          }`}>
             Drop to add
           </div>
         )}

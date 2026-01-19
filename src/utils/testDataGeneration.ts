@@ -1,7 +1,7 @@
 import { Acquisition, DicomField, Series, SelectedValidationFunction } from '../types';
 import { inferDataTypeFromValue } from './datatypeInference';
 import { getFieldByKeyword } from '../services/dicomFieldService';
-import { dicompareAPI } from '../services/DicompareAPI';
+import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
 import JSZip from 'jszip';
 
 export interface TestDataRow {

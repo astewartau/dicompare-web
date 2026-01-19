@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Edit2, Eye, Save } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Edit2, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -20,28 +20,40 @@ const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
   onSave,
   isReadOnly = false,
 }) => {
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [activeTab, setActiveTab] = useState<'preview' | 'edit'>('preview');
   const [editedDescription, setEditedDescription] = useState(description);
+  const lastSavedRef = useRef(description);
 
   useEffect(() => {
     setEditedDescription(description);
-    // Start in edit mode if description is empty and not read-only
-    setIsEditMode(!isReadOnly && !description);
+    lastSavedRef.current = description;
+    // Default to edit tab if description is empty and not read-only, otherwise preview
+    setActiveTab(!isReadOnly && !description ? 'edit' : 'preview');
   }, [description, isReadOnly]);
+
+  // Auto-save when switching tabs or closing
+  const saveIfChanged = () => {
+    if (onSave && editedDescription !== lastSavedRef.current) {
+      onSave(editedDescription);
+      lastSavedRef.current = editedDescription;
+    }
+  };
 
   if (!isOpen) return null;
 
-  const handleSave = () => {
-    if (onSave) {
-      onSave(editedDescription);
+  const handleTabChange = (tab: 'preview' | 'edit') => {
+    if (tab !== activeTab) {
+      // Save when leaving edit tab
+      if (activeTab === 'edit') {
+        saveIfChanged();
+      }
+      setActiveTab(tab);
     }
-    setIsEditMode(false);
-    onClose();
   };
 
   const handleClose = () => {
-    setEditedDescription(description);
-    setIsEditMode(false);
+    // Auto-save on close
+    saveIfChanged();
     onClose();
   };
 
@@ -50,52 +62,49 @@ const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
       <div className="bg-surface-primary rounded-lg max-w-4xl w-full h-[80vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center space-x-3">
+          <div>
             <h3 className="text-lg font-semibold text-content-primary">{title}</h3>
-            <span className="text-sm text-content-tertiary">Detailed Description</span>
+            <span className="text-sm text-content-tertiary">README</span>
           </div>
-          <div className="flex items-center space-x-2">
-            {!isReadOnly && (
-              <>
-                {/* Toggle between Edit and Preview */}
-                <button
-                  onClick={() => setIsEditMode(!isEditMode)}
-                  className="flex items-center px-3 py-1.5 text-sm text-content-secondary hover:text-content-primary border border-border-secondary rounded-md hover:bg-surface-secondary"
-                >
-                  {isEditMode ? (
-                    <>
-                      <Eye className="h-4 w-4 mr-1" />
-                      Preview
-                    </>
-                  ) : (
-                    <>
-                      <Edit2 className="h-4 w-4 mr-1" />
-                      Edit
-                    </>
-                  )}
-                </button>
-                {/* Save button always visible */}
-                <button
-                  onClick={handleSave}
-                  className="flex items-center px-3 py-1.5 text-sm text-white bg-brand-600 rounded-md hover:bg-brand-700"
-                >
-                  <Save className="h-4 w-4 mr-1" />
-                  Save
-                </button>
-              </>
-            )}
+          <button
+            onClick={handleClose}
+            className="p-1.5 text-content-tertiary hover:text-content-secondary rounded-md hover:bg-surface-secondary"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Tabs - underline style */}
+        {!isReadOnly && (
+          <div className="flex border-b border-border px-6">
             <button
-              onClick={handleClose}
-              className="p-1.5 text-content-tertiary hover:text-content-secondary rounded-md hover:bg-surface-secondary"
+              onClick={() => handleTabChange('edit')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'edit'
+                  ? 'border-brand-600 text-brand-600'
+                  : 'border-transparent text-content-tertiary hover:text-content-secondary'
+              }`}
             >
-              <X className="h-5 w-5" />
+              <Edit2 className="h-3.5 w-3.5 inline mr-1.5" />
+              Edit
+            </button>
+            <button
+              onClick={() => handleTabChange('preview')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'preview'
+                  ? 'border-brand-600 text-brand-600'
+                  : 'border-transparent text-content-tertiary hover:text-content-secondary'
+              }`}
+            >
+              <Eye className="h-3.5 w-3.5 inline mr-1.5" />
+              Preview
             </button>
           </div>
-        </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
-          {isEditMode ? (
+          {activeTab === 'edit' && !isReadOnly ? (
             <div className="h-full flex flex-col">
               <div className="text-xs text-content-tertiary mb-2">
                 Supports GitHub-flavored Markdown (headings, lists, tables, code blocks, etc.)
@@ -178,7 +187,7 @@ Add any technical details or vendor-specific information."
                   <p className="mb-2">No detailed description available.</p>
                   {!isReadOnly && (
                     <button
-                      onClick={() => setIsEditMode(true)}
+                      onClick={() => setActiveTab('edit')}
                       className="text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 underline"
                     >
                       Click to add one

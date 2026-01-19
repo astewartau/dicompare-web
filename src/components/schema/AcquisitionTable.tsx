@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText, Eye, EyeOff } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
-import { dicompareAPI } from '../../services/DicompareAPI';
+import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import FieldTable from './FieldTable';
 import SeriesTable from './SeriesTable';
 import DicomFieldSelector from '../common/DicomFieldSelector';
@@ -52,6 +52,8 @@ interface AcquisitionTableProps {
   onValidationFunctionAdd?: (func: SelectedValidationFunction) => void;
   onValidationFunctionUpdate?: (index: number, func: SelectedValidationFunction) => void;
   onValidationFunctionDelete?: (index: number) => void;
+  // Compliance results callback - called when validation results change
+  onComplianceResultsChange?: (results: ComplianceFieldResult[]) => void;
 }
 
 const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
@@ -86,6 +88,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   onValidationFunctionAdd,
   onValidationFunctionUpdate,
   onValidationFunctionDelete,
+  onComplianceResultsChange,
 }) => {
   const [isExpanded, setIsExpanded] = useState(!isCollapsed);
   const [showValidationLibrary, setShowValidationLibrary] = useState(false);
@@ -188,6 +191,14 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
     }
   }, [isComplianceMode, schemaId, schemaAcquisition, realAcquisition, schemaAcquisitionId, validationFunctions.length, isDataProcessing]);
 
+  // Notify parent when compliance results change (including when cleared)
+  useEffect(() => {
+    console.log('[AcquisitionTable] Notifying parent of compliance results change, count:', allComplianceResults.length);
+    if (onComplianceResultsChange) {
+      onComplianceResultsChange(allComplianceResults);
+    }
+  }, [allComplianceResults, onComplianceResultsChange]);
+
   const performValidationRuleCompliance = async () => {
     if (!realAcquisition || (!schemaId && !schemaAcquisition)) return;
 
@@ -219,6 +230,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       }
 
       // Store ALL validation results
+      console.log('[AcquisitionTable] Setting validation results, count:', validationResults.length);
       setAllComplianceResults(validationResults);
 
       // Filter to get validation rule results only
@@ -570,7 +582,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                   className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
                                   title={showRuleStatusMessages ? "Hide status messages" : "Show status messages"}
                                 >
-                                  {showRuleStatusMessages ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                  {showRuleStatusMessages ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                                 </button>
                               </div>
                             </th>
@@ -678,7 +690,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 schemaId={schemaId}
                 schemaAcquisitionId={schemaAcquisitionId}
                 acquisition={acquisition}
-                realAcquisition={realAcquisition}
                 getSchemaContent={getSchemaContent}
                 isDataProcessing={isDataProcessing}
                 complianceResultsProp={allComplianceResults.filter(r =>

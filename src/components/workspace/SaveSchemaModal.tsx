@@ -3,7 +3,7 @@ import { X, Download, Save, Loader2, CheckCircle, User, Plus, Tag } from 'lucide
 import { useWorkspace, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { useSchemaService } from '../../hooks/useSchemaService';
-import { dicompareAPI } from '../../services/DicompareAPI';
+import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 
 interface SaveSchemaModalProps {
   isOpen: boolean;

@@ -51,6 +51,7 @@ const UnifiedWorkspace: React.FC = () => {
     uploadSchemaForItem,
     detachData,
     detachSchema,
+    detachValidationData,
     confirmAttachmentSelection,
     cancelAttachmentSelection,
     generateTestData,
@@ -250,6 +251,13 @@ const UnifiedWorkspace: React.FC = () => {
     }
   }, [selectedId, detachData]);
 
+  // Detach validation data handler (for validation-subject items)
+  const handleDetachValidationData = useCallback(() => {
+    if (selectedId && selectedId !== ADD_NEW_ID) {
+      detachValidationData(selectedId);
+    }
+  }, [selectedId, detachValidationData]);
+
   // Generate test data handler
   const handleGenerateTestData = useCallback(async () => {
     if (selectedId && selectedId !== ADD_NEW_ID) {
@@ -407,6 +415,7 @@ const UnifiedWorkspace: React.FC = () => {
               onAttachData={handleAttachData}
               onUploadSchemaForItem={handleUploadSchemaForItem}
               onDetachData={handleDetachData}
+              onDetachValidationData={handleDetachValidationData}
               onAttachSchema={() => setShowAttachSchemaModal(true)}
               onDetachSchema={handleDetachSchema}
               onGenerateTestData={handleGenerateTestData}

@@ -1,8 +1,11 @@
-import React, { useCallback, useState, useEffect } from 'react';
-import { Upload, FileText, Plus, Edit2, Save, Database, Loader, X, Book, Pencil, FlaskConical, ShieldCheck, Eye, Download, Code, Settings, Check, AlertTriangle, Layers, ArrowRight } from 'lucide-react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { marked } from 'marked';
+import { Upload, FileText, Plus, Edit2, Save, Database, Loader, X, Book, Pencil, FlaskConical, ShieldCheck, Eye, Download, Code, Settings, Check, AlertTriangle, Layers, ArrowRight, FolderOpen, Printer, Copy } from 'lucide-react';
+import { formatFieldDisplay, buildValidationRuleFromField } from '../../utils/fieldFormatters';
 import { WorkspaceItem, ProcessingProgress, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { Acquisition, AcquisitionSelection } from '../../types';
+import { ComplianceFieldResult } from '../../types/schema';
 import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import AcquisitionTable from '../schema/AcquisitionTable';
 import InlineTagInput from '../common/InlineTagInput';
@@ -53,6 +56,7 @@ interface WorkspaceDetailPanelProps {
   onAttachData: (files: FileList) => void;
   onUploadSchemaForItem: (files: FileList) => void;  // Upload DICOMs to build schema for current item
   onDetachData: () => void;
+  onDetachValidationData: () => void;
   onAttachSchema: () => void;
   onDetachSchema: () => void;
   onGenerateTestData: () => void;
@@ -94,6 +98,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   onAttachData,
   onUploadSchemaForItem,
   onDetachData,
+  onDetachValidationData,
   onAttachSchema,
   onDetachSchema,
   onGenerateTestData,
@@ -146,11 +151,17 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
   const [pendingSaveJson, setPendingSaveJson] = useState<string | null>(null);
   const [existingSchemaId, setExistingSchemaId] = useState<string | null>(null);
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
+  const [showTestDataNotes, setShowTestDataNotes] = useState(false);
   const [loadedSchemaAcquisition, setLoadedSchemaAcquisition] = useState<Acquisition | null>(null);
+  const [cachedComplianceResults, setCachedComplianceResults] = useState<ComplianceFieldResult[]>([]);
+
+  // Use a ref to store latest compliance results for print view (refs update synchronously)
+  const complianceResultsRef = useRef<ComplianceFieldResult[]>([]);
 
   // Schema README modal state (with sidebar showing all acquisitions from schema)
   const [showReadmeModal, setShowReadmeModal] = useState(false);
@@ -176,6 +187,13 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       setLoadedSchemaAcquisition(null);
     }
   }, [selectedItem?.id, selectedItem?.source, selectedItem?.attachedSchema?.schemaId, selectedItem?.attachedSchema?.acquisitionId, getSchemaContent]);
+
+  // Clear cached compliance results when the reference (schema or data) changes
+  // This prevents stale results from appearing in print view after switching references
+  useEffect(() => {
+    complianceResultsRef.current = [];
+    setCachedComplianceResults([]);
+  }, [selectedItem?.id, selectedItem?.attachedSchema?.schemaId, selectedItem?.attachedSchema?.acquisitionId, selectedItem?.attachedData?.protocolName]);
 
   // Open README with sidebar showing all acquisitions from the schema
   const openReadmeWithSidebar = async () => {
@@ -373,6 +391,18 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  // Copy JSON to clipboard
+  const handleCopyJson = async () => {
+    if (!previewJson) return;
+    try {
+      await navigator.clipboard.writeText(previewJson);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
   // Generate JSON for saving
   const generateJsonForSave = async (): Promise<string | null> => {
     if (previewJson) return previewJson;
@@ -400,6 +430,497 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       return null;
     }
   };
+
+  // Print acquisition
+  const handlePrintAcquisition = useCallback(async () => {
+    if (!selectedItem) return;
+
+    // Compute flags inside callback to avoid initialization order issues
+    const flags = getItemFlags(selectedItem);
+    const { isEmptyItem, hasCreatedSchema, hasAttachedData, hasAttachedSchema, isUsedAsSchema } = flags;
+
+    // Determine schema acquisition (what we're validating against)
+    const schemaAcquisition = hasAttachedSchema && loadedSchemaAcquisition
+      ? loadedSchemaAcquisition
+      : (isEmptyItem && !hasCreatedSchema && !hasAttachedSchema && hasAttachedData && selectedItem.attachedData)
+        ? selectedItem.attachedData
+        : selectedItem.acquisition;
+
+    // Determine if we're in compliance mode
+    const isComplianceMode =
+      (selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject' && hasAttachedSchema) ||
+      (isUsedAsSchema && hasAttachedData) ||
+      (!isUsedAsSchema && hasAttachedSchema);
+
+    // Get the real data (if compliance mode)
+    const realAcquisition = isComplianceMode
+      ? (selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject'
+          ? selectedItem.acquisition
+          : isUsedAsSchema
+            ? selectedItem.attachedData
+            : selectedItem.acquisition)
+      : null;
+
+    // Use ref for compliance results (ref updates synchronously, state is async)
+    // This ensures print sees the latest results even if called right after setState
+    const complianceResults = isComplianceMode ? complianceResultsRef.current : [];
+
+    // Debug: Log compliance results in print view
+    console.log('[Print] isComplianceMode:', isComplianceMode);
+    console.log('[Print] complianceResultsRef.current length:', complianceResultsRef.current.length);
+    console.log('[Print] complianceResults:', complianceResults);
+
+    // Build header info
+    const schemaName = schemaAcquisition.protocolName || 'Acquisition';
+    const schemaDescription = schemaAcquisition.seriesDescription || '';
+    const dataName = realAcquisition?.protocolName || '';
+    const dataDescription = realAcquisition?.seriesDescription || '';
+
+    // Get schema source info (name, tags, authors) - be explicit about source to avoid stale data
+    let schemaSource = '';
+    let schemaTags: string[] = [];
+    let schemaAuthors: string[] = [];
+    let schemaVersion = '';
+
+    if (hasAttachedSchema && selectedItem.attachedSchema?.schema) {
+      // Use attached schema as the source
+      const schema = selectedItem.attachedSchema.schema;
+      // Get acquisition-specific tags if available, otherwise fall back to schema tags
+      const acquisitionTags = schemaAcquisition.tags || (schemaAcquisition as any).acquisitionTags;
+      schemaSource = schema.name || '';
+      schemaTags = acquisitionTags || schema.tags || [];
+      schemaAuthors = schema.authors || [];
+      schemaVersion = schema.version || '';
+    } else if (hasCreatedSchema && schemaMetadata) {
+      // Use schema metadata for user-created schemas
+      schemaSource = schemaMetadata.name || '';
+      schemaTags = schemaMetadata.tags || [];
+      schemaAuthors = schemaMetadata.authors || [];
+      schemaVersion = schemaMetadata.version || '';
+    } else if (selectedItem.schemaOrigin) {
+      // Use schema origin info
+      schemaSource = selectedItem.schemaOrigin.schemaName || '';
+    }
+
+    const fields = schemaAcquisition.acquisitionFields || [];
+    const series = schemaAcquisition.series || [];
+    const validationFunctions = schemaAcquisition.validationFunctions || [];
+
+    // Helper to normalize tag for comparison
+    const normalizeTag = (t: string) => t?.replace(/[(), ]/g, '').toUpperCase() || '';
+
+    // Helper to find compliance result for a field by tag, keyword, or name
+    const findFieldCompliance = (tag: string, fieldName?: string, keyword?: string) => {
+      return complianceResults.find(r => {
+        // Skip validation rules
+        if (r.validationType === 'validation_rule') return false;
+
+        // Try exact tag match first (most reliable)
+        if (tag && r.fieldPath === tag) return true;
+
+        // Try exact keyword match
+        if (keyword && r.fieldName === keyword) return true;
+
+        // Try exact name match
+        if (fieldName && r.fieldName === fieldName) return true;
+
+        // Try tag inclusion
+        if (tag && r.fieldPath?.includes(tag)) return true;
+
+        // Try normalized tag match
+        const normalizedTag = normalizeTag(tag);
+        if (normalizedTag && r.fieldPath && normalizeTag(r.fieldPath) === normalizedTag) return true;
+
+        return false;
+      });
+    };
+
+    // Helper to find compliance result for a validation rule
+    const findRuleCompliance = (ruleName: string) => {
+      return complianceResults.find(r =>
+        (r.validationType === 'validation_rule' || r.rule_name) &&
+        (r.rule_name === ruleName || r.fieldName === ruleName)
+      );
+    };
+
+    // Helper to escape HTML
+    const escapeHtml = (str: any) => {
+      if (str === null || str === undefined) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    };
+
+    // Determine if this is data-only (no schema attached or created)
+    const isDataOnly = !isUsedAsSchema && !hasAttachedSchema && !hasCreatedSchema;
+
+    // Build HTML for printing
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups to print the acquisition.');
+      return;
+    }
+
+    const fieldsHtml = fields.length > 0 ? `
+      <h2>Fields</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 30%">Field</th>
+            <th style="width: ${isComplianceMode ? '25%' : '50%'}">${isDataOnly ? 'Value' : 'Expected Value'}</th>
+            ${isComplianceMode ? '<th style="width: 25%">Actual Value</th><th style="width: 20%">Status</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+          ${fields.map(f => {
+            const fieldName = f.name || f.keyword || f.field || '';
+            const keyword = f.keyword || '';
+            const tag = f.tag || '';
+            // Build validation rule from field properties and format properly
+            const validationRule = buildValidationRuleFromField(f);
+            const expectedValue = escapeHtml(formatFieldDisplay(f.value, validationRule, { showValue: true, showConstraint: true }));
+
+            // Get compliance result from dicompare (via cached results)
+            const fieldCompliance = isComplianceMode ? findFieldCompliance(tag, fieldName, keyword) : null;
+
+            // Use actual value from dicompare compliance result
+            const actualValue = fieldCompliance?.actualValue;
+            const actualDisplay = actualValue !== null && actualValue !== undefined
+              ? escapeHtml(formatFieldDisplay(actualValue, undefined, { showValue: true, showConstraint: false }))
+              : '<span class="na">—</span>';
+
+            // Use status from dicompare compliance result
+            let status = '';
+            let statusClass = '';
+            if (fieldCompliance) {
+              status = fieldCompliance.message || (fieldCompliance.status === 'pass' ? 'Passed' : 'Failed');
+              statusClass = fieldCompliance.status === 'pass' ? 'pass' :
+                           fieldCompliance.status === 'fail' ? 'fail' :
+                           fieldCompliance.status === 'warning' ? 'warning' : 'unknown';
+            } else if (isComplianceMode) {
+              status = 'Checking...'; statusClass = 'unknown';
+            }
+
+            return `
+              <tr>
+                <td><span class="field-name">${escapeHtml(fieldName)}</span>${tag ? ` <code>${escapeHtml(tag)}</code>` : ''}</td>
+                <td>${expectedValue}</td>
+                ${isComplianceMode ? `<td>${actualDisplay}</td><td class="${statusClass}">${status}</td>` : ''}
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    ` : '';
+
+    // Build series table - collect all unique fields across all series
+    const allSeriesFields: Array<{ tag: string; name: string; keyword?: string }> = [];
+    const seenFieldKeys = new Set<string>();
+    series.forEach(s => {
+      const seriesFields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+      seriesFields.forEach((f: any) => {
+        const fieldKey = f.tag || f.name;
+        if (!seenFieldKeys.has(fieldKey)) {
+          seenFieldKeys.add(fieldKey);
+          allSeriesFields.push({ tag: f.tag || '', name: f.name || f.keyword || f.field || '', keyword: f.keyword });
+        }
+      });
+    });
+
+    const seriesHtml = series.length > 0 && allSeriesFields.length > 0 ? `
+      <h2>Series</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Series</th>
+            ${allSeriesFields.map(f => `<th><span class="field-name">${escapeHtml(f.keyword || f.name)}</span>${f.tag ? ` <code>${escapeHtml(f.tag)}</code>` : ''}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${series.map((s, i) => {
+            const seriesFields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+            return `
+              <tr>
+                <td><span class="field-name">${escapeHtml(s.name || `Series ${i + 1}`)}</span></td>
+                ${allSeriesFields.map(headerField => {
+                  const field = seriesFields.find((f: any) => (f.tag || f.name) === (headerField.tag || headerField.name));
+                  const value = field?.value !== undefined ? escapeHtml(field.value) : '—';
+                  return `<td>${value}</td>`;
+                }).join('')}
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    ` : '';
+
+    // Calculate unchecked fields (fields in data not validated by schema)
+    let uncheckedFields: Array<{ name?: string; keyword?: string; tag: string; value?: any }> = [];
+    if (isComplianceMode && realAcquisition) {
+      const realFields = realAcquisition.acquisitionFields || [];
+      const schemaFields = fields;
+
+      // Get all field identifiers from the schema
+      const schemaFieldIds = new Set<string>();
+      const schemaKeywords = new Set<string>();
+      const schemaNames = new Set<string>();
+
+      schemaFields.forEach(f => {
+        const normalizedTag = normalizeTag(f.tag);
+        if (normalizedTag) schemaFieldIds.add(normalizedTag);
+        if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
+        if (f.name) schemaNames.add(f.name.toLowerCase());
+      });
+
+      // Also include series fields from schema
+      series.forEach(s => {
+        const seriesFields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+        seriesFields.forEach((f: any) => {
+          const normalizedTag = normalizeTag(f.tag);
+          if (normalizedTag) schemaFieldIds.add(normalizedTag);
+          if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
+          if (f.name) schemaNames.add(f.name.toLowerCase());
+        });
+      });
+
+      // Find fields in realAcquisition that aren't in the schema
+      if (schemaFieldIds.size > 0 || schemaKeywords.size > 0 || schemaNames.size > 0) {
+        uncheckedFields = realFields.filter(f => {
+          const normalizedTag = normalizeTag(f.tag);
+          const hasTag = normalizedTag && schemaFieldIds.has(normalizedTag);
+          const hasKeyword = f.keyword && schemaKeywords.has(f.keyword.toLowerCase());
+          const hasName = f.name && schemaNames.has(f.name.toLowerCase());
+          return !hasTag && !hasKeyword && !hasName;
+        });
+      }
+    }
+
+    const uncheckedFieldsHtml = uncheckedFields.length > 0 ? `
+      <div class="unchecked-section">
+        <h2 class="unchecked-header">${uncheckedFields.length} field${uncheckedFields.length === 1 ? '' : 's'} in data not validated by schema</h2>
+        <table class="unchecked-table">
+        <thead>
+          <tr>
+            <th style="width: 40%">Field</th>
+            <th style="width: 60%">Value in Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${uncheckedFields.map(f => {
+            const fieldName = f.name || f.keyword || '';
+            const tag = f.tag || '';
+            return `
+              <tr>
+                <td><span class="field-name">${escapeHtml(fieldName)}</span>${tag ? ` <code>${escapeHtml(tag)}</code>` : ''}</td>
+                <td>${escapeHtml(f.value)}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>
+    ` : '';
+
+    // Get README content - check acquisition detailedDescription and schema metadata
+    const readmeContent = schemaAcquisition.detailedDescription || schemaMetadata?.description || '';
+
+    const readmeHtml = readmeContent ? `
+      <div class="readme-section">
+        <h2>Documentation</h2>
+        ${schemaSource ? `
+          <div class="readme-meta">
+            <div class="readme-meta-item"><strong>Schema:</strong> ${escapeHtml(schemaSource)}${schemaVersion ? ` v${escapeHtml(schemaVersion)}` : ''}</div>
+            ${schemaAuthors.length > 0 ? `<div class="readme-meta-item"><strong>Authors:</strong> ${schemaAuthors.map(a => escapeHtml(a)).join(', ')}</div>` : ''}
+          </div>
+        ` : ''}
+        <div class="readme-content">
+          ${marked.parse(readmeContent)}
+        </div>
+      </div>
+    ` : '';
+
+    // Test data notes (only shown in compliance mode when notes exist)
+    const testNotesHtml = (isComplianceMode && selectedItem.testDataNotes) ? `
+      <div class="test-notes-section">
+        <h2>Test Data Notes</h2>
+        <div class="test-notes-content">
+          ${marked.parse(selectedItem.testDataNotes)}
+        </div>
+      </div>
+    ` : '';
+
+    const rulesHtml = validationFunctions.length > 0 ? `
+      <h2>Validation Rules</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 25%">Rule</th>
+            <th style="width: ${isComplianceMode ? '45%' : '75%'}">Description</th>
+            ${isComplianceMode ? '<th style="width: 30%">Status</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+          ${validationFunctions.map(v => {
+            const ruleName = v.customName || v.name || 'Unnamed Rule';
+            const ruleDescription = v.customDescription || v.description || '';
+            const ruleFields = v.customFields || v.fields || [];
+
+            // Find compliance result for this rule
+            const ruleCompliance = isComplianceMode ? complianceResults.find(r =>
+              r.rule_name === ruleName ||
+              r.fieldName === ruleName
+            ) : null;
+
+            let ruleStatus = '';
+            let ruleStatusClass = '';
+            if (ruleCompliance) {
+              ruleStatus = ruleCompliance.message || (ruleCompliance.status === 'pass' ? 'OK' : 'Failed');
+              ruleStatusClass = ruleCompliance.status === 'pass' ? 'pass' :
+                               ruleCompliance.status === 'fail' ? 'fail' :
+                               ruleCompliance.status === 'warning' ? 'warning' : 'unknown';
+            } else if (isComplianceMode) {
+              ruleStatus = 'No result';
+              ruleStatusClass = 'unknown';
+            }
+
+            return `
+              <tr>
+                <td>
+                  <div class="field-name">${escapeHtml(ruleName)}</div>
+                  ${ruleFields.length > 0 ? `
+                    <div class="rule-fields">
+                      ${ruleFields.map(f => `<span class="field-tag-badge">${escapeHtml(f)}</span>`).join('')}
+                    </div>
+                  ` : ''}
+                </td>
+                <td>${escapeHtml(ruleDescription)}</td>
+                ${isComplianceMode ? `<td class="${ruleStatusClass}">${escapeHtml(ruleStatus)}</td>` : ''}
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    ` : '';
+
+    const primaryLabel = isDataOnly ? 'Data' : 'Reference';
+    const primaryItemClass = isDataOnly ? 'data' : 'schema';
+
+    const headerHtml = `
+      <div class="header-section">
+        <div class="header-row">
+          <div class="header-item ${primaryItemClass}">
+            <div class="header-label">${primaryLabel}</div>
+            ${schemaSource && !isDataOnly ? `<div class="schema-source">From <strong>${escapeHtml(schemaSource)}</strong>${schemaVersion ? ` v${escapeHtml(schemaVersion)}` : ''}</div>` : ''}
+            <div class="header-title">${escapeHtml(schemaName)}</div>
+            ${schemaDescription ? `<div class="header-subtitle">${escapeHtml(schemaDescription)}</div>` : ''}
+            ${schemaTags.length > 0 && !isDataOnly ? `<div class="schema-tags">${schemaTags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+          </div>
+          ${isComplianceMode && realAcquisition ? `
+            <div class="header-item data">
+              <div class="header-label">Test Data</div>
+              <div class="header-title">${escapeHtml(dataName) || 'DICOM Data'}</div>
+              ${dataDescription ? `<div class="header-subtitle">${escapeHtml(dataDescription)}</div>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${schemaName} - Acquisition Details</title>
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              padding: 40px;
+              max-width: 1000px;
+              margin: 0 auto;
+              color: #1a1a1a;
+            }
+            .header-section { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #e5e5e5; }
+            .schema-source { font-size: 12px; color: #666; margin-bottom: 4px; }
+            .schema-source strong { color: #333; }
+            .schema-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+            .tag { display: inline-block; padding: 3px 10px; background: #e0e7ff; color: #3730a3; font-size: 11px; border-radius: 12px; font-weight: 500; }
+            .header-row { display: flex; gap: 40px; }
+            .header-item { flex: 1; }
+            .header-item.schema { border-left: 3px solid #2563eb; padding-left: 12px; }
+            .header-item.data { border-left: 3px solid #d97706; padding-left: 12px; }
+            .header-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #666; margin-bottom: 4px; }
+            .header-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+            .header-subtitle { font-size: 14px; color: #666; }
+            h2 { font-size: 16px; margin-top: 28px; margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 8px; color: #333; }
+            h3 { font-size: 14px; margin-top: 20px; margin-bottom: 8px; color: #444; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; }
+            th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; vertical-align: top; }
+            th { background: #f5f5f5; font-weight: 600; }
+            code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 10px; color: #666; }
+            .field-name { font-weight: 500; color: #1a1a1a; }
+            .rule-fields { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+            .field-tag-badge { display: inline-block; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; font-size: 10px; border-radius: 3px; }
+            .pass { color: #16a34a; font-weight: 500; }
+            .fail { color: #dc2626; font-weight: 500; }
+            .warning { color: #ca8a04; font-weight: 500; }
+            .unknown { color: #9ca3af; font-style: italic; }
+            .na { color: #9ca3af; }
+            .note { font-size: 11px; color: #666; font-style: italic; margin-top: 8px; }
+            .unchecked-section { margin-top: 24px; }
+            .unchecked-header { color: #333; margin-top: 0; }
+            .unchecked-table th { background: #f9fafb; }
+            .unchecked-table td { color: #1a1a1a; }
+            .readme-section { margin-top: 32px; padding-top: 24px; border-top: 2px solid #e5e5e5; }
+            .readme-meta { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; }
+            .readme-meta-item { font-size: 12px; color: #475569; margin: 4px 0; }
+            .readme-meta-item strong { color: #1e293b; }
+            .readme-content { font-size: 13px; line-height: 1.6; color: #333; }
+            .readme-content h2.readme-h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; border-bottom: none; padding-bottom: 0; }
+            .readme-content h3 { font-size: 15px; margin-top: 20px; margin-bottom: 8px; border-bottom: none; padding-bottom: 0; }
+            .readme-content h4 { font-size: 13px; margin-top: 16px; margin-bottom: 6px; }
+            .readme-content p { margin: 12px 0; }
+            .readme-content ul, .readme-content ol { margin: 12px 0; padding-left: 24px; }
+            .readme-content li { margin: 4px 0; }
+            .readme-content a { color: #2563eb; text-decoration: underline; }
+            .readme-content code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 11px; }
+            .test-notes-section { margin-top: 32px; padding-top: 24px; border-top: 2px solid #fbbf24; background: #fffbeb; border-radius: 8px; padding: 20px; }
+            .test-notes-section h2 { color: #92400e; margin-top: 0; margin-bottom: 16px; }
+            .test-notes-content { font-size: 13px; line-height: 1.6; color: #451a03; }
+            .test-notes-content h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; }
+            .test-notes-content h3 { font-size: 15px; margin-top: 20px; margin-bottom: 8px; }
+            .test-notes-content p { margin: 12px 0; }
+            .test-notes-content ul, .test-notes-content ol { margin: 12px 0; padding-left: 24px; }
+            .test-notes-content li { margin: 4px 0; }
+            .test-notes-content code { background: #fef3c7; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 11px; }
+            .print-date { color: #999; font-size: 11px; margin-top: 40px; text-align: center; }
+            @media print {
+              body { padding: 20px; }
+              h2 { page-break-after: avoid; }
+              table { page-break-inside: auto; }
+              tr { page-break-inside: avoid; }
+              thead { display: table-header-group; }
+              .unchecked-section { page-break-before: auto; }
+              .unchecked-header { page-break-after: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          ${headerHtml}
+          ${testNotesHtml}
+          ${rulesHtml}
+          ${fieldsHtml}
+          ${seriesHtml}
+          ${uncheckedFieldsHtml}
+          ${readmeHtml}
+          ${!fieldsHtml && !seriesHtml && !rulesHtml && !readmeHtml && !testNotesHtml ? '<p style="color: #666;">No fields, series, or validation rules defined.</p>' : ''}
+          <div class="print-date">Printed on ${new Date().toLocaleDateString()}</div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+  }, [selectedItem, loadedSchemaAcquisition, getSchemaContent, schemaMetadata]);
 
   // Perform the actual save
   const performSave = async (jsonToSave: string, overwriteId?: string) => {
@@ -501,107 +1022,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   if (isSchemaInfo) {
     return (
       <div className="border border-border rounded-lg bg-surface-primary shadow-sm flex flex-col h-full">
-        {/* Header with tabs */}
+        {/* Tab bar */}
         <div className="px-6 pt-4 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-semibold text-content-primary">Schema Information</h2>
-              <p className="text-sm text-content-secondary mt-1">
-                Define your schema's identity and documentation
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleDownloadJson}
-                disabled={isGeneratingPreview}
-                className="flex items-center px-3 py-2 text-sm border border-border-secondary rounded-lg hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed text-content-secondary"
-              >
-                <Download className="h-4 w-4 mr-1.5" />
-                Download JSON
-              </button>
-              <button
-                onClick={handleSaveToLibrary}
-                disabled={isGeneratingPreview || isSavingToLibrary || !isMetadataValid}
-                className="flex items-center px-3 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSavingToLibrary ? (
-                  <>
-                    <Loader className="h-4 w-4 mr-1.5 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-1.5" />
-                    Save to Library
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Success/Error Message */}
-          {saveMessage && (
-            <div className={`mt-3 px-3 py-2 rounded-lg text-sm flex items-center ${
-              saveMessage.type === 'success'
-                ? 'bg-status-success-bg text-status-success border border-status-success/30'
-                : 'bg-status-error-bg text-status-error border border-status-error/30'
-            }`}>
-              {saveMessage.type === 'success' ? (
-                <Check className="h-4 w-4 mr-2 flex-shrink-0" />
-              ) : (
-                <X className="h-4 w-4 mr-2 flex-shrink-0" />
-              )}
-              {saveMessage.text}
-              <button
-                onClick={() => setSaveMessage(null)}
-                className="ml-auto p-1 hover:bg-black/10 rounded"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          )}
-
-          {/* Overwrite Confirmation Dialog */}
-          {showOverwriteConfirm && (
-            <div className="mt-3 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                    Schema already exists
-                  </p>
-                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                    A schema named "{schemaMetadata?.name}" already exists in your library. What would you like to do?
-                  </p>
-                  <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={handleConfirmOverwrite}
-                      disabled={isSavingToLibrary}
-                      className="px-3 py-1.5 text-sm font-medium rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-                    >
-                      {isSavingToLibrary ? 'Saving...' : 'Overwrite'}
-                    </button>
-                    <button
-                      onClick={handleSaveAsNew}
-                      disabled={isSavingToLibrary}
-                      className="px-3 py-1.5 text-sm font-medium rounded-md border border-amber-600 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
-                    >
-                      Save as New
-                    </button>
-                    <button
-                      onClick={handleCancelOverwrite}
-                      disabled={isSavingToLibrary}
-                      className="px-3 py-1.5 text-sm font-medium rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Tabs */}
           <div className="flex gap-1">
             <button
               onClick={() => setSchemaInfoTab('welcome')}
@@ -639,6 +1061,125 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
           </div>
         </div>
 
+        {/* Action bar with buttons - only for Metadata and Preview tabs */}
+        {schemaInfoTab !== 'welcome' && (
+          <div className="px-6 py-3 border-b border-border">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider">
+                {schemaInfoTab === 'metadata' ? 'Schema Metadata' : 'JSON Preview'}
+              </h3>
+              <div className="flex items-center gap-2">
+                {schemaInfoTab === 'preview' && (
+                  <button
+                    onClick={handleCopyJson}
+                    disabled={isGeneratingPreview || !previewJson}
+                    className="flex items-center px-3 py-2 text-sm border border-border-secondary rounded-lg hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed text-content-secondary"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1.5" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1.5" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                )}
+                <button
+                  onClick={handleDownloadJson}
+                  disabled={isGeneratingPreview}
+                  className="flex items-center px-3 py-2 text-sm border border-border-secondary rounded-lg hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed text-content-secondary"
+                >
+                  <Download className="h-4 w-4 mr-1.5" />
+                  Download JSON
+                </button>
+                <button
+                  onClick={handleSaveToLibrary}
+                  disabled={isGeneratingPreview || isSavingToLibrary || !isMetadataValid}
+                  className="flex items-center px-3 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingToLibrary ? (
+                    <>
+                      <Loader className="h-4 w-4 mr-1.5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-1.5" />
+                      Save to Library
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Success/Error Message */}
+            {saveMessage && (
+              <div className={`mt-3 px-3 py-2 rounded-lg text-sm flex items-center ${
+                saveMessage.type === 'success'
+                  ? 'bg-status-success-bg text-status-success border border-status-success/30'
+                  : 'bg-status-error-bg text-status-error border border-status-error/30'
+              }`}>
+                {saveMessage.type === 'success' ? (
+                  <Check className="h-4 w-4 mr-2 flex-shrink-0" />
+                ) : (
+                  <X className="h-4 w-4 mr-2 flex-shrink-0" />
+                )}
+                {saveMessage.text}
+                <button
+                  onClick={() => setSaveMessage(null)}
+                  className="ml-auto p-1 hover:bg-black/10 rounded"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+
+            {/* Overwrite Confirmation Dialog */}
+            {showOverwriteConfirm && (
+              <div className="mt-3 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      Schema already exists
+                    </p>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                      A schema named "{schemaMetadata?.name}" already exists in your library. What would you like to do?
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={handleConfirmOverwrite}
+                        disabled={isSavingToLibrary}
+                        className="px-3 py-1.5 text-sm font-medium rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {isSavingToLibrary ? 'Saving...' : 'Overwrite'}
+                      </button>
+                      <button
+                        onClick={handleSaveAsNew}
+                        disabled={isSavingToLibrary}
+                        className="px-3 py-1.5 text-sm font-medium rounded-md border border-amber-600 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+                      >
+                        Save as New
+                      </button>
+                      <button
+                        onClick={handleCancelOverwrite}
+                        disabled={isSavingToLibrary}
+                        className="px-3 py-1.5 text-sm font-medium rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Content */}
         {schemaInfoTab === 'welcome' ? (
           <div className="flex-1 overflow-y-auto p-6">
@@ -660,7 +1201,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                       <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </h4>
                     <p className="text-sm text-content-secondary">
-                      Upload DICOM files or protocol exports to automatically extract acquisition parameters
+                      Load DICOM files or protocol files to automatically extract and compare acquisitions
                     </p>
                   </div>
                 </button>
@@ -696,7 +1237,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                   </div>
                   <div>
                     <p className="text-content-primary font-medium">Add acquisitions</p>
-                    <p className="text-sm text-content-secondary">Upload data to extract parameters, or select from existing schemas in the library</p>
+                    <p className="text-sm text-content-secondary">Load data to extract parameters, or select from existing schemas in the library</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -1015,14 +1556,14 @@ Any additional technical details or vendor-specific information."
       <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
         {/* Header with split layout */}
         <div className="px-6 py-4 border-b border-border">
-          {/* Split layout: Schema (left) | Data (right) */}
+          {/* Split layout: Reference (left) | Test data (right) */}
           <div className="grid grid-cols-2 gap-6">
-            {/* Left side - Schema */}
+            {/* Left side - Reference */}
             <div className="border-r border-border pr-6">
               <div className="flex items-center justify-between mb-3">
-                <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Schema</div>
+                <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Reference</div>
               </div>
-              {/* Schema attachment zone */}
+              {/* Reference attachment zone */}
               <div className="flex-1 min-w-0">
                 <div
                   className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
@@ -1037,7 +1578,7 @@ Any additional technical details or vendor-specific information."
                   {isProcessing && processingTarget === 'schema' ? (
                     <>
                       <Loader className="h-6 w-6 text-brand-600 mx-auto mb-2 animate-spin" />
-                      <p className="text-sm font-medium text-content-secondary mb-1">Processing...</p>
+                      <p className="text-sm font-medium text-content-secondary mb-1">{processingProgress?.currentOperation || 'Processing...'}</p>
                       {processingProgress && (
                         <div className="w-full max-w-[120px] mx-auto">
                           <div className="w-full bg-surface-tertiary rounded-full h-1.5">
@@ -1051,10 +1592,10 @@ Any additional technical details or vendor-specific information."
                     </>
                   ) : (
                     <>
-                      <Upload className={`h-6 w-6 mx-auto mb-2 ${schemaDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
-                      <p className="text-sm font-medium text-content-secondary mb-1">No schema</p>
+                      <Download className={`h-6 w-6 mx-auto mb-2 ${schemaDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
+                      <p className="text-sm font-medium text-content-secondary mb-1">No reference</p>
                       <p className="text-xs text-content-tertiary mb-3">
-                        Drop DICOMs or protocols to build a schema
+                        Drop DICOMs or protocols (.pro, .exar1, ExamCard)
                       </p>
                       <div className="flex flex-wrap items-center justify-center gap-2">
                         <input
@@ -1063,7 +1604,7 @@ Any additional technical details or vendor-specific information."
                           webkitdirectory=""
                           accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
                           className="hidden"
-                          id="staged-upload-schema"
+                          id="staged-load-schema"
                           disabled={isProcessing}
                           onChange={(e) => {
                             if (e.target.files) {
@@ -1072,31 +1613,32 @@ Any additional technical details or vendor-specific information."
                           }}
                         />
                         <label
-                          htmlFor="staged-upload-schema"
-                          className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md ${
+                          htmlFor="staged-load-schema"
+                          className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md ${
                             isProcessing
                               ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                               : 'text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer'
                           }`}
                         >
-                          <Upload className="h-4 w-4 mr-1" />
-                          Upload
+                          <FolderOpen className="h-4 w-4 mr-1" />
+                          Browse
                         </label>
                         <button
                           onClick={onStagedAttachSchema}
                           disabled={isProcessing}
-                          className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border ${
+                          className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md border ${
                             isProcessing
                               ? 'border-gray-300 text-gray-400 cursor-not-allowed'
                               : 'border-brand-600 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20'
                           }`}
                         >
-                          Choose
+                          <Book className="h-4 w-4 mr-1" />
+                          Library
                         </button>
                         <button
                           onClick={onStagedCreateBlank}
                           disabled={isProcessing}
-                          className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border ${
+                          className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md border ${
                             isProcessing
                               ? 'border-gray-300 text-gray-400 cursor-not-allowed'
                               : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
@@ -1112,10 +1654,10 @@ Any additional technical details or vendor-specific information."
               </div>
             </div>
 
-            {/* Right side - Test Data */}
+            {/* Right side - Test data */}
             <div className="pl-0">
               <div className="flex items-center justify-between mb-3">
-                <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Test Data</div>
+                <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Test data</div>
               </div>
               {/* Data attachment zone */}
               <div className="flex-1 min-w-0">
@@ -1132,7 +1674,7 @@ Any additional technical details or vendor-specific information."
                   {isProcessing && processingTarget === 'data' ? (
                     <>
                       <Loader className="h-6 w-6 text-brand-600 mx-auto mb-2 animate-spin" />
-                      <p className="text-sm font-medium text-content-secondary mb-1">Processing...</p>
+                      <p className="text-sm font-medium text-content-secondary mb-1">{processingProgress?.currentOperation || 'Processing...'}</p>
                       {processingProgress && (
                         <div className="w-full max-w-[120px] mx-auto">
                           <div className="w-full bg-surface-tertiary rounded-full h-1.5">
@@ -1146,16 +1688,16 @@ Any additional technical details or vendor-specific information."
                     </>
                   ) : (
                     <>
-                      <Upload className={`h-6 w-6 mx-auto mb-2 ${testDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
-                      <p className="text-sm font-medium text-content-secondary mb-1">No data</p>
-                      <p className="text-xs text-content-tertiary mb-3">Drop DICOMs to add test data</p>
+                      <Download className={`h-6 w-6 mx-auto mb-2 ${testDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
+                      <p className="text-sm font-medium text-content-secondary mb-1">No test data</p>
+                      <p className="text-xs text-content-tertiary mb-3">Drop DICOMs or protocols (.pro, .exar1, ExamCard)</p>
                       <div className="flex items-center justify-center gap-2">
                         <input
                           type="file"
                           multiple
                           webkitdirectory=""
                           className="hidden"
-                          id="staged-upload-data"
+                          id="staged-load-data"
                           disabled={isProcessing}
                           onChange={(e) => {
                             if (e.target.files) {
@@ -1164,13 +1706,14 @@ Any additional technical details or vendor-specific information."
                           }}
                         />
                         <label
-                          htmlFor="staged-upload-data"
-                          className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md ${
+                          htmlFor="staged-load-data"
+                          className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md ${
                             isProcessing
                               ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                               : 'text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer'
                           }`}
                         >
+                          <FolderOpen className="h-4 w-4 mr-1" />
                           Browse
                         </label>
                       </div>
@@ -1182,9 +1725,12 @@ Any additional technical details or vendor-specific information."
           </div>
         </div>
 
-        {/* Empty content area with hint */}
-        <div className="p-6 text-center text-content-tertiary">
-          <p className="text-sm">Upload data or select a schema to create a new acquisition</p>
+        {/* Privacy notice - prominent */}
+        <div className="px-6 py-4 bg-green-50 dark:bg-green-900/20 border-t border-green-200 dark:border-green-800">
+          <p className="text-sm text-green-800 dark:text-green-200 flex items-center justify-center gap-2 font-medium">
+            <ShieldCheck className="h-5 w-5 flex-shrink-0" />
+            <span>Your data never leaves your computer — all processing happens locally in your browser</span>
+          </p>
         </div>
       </div>
     );
@@ -1268,7 +1814,7 @@ Any additional technical details or vendor-specific information."
             {/* Source indicator for data items */}
             {!isSchema && selectedItem.source === 'data' && (
               <p className="text-xs text-content-tertiary mt-1">
-                {selectedItem.dataUsageMode === 'validation-subject' ? 'Test data' : 'Reference data'}
+                {selectedItem.dataUsageMode === 'validation-subject' ? 'Data attached for validation' : 'Reference data'}
               </p>
             )}
           </div>
@@ -1300,8 +1846,8 @@ Any additional technical details or vendor-specific information."
         return (
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg flex-shrink-0 bg-green-100 dark:bg-green-900/30">
-                <FileText className="h-5 w-5 text-green-600" />
+              <div className="p-2 rounded-lg flex-shrink-0 bg-brand-100 dark:bg-brand-900/30">
+                <FileText className="h-5 w-5 text-brand-600" />
               </div>
               <div className="flex-1 min-w-0">
                 <h4 className="text-lg font-semibold text-content-primary truncate">
@@ -1312,7 +1858,7 @@ Any additional technical details or vendor-specific information."
                     {selectedItem.attachedSchema.acquisitionName}
                   </p>
                 )}
-                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                <p className="text-xs text-content-tertiary mt-1">
                   Schema attached for validation
                 </p>
               </div>
@@ -1336,7 +1882,7 @@ Any additional technical details or vendor-specific information."
             {isProcessing && processingTarget === 'schema' ? (
               <>
                 <Loader className="h-6 w-6 text-brand-600 mx-auto mb-2 animate-spin" />
-                <p className="text-sm font-medium text-content-secondary mb-1">Processing...</p>
+                <p className="text-sm font-medium text-content-secondary mb-1">{processingProgress?.currentOperation || 'Processing...'}</p>
                 {processingProgress && (
                   <div className="w-full max-w-[120px] mx-auto">
                     <div className="w-full bg-surface-tertiary rounded-full h-1.5">
@@ -1350,10 +1896,10 @@ Any additional technical details or vendor-specific information."
               </>
             ) : (
               <>
-                <Upload className={`h-6 w-6 mx-auto mb-2 ${schemaDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
-                <p className="text-sm font-medium text-content-secondary mb-1">No schema</p>
+                <Download className={`h-6 w-6 mx-auto mb-2 ${schemaDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
+                <p className="text-sm font-medium text-content-secondary mb-1">No reference</p>
                 <p className="text-xs text-content-tertiary mb-3">
-                  Drop DICOMs or protocols to build a schema
+                  Drop DICOMs or protocols (.pro, .exar1, ExamCard)
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <input
@@ -1362,16 +1908,16 @@ Any additional technical details or vendor-specific information."
                     webkitdirectory=""
                     accept=".dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol"
                     className="hidden"
-                    id={`upload-schema-ref-${selectedItem.id}`}
+                    id={`load-schema-ref-${selectedItem.id}`}
                     disabled={isProcessing}
                     onChange={(e) => {
                       if (!e.target.files) return;
                       // For empty items or validation-subject items needing a schema,
-                      // upload to the current item (preserving attachedData)
+                      // load to the current item (preserving attachedData)
                       // For other cases, create new items
-                      const shouldUploadToCurrentItem = isEmptyItem ||
+                      const shouldLoadToCurrentItem = isEmptyItem ||
                         (selectedItem.dataUsageMode === 'validation-subject' && !hasSchema);
-                      if (shouldUploadToCurrentItem) {
+                      if (shouldLoadToCurrentItem) {
                         onUploadSchemaForItem(e.target.files);
                       } else {
                         onFileUpload(e.target.files, 'schema-template');
@@ -1379,33 +1925,34 @@ Any additional technical details or vendor-specific information."
                     }}
                   />
                   <label
-                    htmlFor={`upload-schema-ref-${selectedItem.id}`}
-                    className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md ${
+                    htmlFor={`load-schema-ref-${selectedItem.id}`}
+                    className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md ${
                       isProcessing
                         ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                         : 'text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer'
                     }`}
                   >
-                    <Upload className="h-4 w-4 mr-1" />
-                    Upload
+                    <FolderOpen className="h-4 w-4 mr-1" />
+                    Browse
                   </label>
                   <button
                     onClick={onAttachSchema}
                     disabled={isProcessing}
-                    className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border ${
+                    className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md border ${
                       isProcessing
                         ? 'border-gray-300 text-gray-400 cursor-not-allowed'
                         : 'border-brand-600 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20'
                     }`}
                   >
-                    Choose
+                    <Book className="h-4 w-4 mr-1" />
+                    Library
                   </button>
-                  {/* Only show Blank option if no data is attached - can't create blank schema when data exists */}
-                  {!hasAttachedData && (
+                  {/* Only show Blank option for empty items - can't create blank schema when data exists */}
+                  {!hasAttachedData && isEmptyItem && (
                     <button
                       onClick={onCreateSchema}
                       disabled={isProcessing}
-                      className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border ${
+                      className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md border ${
                         isProcessing
                           ? 'border-gray-300 text-gray-400 cursor-not-allowed'
                           : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
@@ -1428,8 +1975,8 @@ Any additional technical details or vendor-specific information."
         return (
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg flex-shrink-0 bg-green-100 dark:bg-green-900/30">
-                <Database className="h-5 w-5 text-green-600" />
+              <div className="p-2 rounded-lg flex-shrink-0 bg-amber-100 dark:bg-amber-900/30">
+                <Database className="h-5 w-5 text-amber-600" />
               </div>
               <div className="flex-1 min-w-0">
                 <h4 className="text-lg font-semibold text-content-primary">
@@ -1438,7 +1985,7 @@ Any additional technical details or vendor-specific information."
                 <p className="text-sm text-content-secondary truncate">
                   {selectedItem.attachedData.seriesDescription || `${selectedItem.attachedData.totalFiles || 0} files`}
                 </p>
-                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                <p className="text-xs text-content-tertiary mt-1">
                   Data attached for validation
                 </p>
               </div>
@@ -1462,7 +2009,7 @@ Any additional technical details or vendor-specific information."
             {isProcessing && processingTarget === 'data' ? (
               <>
                 <Loader className="h-6 w-6 text-brand-600 mx-auto mb-2 animate-spin" />
-                <p className="text-sm font-medium text-content-secondary mb-1">Processing...</p>
+                <p className="text-sm font-medium text-content-secondary mb-1">{processingProgress?.currentOperation || 'Processing...'}</p>
                 {processingProgress && (
                   <div className="w-full max-w-[120px] mx-auto">
                     <div className="w-full bg-surface-tertiary rounded-full h-1.5">
@@ -1476,41 +2023,30 @@ Any additional technical details or vendor-specific information."
               </>
             ) : (
               <>
-                <Upload className={`h-6 w-6 mx-auto mb-2 ${mainDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
-                <p className="text-sm font-medium text-content-secondary mb-1">No data</p>
-                <p className="text-xs text-content-tertiary mb-3">Drop DICOMs to validate against schema</p>
+                <Download className={`h-6 w-6 mx-auto mb-2 ${mainDropZone.isDragOver ? 'text-brand-600' : 'text-content-muted'}`} />
+                <p className="text-sm font-medium text-content-secondary mb-1">No test data</p>
+                <p className="text-xs text-content-tertiary mb-3">Drop DICOMs or protocols (.pro, .exar1, ExamCard)</p>
                 <div className="flex items-center justify-center gap-2">
                   <input
                     type="file"
                     multiple
                     webkitdirectory=""
                     className="hidden"
-                    id={`attach-data-header-${selectedItem.id}`}
+                    id={`load-data-${selectedItem.id}`}
                     disabled={isProcessing}
                     onChange={(e) => e.target.files && onAttachData(e.target.files)}
                   />
                   <label
-                    htmlFor={`attach-data-header-${selectedItem.id}`}
-                    className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md ${
+                    htmlFor={`load-data-${selectedItem.id}`}
+                    className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md ${
                       isProcessing
                         ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                         : 'text-content-inverted bg-brand-600 hover:bg-brand-700 cursor-pointer'
                     }`}
                   >
+                    <FolderOpen className="h-4 w-4 mr-1" />
                     Browse
                   </label>
-                  <button
-                    onClick={onGenerateTestData}
-                    disabled={isProcessing}
-                    className={`inline-flex items-center px-3 py-1.5 border text-sm rounded-md ${
-                      isProcessing
-                        ? 'border-gray-300 text-gray-400 cursor-not-allowed'
-                        : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
-                    }`}
-                    title="Generate test data"
-                  >
-                    <Database className="h-4 w-4" />
-                  </button>
                 </div>
               </>
             )}
@@ -1521,7 +2057,17 @@ Any additional technical details or vendor-specific information."
   };
 
   return (
-    <div className="bg-surface-primary rounded-lg border border-border shadow-sm">
+    <div className="bg-surface-primary rounded-lg border border-border shadow-sm relative">
+      {/* Print button as floating tab extending upward */}
+      <button
+        onClick={handlePrintAcquisition}
+        className="absolute -top-7 right-4 inline-flex items-center px-2.5 py-1.5 text-xs rounded-t border border-b-0 border-border bg-surface-primary text-content-secondary hover:bg-surface-secondary hover:text-content-primary z-10"
+        title="Print acquisition report"
+      >
+        <Printer className="h-3.5 w-3.5 mr-1" />
+        Print
+      </button>
+
       {/* Header with split layout */}
       <div className="px-6 py-4 border-b border-border">
         {/* Split layout: Schema (left) | Data (right) */}
@@ -1529,40 +2075,20 @@ Any additional technical details or vendor-specific information."
           {/* Left side - Schema */}
           <div className="border-r border-border pr-6">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Schema</div>
-              {/* Schema actions - README and Edit */}
+              {/* Left: label */}
+              <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Reference</div>
+              {/* Right: README, Edit, and X buttons */}
               {isUsedAsSchema && (
                 <div className="flex items-center gap-1.5">
-                  {/* README button */}
-                  {!selectedItem.isEditing ? (
-                    (() => {
-                      const hasReadme = selectedItem.acquisition.detailedDescription || selectedItem.schemaOrigin || selectedItem.attachedSchema;
-                      return (
-                        <button
-                          onClick={hasReadme ? openReadmeWithSidebar : undefined}
-                          disabled={!hasReadme}
-                          className={`inline-flex items-center px-2 py-1 border text-xs rounded ${
-                            hasReadme
-                              ? 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
-                              : 'border-border-secondary text-content-muted cursor-not-allowed opacity-50'
-                          }`}
-                          title={hasReadme ? "View documentation" : "No README available"}
-                        >
-                          <Book className="h-3.5 w-3.5 mr-1" />
-                          README
-                        </button>
-                      );
-                    })()
-                  ) : canEdit && !hasAttachedData && !hasAttachedSchema ? (
-                    <button
-                      onClick={() => setShowDetailedDescription(true)}
-                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
-                      title={selectedItem.acquisition.detailedDescription ? 'Edit detailed description' : 'Add detailed description'}
-                    >
-                      <Pencil className="h-3.5 w-3.5 mr-1" />
-                      README
-                    </button>
-                  ) : null}
+                  {/* README button - always opens editable modal */}
+                  <button
+                    onClick={() => setShowDetailedDescription(true)}
+                    className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
+                    title={selectedItem.acquisition.detailedDescription ? 'View/edit README' : 'Add README'}
+                  >
+                    <Book className="h-3.5 w-3.5 mr-1" />
+                    README
+                  </button>
 
                   {/* Edit toggle */}
                   {canEdit && (
@@ -1592,48 +2118,55 @@ Any additional technical details or vendor-specific information."
                     </button>
                   )}
 
-                  {/* Detach button for empty items with created schemas */}
-                  {isEmptyItem && hasCreatedSchema && !selectedItem.isEditing && (
-                    <button
-                      onClick={onDetachCreatedSchema}
-                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      title="Remove schema"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-
-                  {/* Detach button for empty items with attached schemas */}
-                  {isEmptyItem && hasAttachedSchema && !selectedItem.isEditing && (
-                    <button
-                      onClick={onDetachSchema}
-                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      title="Detach schema"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-
-                  {/* Detach button for data-sourced items used as schema template */}
-                  {selectedItem.source === 'data' && selectedItem.dataUsageMode !== 'validation-subject' && !selectedItem.isEditing && (
-                    <button
-                      onClick={onDetachSchema}
-                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      title="Detach schema"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-
-                  {/* Detach button for schema-sourced items (from library) */}
-                  {selectedItem.source === 'schema' && !selectedItem.isEditing && (
-                    <button
-                      onClick={onDetachSchema}
-                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      title="Detach schema"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                  {/* Detach X button */}
+                  {!selectedItem.isEditing && (
+                    <>
+                      {isEmptyItem && hasCreatedSchema && (
+                        <button
+                          onClick={onDetachCreatedSchema}
+                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="Remove schema"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {isEmptyItem && hasAttachedSchema && (
+                        <button
+                          onClick={onDetachSchema}
+                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="Detach schema"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {selectedItem.source === 'data' && selectedItem.dataUsageMode !== 'validation-subject' && (
+                        <button
+                          onClick={onDetachSchema}
+                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="Detach schema"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject' && hasAttachedSchema && (
+                        <button
+                          onClick={onDetachSchema}
+                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="Detach schema"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {selectedItem.source === 'schema' && (
+                        <button
+                          onClick={onDetachSchema}
+                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="Detach schema"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -1650,13 +2183,28 @@ Any additional technical details or vendor-specific information."
           {/* Right side - Data */}
           <div className="pl-0">
             <div className="flex items-center justify-between mb-3">
+              {/* Left: label */}
               <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Test data</div>
-              {/* Data actions - X button when data is attached */}
-              {hasAttachedData && (
-                <div className="flex items-center gap-1.5">
+              {/* Right: Notes button + X button when data is attached */}
+              {(hasAttachedData || (selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject')) && (
+                <div className="flex items-center gap-1">
                   <button
-                    onClick={onDetachData}
-                    className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-tertiary hover:text-red-600 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={() => setShowTestDataNotes(true)}
+                    className={`inline-flex items-center px-2 py-1 border text-xs rounded ${
+                      selectedItem.testDataNotes
+                        ? 'text-amber-700 border-amber-500/30 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-900/20 dark:hover:bg-amber-900/30'
+                        : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
+                    }`}
+                    title={selectedItem.testDataNotes ? 'View/edit notes' : 'Add notes'}
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    Notes
+                  </button>
+                  <button
+                    onClick={selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject'
+                      ? onDetachValidationData
+                      : onDetachData}
+                    className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
                     title="Detach data"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -1664,14 +2212,17 @@ Any additional technical details or vendor-specific information."
                 </div>
               )}
             </div>
-            {isUsedAsSchema ? (
+            {selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject' ? (
+              // This item IS the data (validation-subject) - show its info
+              renderAcquisitionInfo(false)
+            ) : isUsedAsSchema ? (
               // This item is schema - show data attachment zone
               renderAttachmentZone('data')
             ) : isEmptyItem ? (
               // Empty item - always show data attachment zone (whether data attached or not)
               renderAttachmentZone('data')
             ) : (
-              // This item IS the data (data-sourced) - show its info
+              // Fallback - show acquisition info
               renderAcquisitionInfo(false)
             )}
           </div>
@@ -1694,18 +2245,23 @@ Any additional technical details or vendor-specific information."
             isEditMode={selectedItem.isEditing}
             mode={
               // Compliance mode requires BOTH schema and data to compare
-              // - If item is used as schema: need attachedData for compliance
-              // - If item is used as data: need attachedSchema for compliance
-              (isUsedAsSchema && hasAttachedData) || (!isUsedAsSchema && hasAttachedSchema)
+              // - Validation-subject with attachedSchema: compliance mode
+              // - Schema items with attachedData: compliance mode
+              // - Empty items with attachedSchema: compliance mode (if also has data)
+              (selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject' && hasAttachedSchema) ||
+              (isUsedAsSchema && hasAttachedData) ||
+              (!isUsedAsSchema && hasAttachedSchema)
                 ? 'compliance'
                 : 'edit'
             }
             realAcquisition={
-              // For items used as schema, attached data is the "real" data to validate
               // For validation-subject items, the acquisition itself is the real data
-              isUsedAsSchema
-                ? selectedItem.attachedData     // Schema mode: attached data is real data
-                : selectedItem.acquisition      // Validation mode: acquisition is real data
+              // For other schema items, attached data is the "real" data to validate
+              selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject'
+                ? selectedItem.acquisition      // Validation-subject: acquisition is real data
+                : isUsedAsSchema
+                  ? selectedItem.attachedData   // Schema mode: attached data is real data
+                  : selectedItem.acquisition    // Fallback: acquisition is real data
             }
             schemaId={
               // Priority: attachedSchema > schemaOrigin
@@ -1741,21 +2297,38 @@ Any additional technical details or vendor-specific information."
             onValidationFunctionAdd={(func) => workspace.addValidationFunction(selectedItem.id, func)}
             onValidationFunctionUpdate={(index, func) => workspace.updateValidationFunction(selectedItem.id, index, func)}
             onValidationFunctionDelete={(index) => workspace.deleteValidationFunction(selectedItem.id, index)}
+            onComplianceResultsChange={(results) => {
+              console.log('[WorkspaceDetailPanel] Received compliance results from AcquisitionTable, count:', results.length);
+              // Update both state and ref - ref updates synchronously for print view
+              complianceResultsRef.current = results;
+              setCachedComplianceResults(results);
+            }}
           />
       </div>
 
 
-      {/* Detailed Description Modal - for editing mode or when no schema context */}
+      {/* Detailed Description Modal - always editable */}
       <DetailedDescriptionModal
         isOpen={showDetailedDescription}
         onClose={() => setShowDetailedDescription(false)}
         title={selectedItem.acquisition.protocolName || 'Acquisition'}
-        description={selectedItem.acquisition.detailedDescription || ''}
-        onSave={selectedItem.isEditing && !hasAttachedData && !hasAttachedSchema
-          ? (description) => onUpdateAcquisition({ detailedDescription: description })
-          : undefined
+        description={
+          // Use loaded schema acquisition's README as starting point when available (for Library-attached schemas)
+          // but allow editing to create custom README
+          selectedItem.acquisition.detailedDescription ||
+          (hasAttachedSchema && loadedSchemaAcquisition?.detailedDescription) ||
+          ''
         }
-        isReadOnly={!selectedItem.isEditing || hasAttachedData || hasAttachedSchema}
+        onSave={(description) => onUpdateAcquisition({ detailedDescription: description })}
+      />
+
+      {/* Test Data Notes Modal - for adding notes about test data (print report only) */}
+      <DetailedDescriptionModal
+        isOpen={showTestDataNotes}
+        onClose={() => setShowTestDataNotes(false)}
+        title={`Notes: ${selectedItem.attachedData?.protocolName || selectedItem.acquisition.protocolName || 'Test Data'}`}
+        description={selectedItem.testDataNotes || ''}
+        onSave={(notes) => workspace.updateTestDataNotes(selectedItem.id, notes)}
       />
 
       {/* Schema README Modal - for viewing mode with schema context (shows sidebar with all acquisitions) */}

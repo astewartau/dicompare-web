@@ -42,11 +42,12 @@ export function getItemFlags(item: WorkspaceItem): ItemFlags {
     hasAttachedData;
 
   // Item is "used as schema" when it represents the schema side
-  // (not just having an attached schema for validation)
+  // OR when it has an attached schema (for validation-subject items)
   const isUsedAsSchema = item.source === 'schema' ||
     (item.source === 'data' && item.dataUsageMode !== 'validation-subject') ||
     (isEmptyItem && hasCreatedSchema) ||
-    (isEmptyItem && hasAttachedSchema);
+    (isEmptyItem && hasAttachedSchema) ||
+    (item.source === 'data' && item.dataUsageMode === 'validation-subject' && hasAttachedSchema);
 
   return {
     isEmptyItem,

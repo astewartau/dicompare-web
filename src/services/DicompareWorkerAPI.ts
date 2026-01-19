@@ -106,13 +106,21 @@ class DicompareWorkerAPI {
   /**
    * Ensure Pyodide and dicompare are initialized
    */
-  async ensureInitialized(): Promise<void> {
+  async ensureInitialized(
+    onProgress?: (progress: ProgressPayload) => void
+  ): Promise<void> {
     if (this.initialized) {
       return;
     }
 
     if (!this.initializationPromise) {
-      this.initializationPromise = this.sendRequest<void>({ type: 'initialize' });
+      this.initializationPromise = this.sendRequest<void>(
+        { type: 'initialize' },
+        onProgress
+      );
+    } else if (onProgress) {
+      // If already initializing but caller wants progress, we can't provide it
+      // for the in-flight request, but we can at least await it
     }
 
     await this.initializationPromise;
@@ -145,7 +153,24 @@ class DicompareWorkerAPI {
     files: FileObject[],
     onProgress?: (progress: { currentFile: number; totalFiles: number; currentOperation: string; percentage: number }) => void
   ): Promise<UIAcquisition[]> {
-    await this.ensureInitialized();
+    // If not initialized, show init progress (0-30% of total)
+    const needsInit = !this.initialized;
+
+    if (needsInit && onProgress) {
+      const initProgressHandler = (p: ProgressPayload) => {
+        // Map init progress (0-100) to overall progress (0-30)
+        const scaledPercentage = Math.round(p.percentage * 0.3);
+        onProgress({
+          currentFile: 0,
+          totalFiles: files.length,
+          currentOperation: p.currentOperation || 'Initializing...',
+          percentage: scaledPercentage
+        });
+      };
+      await this.ensureInitialized(initProgressHandler);
+    } else {
+      await this.ensureInitialized();
+    }
 
     console.log(`[DicompareWorkerAPI] Analyzing ${files.length} files...`);
 
@@ -155,11 +180,15 @@ class DicompareWorkerAPI {
 
     const progressHandler = onProgress
       ? (p: ProgressPayload) => {
+          // Map file processing progress (0-100) to overall progress (30-100)
+          const basePercentage = needsInit ? 30 : 0;
+          const scaleFactor = needsInit ? 0.7 : 1;
+          const scaledPercentage = Math.round(basePercentage + (p.percentage || 0) * scaleFactor);
           onProgress({
             currentFile: p.totalProcessed || 0,
             totalFiles: p.totalFiles || files.length,
             currentOperation: p.currentOperation || 'Processing...',
-            percentage: p.percentage || 0
+            percentage: scaledPercentage
           });
         }
       : undefined;
@@ -571,6 +600,19 @@ class DicompareWorkerAPI {
   }> {
     await this.ensureInitialized();
     return this.sendRequest({ type: 'categorizeFields', payload: { fields, testData } });
+  }
+
+  // ==========================================================================
+  // Python Execution
+  // ==========================================================================
+
+  /**
+   * Run arbitrary Python code and return the result.
+   * Used for custom code execution (e.g., test data generation scripts).
+   */
+  async runPython(code: string): Promise<any> {
+    await this.ensureInitialized();
+    return this.sendRequest({ type: 'runPython', payload: { code } });
   }
 
   // ==========================================================================
