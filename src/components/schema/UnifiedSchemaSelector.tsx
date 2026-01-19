@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, Pencil } from 'lucide-react';
-import { useDraggable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
 import { Acquisition, AcquisitionSelection } from '../../types';
+import DeleteConfirmModal from './DeleteConfirmModal';
+import { DraggableSchema, DraggableAcquisition } from './DraggableComponents';
 
 interface UnifiedSchemaSelectorProps {
   // Data
@@ -43,146 +43,6 @@ interface UnifiedSchemaSelectorProps {
   // Edit support (load schema into workspace for editing)
   onSchemaEdit?: (schemaId: string) => void;
 }
-
-interface DeleteConfirmModalProps {
-  isOpen: boolean;
-  schemaName: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
-
-const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
-  isOpen,
-  schemaName,
-  onConfirm,
-  onCancel
-}) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-surface-primary rounded-lg max-w-md w-full p-6">
-        <div className="flex items-start mb-4">
-          <div className="flex-shrink-0">
-            <div className="h-12 w-12 rounded-full bg-status-error-bg flex items-center justify-center">
-              <Trash2 className="h-6 w-6 text-status-error" />
-            </div>
-          </div>
-          <div className="ml-4 flex-1">
-            <h3 className="text-lg font-medium text-content-primary">Delete Schema</h3>
-            <p className="mt-2 text-sm text-content-secondary">
-              Are you sure you want to delete <strong>{schemaName}</strong>? This action cannot be undone.
-            </p>
-          </div>
-        </div>
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-content-secondary bg-surface-primary border border-border-secondary rounded-md hover:bg-surface-secondary"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 text-sm font-medium text-content-inverted bg-status-error border border-transparent rounded-md hover:opacity-90"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Draggable wrapper for schema headers (drags entire schema with all acquisitions)
-interface DraggableSchemaProps {
-  schemaId: string;
-  schemaName: string;
-  acquisitionCount: number;
-  enabled: boolean;
-  children: React.ReactNode;
-}
-
-const DraggableSchema: React.FC<DraggableSchemaProps> = ({
-  schemaId,
-  schemaName,
-  acquisitionCount,
-  enabled,
-  children
-}) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `schema-drag-${schemaId}`,
-    data: {
-      type: 'schema',
-      schemaId,
-      schemaName,
-      acquisitionCount
-    },
-    disabled: !enabled
-  });
-
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  if (!enabled) {
-    return <>{children}</>;
-  }
-
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      {children}
-    </div>
-  );
-};
-
-// Draggable wrapper for individual acquisition items
-interface DraggableAcquisitionProps {
-  selection: AcquisitionSelection;
-  acquisition: Acquisition;
-  schemaName: string;
-  tags?: string[];
-  enabled: boolean;
-  children: (isDraggable: boolean) => React.ReactNode;
-}
-
-const DraggableAcquisition: React.FC<DraggableAcquisitionProps> = ({
-  selection,
-  acquisition,
-  schemaName,
-  tags,
-  enabled,
-  children
-}) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `acq-drag-${selection.schemaId}-${selection.acquisitionIndex}`,
-    data: {
-      type: 'acquisition',
-      selection,
-      acquisition,
-      schemaName,
-      tags
-    },
-    disabled: !enabled
-  });
-
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0 : 1,  // Hide completely when dragging - overlay shows the preview
-  };
-
-  if (!enabled) {
-    return <>{children(false)}</>;
-  }
-
-  // Apply listeners to the entire wrapper so dragging works from anywhere on the card
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      {children(true)}
-    </div>
-  );
-};
 
 const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   librarySchemas,

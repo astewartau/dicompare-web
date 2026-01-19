@@ -495,30 +495,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           </div>
         )}
 
-        {/* Schema info or stats row */}
-        <div className="mt-1 text-xs text-content-tertiary">
-          {isSchemaMode ? (
-            <>
-              v{version || '1.0.0'} • {authors?.join(', ') || 'Schema Template'}
-            </>
-          ) : acquisition.totalFiles > 0 ? (
-            <>
-              {acquisition.totalFiles} files • {acquisition.acquisitionFields.length} fields
-              {hasSeriesFields && ` • ${acquisition.series?.reduce((count, s) => {
-                if (Array.isArray(s.fields)) return count + s.fields.length;
-                return count + (s.fields ? Object.keys(s.fields).length : 0);
-              }, 0) || 0} varying`}
-            </>
-          ) : (
-            <>
-              {acquisition.acquisitionFields.length} fields
-              {hasSeriesFields && ` • ${acquisition.series?.reduce((count, s) => {
-                if (Array.isArray(s.fields)) return count + s.fields.length;
-                return count + (s.fields ? Object.keys(s.fields).length : 0);
-              }, 0) || 0} varying`}
-            </>
-          )}
-        </div>
+        {/* Schema info row */}
+        {isSchemaMode && (
+          <div className="mt-1 text-xs text-content-tertiary">
+            v{version || '1.0.0'} • {authors?.join(', ') || 'Schema Template'}
+          </div>
+        )}
       </div>
       )}
 

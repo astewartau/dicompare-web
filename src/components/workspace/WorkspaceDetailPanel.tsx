@@ -13,6 +13,7 @@ import { useSchemaContext } from '../../contexts/SchemaContext';
 import { useTagSuggestions } from '../../hooks/useTagSuggestions';
 import { convertSchemaToAcquisition } from '../../utils/schemaToAcquisition';
 import { buildReadmeItems } from '../../utils/readmeHelpers';
+import { fetchAndParseSchema } from '../../utils/schemaHelpers';
 import { getItemFlags } from '../../utils/workspaceHelpers';
 import { generatePrintReportHtml, openPrintWindow } from '../../utils/printReportGenerator';
 import { useDropZone } from '../../hooks/useDropZone';
@@ -29,8 +30,6 @@ interface WorkspaceDetailPanelProps {
   isSchemaInfo: boolean;
   schemaInfoTab: SchemaInfoTab;
   setSchemaInfoTab: (tab: SchemaInfoTab) => void;
-  activeTab: 'schema' | 'data';
-  setActiveTab: (tab: 'schema' | 'data') => void;
   isProcessing: boolean;
   processingProgress: ProcessingProgress | null;
   pendingSchemaSelections: AcquisitionSelection[];
@@ -42,8 +41,6 @@ interface WorkspaceDetailPanelProps {
   onSchemaToggle: (selection: AcquisitionSelection) => void;
   onConfirmSchemas: () => void;
   onFileUpload: (files: FileList | null, mode?: 'schema-template' | 'validation-subject') => void;
-  onAddFromScratch: () => void;
-  onAddEmpty: () => void;
   onCreateSchema: () => void;  // Create schema for current empty item
   onDetachCreatedSchema: () => void;  // Detach created schema from current item
   onToggleEditing: () => void;
@@ -71,8 +68,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   isSchemaInfo,
   schemaInfoTab,
   setSchemaInfoTab,
-  activeTab,
-  setActiveTab,
   isProcessing,
   processingProgress,
   pendingSchemaSelections,
@@ -84,8 +79,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   onSchemaToggle,
   onConfirmSchemas,
   onFileUpload,
-  onAddFromScratch,
-  onAddEmpty,
   onCreateSchema,
   onDetachCreatedSchema,
   onToggleEditing,
@@ -140,7 +133,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
   const [showTestDataNotes, setShowTestDataNotes] = useState(false);
   const [loadedSchemaAcquisition, setLoadedSchemaAcquisition] = useState<Acquisition | null>(null);
-  const [cachedComplianceResults, setCachedComplianceResults] = useState<ComplianceFieldResult[]>([]);
 
   // Use a ref to store latest compliance results for print view (refs update synchronously)
   const complianceResultsRef = useRef<ComplianceFieldResult[]>([]);
@@ -174,7 +166,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   // This prevents stale results from appearing in print view after switching references
   useEffect(() => {
     complianceResultsRef.current = [];
-    setCachedComplianceResults([]);
   }, [selectedItem?.id, selectedItem?.attachedSchema?.schemaId, selectedItem?.attachedSchema?.acquisitionId, selectedItem?.attachedData?.protocolName]);
 
   // Open README with sidebar showing all acquisitions from the schema
@@ -192,24 +183,18 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       return;
     }
 
-    try {
-      const content = await getSchemaContent(schemaId);
-      if (content) {
-        const schemaData = JSON.parse(content);
-        const schemaName = schemaData.name || selectedItem.schemaOrigin?.schemaName ||
-          selectedItem.attachedSchema?.schema.name || 'Schema';
-        setReadmeModalData({
-          schemaName,
-          readmeItems: buildReadmeItems(schemaData, schemaName),
-          initialSelection: `acquisition-${acquisitionIndex}`
-        });
-        setShowReadmeModal(true);
-      } else {
-        // Fallback to simple modal if schema content unavailable
-        setShowDetailedDescription(true);
-      }
-    } catch (error) {
-      console.error('Failed to load schema README:', error);
+    const schemaData = await fetchAndParseSchema(schemaId, getSchemaContent);
+    if (schemaData) {
+      const schemaName = schemaData.name || selectedItem.schemaOrigin?.schemaName ||
+        selectedItem.attachedSchema?.schema.name || 'Schema';
+      setReadmeModalData({
+        schemaName,
+        readmeItems: buildReadmeItems(schemaData, schemaName),
+        initialSelection: `acquisition-${acquisitionIndex}`
+      });
+      setShowReadmeModal(true);
+    } else {
+      // Fallback to simple modal if schema content unavailable
       setShowDetailedDescription(true);
     }
   };
@@ -310,8 +295,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     isUsedAsSchema,
   } = getItemFlags(selectedItem);
 
-  const canAttachData = hasSchema;
-  const canAttachSchema = !hasSchema && !hasCreatedSchema;
   const canEdit = hasSchema;
 
   // Helper to render acquisition info panel
@@ -566,55 +549,21 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                     </button>
                   )}
 
-                  {/* Detach X button */}
-                  {!selectedItem.isEditing && (
-                    <>
-                      {isEmptyItem && hasCreatedSchema && (
-                        <button
-                          onClick={onDetachCreatedSchema}
-                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                          title="Remove schema"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {isEmptyItem && hasAttachedSchema && (
-                        <button
-                          onClick={onDetachSchema}
-                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                          title="Detach schema"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {selectedItem.source === 'data' && selectedItem.dataUsageMode !== 'validation-subject' && (
-                        <button
-                          onClick={onDetachSchema}
-                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                          title="Detach schema"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject' && hasAttachedSchema && (
-                        <button
-                          onClick={onDetachSchema}
-                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                          title="Detach schema"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {selectedItem.source === 'schema' && (
-                        <button
-                          onClick={onDetachSchema}
-                          className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                          title="Detach schema"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </>
+                  {/* Detach X button - consolidated from multiple conditions */}
+                  {!selectedItem.isEditing && isUsedAsSchema && (
+                    <button
+                      onClick={() => {
+                        if (isEmptyItem && hasCreatedSchema) {
+                          onDetachCreatedSchema();
+                        } else {
+                          onDetachSchema();
+                        }
+                      }}
+                      className="inline-flex items-center p-1 text-content-tertiary hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                      title={isEmptyItem && hasCreatedSchema ? "Remove schema" : "Detach schema"}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               )}
@@ -746,10 +695,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             onValidationFunctionUpdate={(index, func) => workspace.updateValidationFunction(selectedItem.id, index, func)}
             onValidationFunctionDelete={(index) => workspace.deleteValidationFunction(selectedItem.id, index)}
             onComplianceResultsChange={(results) => {
-              console.log('[WorkspaceDetailPanel] Received compliance results from AcquisitionTable, count:', results.length);
-              // Update both state and ref - ref updates synchronously for print view
+              // Update ref synchronously for print view
               complianceResultsRef.current = results;
-              setCachedComplianceResults(results);
             }}
           />
       </div>

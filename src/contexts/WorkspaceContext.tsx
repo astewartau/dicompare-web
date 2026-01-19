@@ -6,60 +6,23 @@ import { useWorkspaceEditing } from '../hooks/useWorkspaceEditing';
 import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
 import { generateDicomsFromAcquisition } from '../utils/testDataGeneration';
 import { convertSchemaToAcquisition } from '../utils/schemaToAcquisition';
+import { createEmptyAcquisition } from '../utils/workspaceHelpers';
 
-// Core workspace item model
-export interface WorkspaceItem {
-  id: string;
-  acquisition: Acquisition;
-  source: 'schema' | 'data' | 'empty';  // 'empty' = created without initial content
-  isEditing: boolean;
+// Re-export types from workspace/types.ts for backwards compatibility
+export type {
+  WorkspaceItem,
+  SchemaMetadata,
+  ProcessingProgress,
+  PendingAttachmentSelection,
+} from './workspace/types';
 
-  // For data-sourced items: how should the data be used?
-  // - 'schema-template': Use extracted parameters to build a schema (can edit)
-  // - 'validation-subject': Validate this data against a schema (attach schema)
-  dataUsageMode?: 'schema-template' | 'validation-subject';
-
-  // For compliance - one of these may be set
-  attachedData?: Acquisition;         // Real DICOM data (when item has schema)
-  attachedSchema?: SchemaBinding;     // Schema to validate against (when item has data)
-
-  // Does this item have a user-created schema? (for empty items that got a schema created)
-  hasCreatedSchema?: boolean;
-
-  // Track origin for schema-sourced items
-  schemaOrigin?: {
-    schemaId: string;
-    acquisitionIndex: number;
-    schemaName: string;
-    acquisitionName: string;
-  };
-
-  // User notes about test data (for print report only, not exported to schema)
-  testDataNotes?: string;
-}
-
-// Schema metadata for export
-export interface SchemaMetadata {
-  name: string;
-  description: string;
-  authors: string[];
-  version: string;
-  tags?: string[];
-}
-
-// Processing progress
-export interface ProcessingProgress {
-  currentFile: number;
-  totalFiles: number;
-  currentOperation: string;
-  percentage: number;
-}
-
-// Pending attachment selection (when multiple acquisitions found)
-export interface PendingAttachmentSelection {
-  targetItemId: string;
-  acquisitions: Acquisition[];
-}
+import {
+  WorkspaceItem,
+  SchemaMetadata,
+  ProcessingProgress,
+  PendingAttachmentSelection,
+  DEFAULT_SCHEMA_METADATA,
+} from './workspace/types';
 
 interface WorkspaceContextType {
   // State
@@ -144,14 +107,6 @@ interface WorkspaceProviderProps {
   children: ReactNode;
 }
 
-// Default schema metadata
-const DEFAULT_SCHEMA_METADATA: SchemaMetadata = {
-  name: '',
-  description: '',
-  authors: [],
-  version: '1.0',
-};
-
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
   const [items, setItems] = useState<WorkspaceItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -209,6 +164,26 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       !item.attachedData
     );
   }, []);
+
+  // Helper to update an item and auto-remove if it becomes empty
+  const updateItemWithCleanup = useCallback((
+    id: string,
+    updateFn: (item: WorkspaceItem) => WorkspaceItem
+  ) => {
+    setItems(prev => {
+      const updated = prev.map(item => item.id === id ? updateFn(item) : item);
+      const targetItem = updated.find(item => item.id === id);
+      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
+
+      if (shouldRemove) {
+        if (selectedId === id) {
+          setSelectedId('__add_from_data__');
+        }
+        return updated.filter(item => item.id !== id);
+      }
+      return updated;
+    });
+  }, [isItemCompletelyEmpty, selectedId]);
 
   // Add items from schema selections
   const addFromSchema = useCallback(async (
@@ -274,19 +249,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   // Add a new empty acquisition from scratch (treated as a schema entry)
   const addFromScratch = useCallback((): string => {
     const newId = `ws_${Date.now()}_scratch`;
-    const newAcquisition: Acquisition = {
-      id: newId,
-      protocolName: 'New Acquisition',
-      seriesDescription: '',
-      totalFiles: 0,
-      acquisitionFields: [],
-      series: [],
-      metadata: {}
-    };
-
     const newItem: WorkspaceItem = {
       id: newId,
-      acquisition: newAcquisition,
+      acquisition: createEmptyAcquisition(newId, 'New Acquisition'),
       source: 'schema',  // Treated as schema - can only attach data for validation
       isEditing: true
     };
@@ -299,19 +264,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   // Add a truly empty item (no schema, no data)
   const addEmpty = useCallback((): string => {
     const newId = `ws_${Date.now()}_empty`;
-    const emptyAcquisition: Acquisition = {
-      id: newId,
-      protocolName: '',
-      seriesDescription: '',
-      totalFiles: 0,
-      acquisitionFields: [],
-      series: [],
-      metadata: {}
-    };
-
     const newItem: WorkspaceItem = {
       id: newId,
-      acquisition: emptyAcquisition,
+      acquisition: createEmptyAcquisition(newId),
       source: 'empty',
       isEditing: false
     };
@@ -342,44 +297,25 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   // Remove created schema from an item (detach the schema side, preserves attachedData)
   // Auto-removes the item if it becomes completely empty
   const detachCreatedSchema = useCallback((id: string) => {
-    setItems(prev => {
-      const updated = prev.map(item => {
-        if (item.id !== id) return item;
-
-        return {
-          ...item,
-          hasCreatedSchema: false,
-          isEditing: false,
-          schemaOrigin: undefined,
-          // Note: attachedData is preserved, attachedSchema should already be undefined
-          // since hasCreatedSchema and attachedSchema are mutually exclusive
-          acquisition: {
-            ...item.acquisition,
-            protocolName: '',
-            seriesDescription: '',
-            acquisitionFields: [],
-            series: [],
-            validationFunctions: [],
-            detailedDescription: undefined,
-            tags: undefined
-          }
-        };
-      });
-
-      // Check if item is now completely empty and needs removal
-      const targetItem = updated.find(item => item.id === id);
-      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
-
-      if (shouldRemove) {
-        // Navigate to "From data" view (queued with the items update)
-        if (selectedId === id) {
-          setSelectedId('__add_from_data__');
-        }
-        return updated.filter(item => item.id !== id);
+    updateItemWithCleanup(id, item => ({
+      ...item,
+      hasCreatedSchema: false,
+      isEditing: false,
+      schemaOrigin: undefined,
+      // Note: attachedData is preserved, attachedSchema should already be undefined
+      // since hasCreatedSchema and attachedSchema are mutually exclusive
+      acquisition: {
+        ...item.acquisition,
+        protocolName: '',
+        seriesDescription: '',
+        acquisitionFields: [],
+        series: [],
+        validationFunctions: [],
+        detailedDescription: undefined,
+        tags: undefined
       }
-      return updated;
-    });
-  }, [isItemCompletelyEmpty, selectedId]);
+    }));
+  }, [updateItemWithCleanup]);
 
   // Select an item
   const selectItem = useCallback((id: string | null) => {
@@ -538,156 +474,85 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   // Detach data
   // Auto-removes the item if it becomes completely empty
   const detachData = useCallback((id: string) => {
-    setItems(prev => {
-      const updated = prev.map(item => {
-        if (item.id !== id) return item;
-        return { ...item, attachedData: undefined };
-      });
-
-      // Check if item is now completely empty and needs removal
-      const targetItem = updated.find(item => item.id === id);
-      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
-
-      if (shouldRemove) {
-        // Navigate to "From data" view (queued with the items update)
-        if (selectedId === id) {
-          setSelectedId('__add_from_data__');
-        }
-        return updated.filter(item => item.id !== id);
-      }
-      return updated;
-    });
-  }, [isItemCompletelyEmpty, selectedId]);
+    updateItemWithCleanup(id, item => ({ ...item, attachedData: undefined }));
+  }, [updateItemWithCleanup]);
 
   // Detach validation data (for validation-subject items)
   // Converts to empty item, keeping attached schema if any
   // Auto-removes the item if it becomes completely empty
   const detachValidationData = useCallback((id: string) => {
-    setItems(prev => {
-      const updated = prev.map(item => {
-        if (item.id !== id) return item;
-        if (item.source !== 'data' || item.dataUsageMode !== 'validation-subject') return item;
+    updateItemWithCleanup(id, item => {
+      // Only process validation-subject items
+      if (item.source !== 'data' || item.dataUsageMode !== 'validation-subject') return item;
 
-        return {
-          ...item,
-          source: 'empty' as const,
-          dataUsageMode: undefined,
-          acquisition: {
-            id: item.id,
-            protocolName: item.attachedSchema ? (item.acquisition.protocolName || '') : '',
-            seriesDescription: '',
-            totalFiles: 0,
-            acquisitionFields: [],
-            series: [],
-            metadata: {}
-          },
-          // Keep the attached schema if present
-          attachedSchema: item.attachedSchema
-        } as WorkspaceItem;
-      });
-
-      // Check if item is now completely empty and needs removal
-      const targetItem = updated.find(item => item.id === id);
-      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
-
-      if (shouldRemove) {
-        // Navigate to "From data" view (queued with the items update)
-        if (selectedId === id) {
-          setSelectedId('__add_from_data__');
-        }
-        return updated.filter(item => item.id !== id);
-      }
-      return updated;
+      return {
+        ...item,
+        source: 'empty' as const,
+        dataUsageMode: undefined,
+        acquisition: createEmptyAcquisition(
+          item.id,
+          item.attachedSchema ? (item.acquisition.protocolName || '') : ''
+        ),
+        // Keep the attached schema if present
+        attachedSchema: item.attachedSchema
+      } as WorkspaceItem;
     });
-  }, [isItemCompletelyEmpty, selectedId]);
+  }, [updateItemWithCleanup]);
 
   // Detach schema (handles all item types, preserves attachedData)
   // Auto-removes the item if it becomes completely empty
   const detachSchema = useCallback((id: string) => {
-    setItems(prev => {
-      const updated = prev.map(item => {
-        if (item.id !== id) return item;
-
-        // For schema-sourced items, convert to empty item (preserving any attached data)
-        if (item.source === 'schema') {
-          return {
-            ...item,
-            source: 'empty' as const,
-            schemaOrigin: undefined,
-            attachedSchema: undefined,
-            hasCreatedSchema: false,
-            isEditing: false,
-            acquisition: {
-              id: item.id,
-              protocolName: '',
-              seriesDescription: '',
-              totalFiles: 0,
-              acquisitionFields: [],
-              series: [],
-              metadata: {}
-            },
-            // Keep the attached data if present
-            attachedData: item.attachedData
-          };
-        }
-        // For data-sourced items used as schema template, convert to empty (with or without attached data)
-        if (item.source === 'data' && item.dataUsageMode !== 'validation-subject') {
-          return {
-            ...item,
-            source: 'empty' as const,
-            dataUsageMode: undefined,
-            attachedSchema: undefined,
-            hasCreatedSchema: false,
-            isEditing: false,
-            acquisition: {
-              id: item.id,
-              protocolName: '',
-              seriesDescription: '',
-              totalFiles: 0,
-              acquisitionFields: [],
-              series: [],
-              metadata: {}
-            },
-            // Keep any attached data if present
-            attachedData: item.attachedData
-          };
-        }
-        // For empty items with attached schema, reset acquisition properties
-        if (item.source === 'empty' && item.attachedSchema) {
-          return {
-            ...item,
-            attachedSchema: undefined,
-            acquisition: {
-              ...item.acquisition,
-              protocolName: '',
-              seriesDescription: '',
-              tags: undefined
-            },
-            attachedData: item.attachedData
-          };
-        }
-        // For other items, just clear attachedSchema and preserve attachedData
+    updateItemWithCleanup(id, item => {
+      // For schema-sourced items, convert to empty item (preserving any attached data)
+      if (item.source === 'schema') {
+        return {
+          ...item,
+          source: 'empty' as const,
+          schemaOrigin: undefined,
+          attachedSchema: undefined,
+          hasCreatedSchema: false,
+          isEditing: false,
+          acquisition: createEmptyAcquisition(item.id),
+          // Keep the attached data if present
+          attachedData: item.attachedData
+        };
+      }
+      // For data-sourced items used as schema template, convert to empty (with or without attached data)
+      if (item.source === 'data' && item.dataUsageMode !== 'validation-subject') {
+        return {
+          ...item,
+          source: 'empty' as const,
+          dataUsageMode: undefined,
+          attachedSchema: undefined,
+          hasCreatedSchema: false,
+          isEditing: false,
+          acquisition: createEmptyAcquisition(item.id),
+          // Keep any attached data if present
+          attachedData: item.attachedData
+        };
+      }
+      // For empty items with attached schema, reset acquisition properties
+      if (item.source === 'empty' && item.attachedSchema) {
         return {
           ...item,
           attachedSchema: undefined,
+          acquisition: {
+            ...item.acquisition,
+            protocolName: '',
+            seriesDescription: '',
+            tags: undefined
+          },
           attachedData: item.attachedData
         };
-      });
-
-      // Check if item is now completely empty and needs removal
-      const targetItem = updated.find(item => item.id === id);
-      const shouldRemove = targetItem && isItemCompletelyEmpty(targetItem);
-
-      if (shouldRemove) {
-        // Navigate to "From data" view (queued with the items update)
-        if (selectedId === id) {
-          setSelectedId('__add_from_data__');
-        }
-        return updated.filter(item => item.id !== id);
       }
-      return updated;
+      // For other items, just clear attachedSchema and preserve attachedData
+      return {
+        ...item,
+        attachedSchema: undefined,
+        attachedData: item.attachedData
+      };
     });
-  }, [isItemCompletelyEmpty, selectedId]);
+  }, [updateItemWithCleanup]);
 
   // Update test data notes (for print report only, not exported to schema)
   const updateTestDataNotes = useCallback((id: string, notes: string) => {

@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader, X, Book, Edit2, Eye, Download, Code, Settings, Check, AlertTriangle, Layers, ArrowRight, Save, Copy, Upload, FileText } from 'lucide-react';
+import { Loader, X, Book, Edit2, Eye, Download, Code, Settings, Check, AlertTriangle, Layers, Save, Copy } from 'lucide-react';
 import { SchemaMetadata } from '../../../contexts/WorkspaceContext';
 import { useWorkspace } from '../../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../../contexts/SchemaContext';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { generateSchemaJson, downloadSchemaJson, copyToClipboard } from '../../../utils/schemaGeneration';
-import { ADD_NEW_ID, ADD_FROM_DATA_ID } from '../WorkspaceSidebar';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
+import WelcomeTab from './schemaInfo/WelcomeTab';
 
 export type SchemaInfoTab = 'welcome' | 'metadata' | 'preview';
 
@@ -450,94 +450,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
 
       {/* Content */}
       {schemaInfoTab === 'welcome' ? (
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* Quick Start */}
-          <div className="mb-8">
-            <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider mb-4">Get Started</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* From Data */}
-              <button
-                onClick={() => workspace.selectItem(ADD_FROM_DATA_ID)}
-                className="flex items-start gap-4 p-5 rounded-xl border-2 border-border hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-all text-left group"
-              >
-                <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg group-hover:scale-105 transition-transform">
-                  <Upload className="h-6 w-6 text-amber-600" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-content-primary mb-1 flex items-center">
-                    From Data
-                    <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </h4>
-                  <p className="text-sm text-content-secondary">
-                    Load DICOM files or protocol files to automatically extract and compare acquisitions
-                  </p>
-                </div>
-              </button>
-
-              {/* From Schema */}
-              <button
-                onClick={() => workspace.selectItem(ADD_NEW_ID)}
-                className="flex items-start gap-4 p-5 rounded-xl border-2 border-border hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-all text-left group"
-              >
-                <div className="p-3 bg-brand-100 dark:bg-brand-900/30 rounded-lg group-hover:scale-105 transition-transform">
-                  <FileText className="h-6 w-6 text-brand-600" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-content-primary mb-1 flex items-center">
-                    From Schema
-                    <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </h4>
-                  <p className="text-sm text-content-secondary">
-                    Browse the schema library and add existing acquisitions to your workspace
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* How it works */}
-          <div>
-            <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider mb-4">How It Works</h3>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-sm font-medium">
-                  1
-                </div>
-                <div>
-                  <p className="text-content-primary font-medium">Add acquisitions</p>
-                  <p className="text-sm text-content-secondary">Load data to extract parameters, or select from existing schemas in the library</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-sm font-medium">
-                  2
-                </div>
-                <div>
-                  <p className="text-content-primary font-medium">Edit and refine</p>
-                  <p className="text-sm text-content-secondary">Customize field requirements, add validation rules, and document your schema</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-sm font-medium">
-                  3
-                </div>
-                <div>
-                  <p className="text-content-primary font-medium">Validate data</p>
-                  <p className="text-sm text-content-secondary">Attach test data to verify compliance before exporting your schema</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-sm font-medium">
-                  4
-                </div>
-                <div>
-                  <p className="text-content-primary font-medium">Save and share</p>
-                  <p className="text-sm text-content-secondary">Download as JSON or save to your library for reuse</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <WelcomeTab />
       ) : schemaInfoTab === 'metadata' ? (
       <div className="flex-1 overflow-y-auto p-6">
         {/* Basic Info Section */}
