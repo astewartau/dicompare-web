@@ -3,6 +3,7 @@ import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, A
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
+import { normalizeTag } from '../../utils/stringHelpers';
 import FieldTable from './FieldTable';
 import SeriesTable from './SeriesTable';
 import DicomFieldSelector from '../common/DicomFieldSelector';
@@ -131,12 +132,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
     // If no real fields, nothing to show
     if (realFields.length === 0) return [];
-
-    // Normalize tag format: remove parentheses, spaces, commas and convert to uppercase
-    const normalizeTag = (tag: string | null | undefined): string | null => {
-      if (!tag) return null;
-      return tag.replace(/[(), ]/g, '').toUpperCase();
-    };
 
     // Get all field identifiers from the schema (normalized)
     const schemaFieldIds = new Set<string>();

@@ -47,8 +47,8 @@ const LandingPage: React.FC = () => {
                 MRI Protocol Validation for Global Collaboration
               </h2>
               <p className="text-xl text-content-secondary mb-10 drop-shadow-sm">
-                Validate your data against community protocols and standards. Build validation schemas for your study.
-                Perfect for multi-site studies and protocol compliance.
+                Validate your DICOMs against community protocols and standards. Build and share your own references for your study.
+                Generate and share your data compliance reports.
               </p>
 
               {/* Primary CTA */}
