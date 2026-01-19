@@ -8,7 +8,7 @@ MRI protocol validation for global collaboration. Validate your DICOMs against c
 
 The easiest way to use DICOMpare is through the web app:
 
-**[dicompare.vercel.app](https://dicompare.vercel.app)**
+**[dicompare-web.vercel.app](https://dicompare-web.vercel.app)**
 
 No installation required. Works in any modern browser.
 
