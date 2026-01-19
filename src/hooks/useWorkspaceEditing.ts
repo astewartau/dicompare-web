@@ -1,6 +1,6 @@
 import { useCallback, Dispatch, SetStateAction } from 'react';
 import { Acquisition, DicomField, Series, SeriesField, SelectedValidationFunction } from '../types';
-import { WorkspaceItem } from '../contexts/WorkspaceContext';
+import { WorkspaceItem } from '../contexts/workspace/types';
 import { searchDicomFields, suggestDataType, suggestValidationConstraint, isValidDicomTag } from '../services/dicomFieldService';
 import { convertValueToDataType, inferDataTypeFromValue } from '../utils/datatypeInference';
 import { getSuggestedToleranceValue } from '../utils/vrMapping';

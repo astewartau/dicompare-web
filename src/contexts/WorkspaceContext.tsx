@@ -1,12 +1,17 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useCallback, ReactNode, useRef, useState } from 'react';
 import { Acquisition, DicomField, Series, SeriesField, SelectedValidationFunction, AcquisitionSelection } from '../types';
 import { SchemaBinding, UnifiedSchema } from '../hooks/useSchemaService';
-import { useFileProcessing } from '../hooks/useFileProcessing';
-import { useWorkspaceEditing } from '../hooks/useWorkspaceEditing';
 import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
 import { generateDicomsFromAcquisition } from '../utils/testDataGeneration';
 import { convertSchemaToAcquisition } from '../utils/schemaToAcquisition';
 import { createEmptyAcquisition } from '../utils/workspaceHelpers';
+import { processUploadedFiles } from '../utils/fileUploadUtils';
+
+// Import from new contexts
+import { useProcessing } from './ProcessingContext';
+import { useSchemaMetadata } from './SchemaMetadataContext';
+import { useItemManagement } from './ItemManagementContext';
+import { useSchemaEditing } from './SchemaEditingContext';
 
 // Re-export types from workspace/types.ts for backwards compatibility
 export type {
@@ -30,7 +35,7 @@ interface WorkspaceContextType {
   selectedId: string | null;
   schemaMetadata: SchemaMetadata;
   isProcessing: boolean;
-  processingTarget: 'schema' | 'data' | 'addNew' | null;  // Which zone is processing
+  processingTarget: 'schema' | 'data' | 'addNew' | null;
   processingProgress: ProcessingProgress | null;
   processingError: string | null;
   pendingAttachmentSelection: PendingAttachmentSelection | null;
@@ -39,11 +44,11 @@ interface WorkspaceContextType {
   addFromSchema: (selections: AcquisitionSelection[], getSchemaContent: (id: string) => Promise<string | null>, getUnifiedSchema: (id: string) => UnifiedSchema | null) => Promise<void>;
   addFromData: (files: FileList, mode?: 'schema-template' | 'validation-subject') => Promise<void>;
   addFromScratch: () => string;
-  addEmpty: () => string;  // Create truly empty item (no schema, no data)
+  addEmpty: () => string;
 
   // Schema management for empty items
-  createSchemaForItem: (id: string) => void;  // Create empty schema for an item
-  detachCreatedSchema: (id: string) => void;  // Remove created schema from item
+  createSchemaForItem: (id: string) => void;
+  detachCreatedSchema: (id: string) => void;
 
   // Item management
   selectItem: (id: string | null) => void;
@@ -61,10 +66,10 @@ interface WorkspaceContextType {
   // Attachments
   attachData: (id: string, files: FileList) => Promise<void>;
   attachSchema: (id: string, binding: SchemaBinding) => void;
-  uploadSchemaForItem: (id: string, files: FileList) => Promise<void>;  // Upload DICOMs to build schema for existing item
+  uploadSchemaForItem: (id: string, files: FileList) => Promise<void>;
   detachData: (id: string) => void;
   detachSchema: (id: string) => void;
-  detachValidationData: (id: string) => void;  // Convert validation-subject to empty item (keeping attached schema if any)
+  detachValidationData: (id: string) => void;
   generateTestData: (id: string, getSchemaContent: (id: string) => Promise<string | null>) => Promise<void>;
 
   // Attachment selection (when multiple acquisitions found)
@@ -108,25 +113,17 @@ interface WorkspaceProviderProps {
 }
 
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
-  const [items, setItems] = useState<WorkspaceItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [schemaMetadata, setSchemaMetadata] = useState<SchemaMetadata>(DEFAULT_SCHEMA_METADATA);
-  const [pendingAttachmentSelection, setPendingAttachmentSelection] = useState<PendingAttachmentSelection | null>(null);
+  // Consume the new contexts
+  const { isProcessing, processingTarget, processingProgress, processingError, processFiles } = useProcessing();
+  const { schemaMetadata, setSchemaMetadata, resetMetadata } = useSchemaMetadata();
+  const { items, selectedId, setItems, selectItem, removeItem, reorderItems, clearItems } = useItemManagement();
+  const editing = useSchemaEditing();
 
-  // Use file processing hook for all file operations
-  const {
-    isProcessing,
-    processingTarget,
-    processingProgress,
-    processingError,
-    processFiles,
-  } = useFileProcessing();
+  // Local state for attachment selection modal
+  const [pendingAttachmentSelection, setPendingAttachmentSelection] = useState<PendingAttachmentSelection | null>(null);
 
   // Cache for schema acquisitions
   const schemaAcquisitionsRef = useRef<Map<string, Acquisition>>(new Map());
-
-  // Use editing hook for field/series/validation mutations
-  const editing = useWorkspaceEditing(setItems);
 
   // Helper to get or load schema acquisition
   const getSchemaAcquisition = useCallback(async (
@@ -177,13 +174,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
       if (shouldRemove) {
         if (selectedId === id) {
-          setSelectedId('__add_from_data__');
+          selectItem('__add_from_data__');
         }
         return updated.filter(item => item.id !== id);
       }
       return updated;
     });
-  }, [isItemCompletelyEmpty, selectedId]);
+  }, [isItemCompletelyEmpty, selectedId, setItems, selectItem]);
 
   // Add items from schema selections
   const addFromSchema = useCallback(async (
@@ -197,7 +194,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       const schema = getUnifiedSchema(selection.schemaId);
       if (!schema) continue;
 
-      // Convert schema to acquisition
       const acquisition = await convertSchemaToAcquisition(
         schema,
         selection.acquisitionIndex.toString(),
@@ -221,12 +217,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }
 
     setItems(prev => [...prev, ...newItems]);
-    // Do NOT auto-select - let user stay on "From schema" tab to continue adding
-  }, []);
+  }, [setItems]);
 
   // Add items from DICOM files or protocol files
   const addFromData = useCallback(async (files: FileList, mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
-    // Use appropriate processing target based on mode
     const target = mode === 'validation-subject' ? 'data' : 'schema';
     const newAcquisitions = await processFiles(files, target);
 
@@ -240,28 +234,27 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
     setItems(prev => [...prev, ...newItems]);
 
-    // Auto-select the first new item
     if (newItems.length > 0) {
-      setSelectedId(newItems[0].id);
+      selectItem(newItems[0].id);
     }
-  }, [processFiles]);
+  }, [processFiles, setItems, selectItem]);
 
-  // Add a new empty acquisition from scratch (treated as a schema entry)
+  // Add a new empty acquisition from scratch
   const addFromScratch = useCallback((): string => {
     const newId = `ws_${Date.now()}_scratch`;
     const newItem: WorkspaceItem = {
       id: newId,
       acquisition: createEmptyAcquisition(newId, 'New Acquisition'),
-      source: 'schema',  // Treated as schema - can only attach data for validation
+      source: 'schema',
       isEditing: true
     };
 
     setItems(prev => [...prev, newItem]);
-    setSelectedId(newId);
+    selectItem(newId);
     return newId;
-  }, []);
+  }, [setItems, selectItem]);
 
-  // Add a truly empty item (no schema, no data)
+  // Add a truly empty item
   const addEmpty = useCallback((): string => {
     const newId = `ws_${Date.now()}_empty`;
     const newItem: WorkspaceItem = {
@@ -272,11 +265,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     };
 
     setItems(prev => [...prev, newItem]);
-    setSelectedId(newId);
+    selectItem(newId);
     return newId;
-  }, []);
+  }, [setItems, selectItem]);
 
-  // Create empty schema for an empty item (user clicked "Blank" on schema side)
+  // Create empty schema for an empty item
   const createSchemaForItem = useCallback((id: string) => {
     setItems(prev => prev.map(item => {
       if (item.id !== id) return item;
@@ -284,26 +277,23 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       return {
         ...item,
         hasCreatedSchema: true,
-        attachedSchema: undefined,  // Clear any attached schema
-        isEditing: true,  // Start in edit mode so user can immediately add fields
+        attachedSchema: undefined,
+        isEditing: true,
         acquisition: {
           ...item.acquisition,
           protocolName: item.acquisition.protocolName || 'New Acquisition',
         }
       };
     }));
-  }, []);
+  }, [setItems]);
 
-  // Remove created schema from an item (detach the schema side, preserves attachedData)
-  // Auto-removes the item if it becomes completely empty
+  // Remove created schema from an item
   const detachCreatedSchema = useCallback((id: string) => {
     updateItemWithCleanup(id, item => ({
       ...item,
       hasCreatedSchema: false,
       isEditing: false,
       schemaOrigin: undefined,
-      // Note: attachedData is preserved, attachedSchema should already be undefined
-      // since hasCreatedSchema and attachedSchema are mutually exclusive
       acquisition: {
         ...item.acquisition,
         protocolName: '',
@@ -317,110 +307,65 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }));
   }, [updateItemWithCleanup]);
 
-  // Select an item
-  const selectItem = useCallback((id: string | null) => {
-    setSelectedId(id);
-  }, []);
-
-  // Remove an item
-  const removeItem = useCallback((id: string) => {
-    setItems(prev => {
-      const index = prev.findIndex(item => item.id === id);
-      const newItems = prev.filter(item => item.id !== id);
-
-      // If the removed item was selected, select another item
-      if (selectedId === id && newItems.length > 0) {
-        // Select the item at the same index, or the last item if we removed the last one
-        const newIndex = Math.min(index, newItems.length - 1);
-        setSelectedId(newItems[newIndex].id);
-      } else if (selectedId === id) {
-        // No items left, keep selection as is (will show Add New)
-        setSelectedId(null);
-      }
-
-      return newItems;
-    });
-  }, [selectedId]);
-
-  // Reorder items
-  const reorderItems = useCallback((fromIndex: number, toIndex: number) => {
-    setItems(prev => {
-      const newItems = [...prev];
-      const [removed] = newItems.splice(fromIndex, 1);
-      newItems.splice(toIndex, 0, removed);
-      return newItems;
-    });
-  }, []);
-
   // Clear all items
   const clearAll = useCallback(async () => {
-    setItems([]);
-    setSelectedId(null);
-    setSchemaMetadata(DEFAULT_SCHEMA_METADATA);
+    clearItems();
+    resetMetadata();
     schemaAcquisitionsRef.current = new Map();
     try {
       await dicompareAPI.clearSessionCache();
     } catch (error) {
       console.error('Failed to clear session cache:', error);
     }
-  }, []);
+  }, [clearItems, resetMetadata]);
 
   // Toggle editing mode for an item
   const toggleEditing = useCallback((id: string) => {
     setItems(prev => prev.map(item =>
       item.id === id ? { ...item, isEditing: !item.isEditing } : item
     ));
-  }, []);
+  }, [setItems]);
 
   // Set editing mode explicitly
   const setItemEditing = useCallback((id: string, isEditing: boolean) => {
     setItems(prev => prev.map(item =>
       item.id === id ? { ...item, isEditing } : item
     ));
-  }, []);
+  }, [setItems]);
 
   // Set data usage mode for data-sourced items
   const setDataUsageMode = useCallback((id: string, mode: 'schema-template' | 'validation-subject') => {
     setItems(prev => prev.map(item => {
       if (item.id !== id || item.source !== 'data') return item;
 
-      // When switching to validation-subject mode, exit editing (can't edit in this mode)
-      // When switching to schema-template mode, keep current edit state
       const newIsEditing = mode === 'validation-subject' ? false : item.isEditing;
-
       return { ...item, dataUsageMode: mode, isEditing: newIsEditing };
     }));
-  }, []);
+  }, [setItems]);
 
   // Attach data to a schema-sourced item
   const attachData = useCallback(async (id: string, files: FileList) => {
-    // Process files using the shared hook
     const allAcquisitions = await processFiles(files, 'data');
 
-    // Handle the results
     if (allAcquisitions.length === 1) {
-      // Single acquisition - attach directly
       setItems(prev => prev.map(item =>
         item.id === id ? { ...item, attachedData: allAcquisitions[0] } : item
       ));
     } else if (allAcquisitions.length > 1) {
-      // Multiple acquisitions - prompt user to select
       setPendingAttachmentSelection({
         targetItemId: id,
         acquisitions: allAcquisitions
       });
     }
-  }, [processFiles]);
+  }, [processFiles, setItems]);
 
-  // Attach schema to an item (clears hasCreatedSchema if set)
+  // Attach schema to an item
   const attachSchema = useCallback((id: string, binding: SchemaBinding) => {
     setItems(prev => prev.map(item => {
       if (item.id !== id) return item;
 
-      // When attaching a schema to an empty item, update the acquisition name and tags from the schema
       let updatedAcquisition = item.acquisition;
       if (item.source === 'empty') {
-        // Find the acquisition in the schema to get tags
         const acquisitionIndex = binding.acquisitionId ? parseInt(binding.acquisitionId) : 0;
         const schemaAcquisition = binding.schema.acquisitions?.[acquisitionIndex];
 
@@ -439,20 +384,17 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         acquisition: updatedAcquisition
       };
     }));
-  }, []);
+  }, [setItems]);
 
-  // Upload files to build a schema for an existing item (preserves test data)
+  // Upload files to build a schema for an existing item
   const uploadSchemaForItem = useCallback(async (id: string, files: FileList) => {
     const newAcquisitions = await processFiles(files, 'schema');
 
-    // Use the first acquisition to set up the schema on this item
     if (newAcquisitions.length > 0) {
       const schemaAcquisition = newAcquisitions[0];
       setItems(prev => prev.map(item => {
         if (item.id !== id) return item;
 
-        // If this was a validation-subject item, move its data to attachedData
-        // so we don't lose the test data when replacing acquisition with schema
         const preservedData = item.dataUsageMode === 'validation-subject'
           ? item.acquisition
           : item.attachedData;
@@ -469,20 +411,16 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         };
       }));
     }
-  }, [processFiles]);
+  }, [processFiles, setItems]);
 
   // Detach data
-  // Auto-removes the item if it becomes completely empty
   const detachData = useCallback((id: string) => {
     updateItemWithCleanup(id, item => ({ ...item, attachedData: undefined }));
   }, [updateItemWithCleanup]);
 
-  // Detach validation data (for validation-subject items)
-  // Converts to empty item, keeping attached schema if any
-  // Auto-removes the item if it becomes completely empty
+  // Detach validation data
   const detachValidationData = useCallback((id: string) => {
     updateItemWithCleanup(id, item => {
-      // Only process validation-subject items
       if (item.source !== 'data' || item.dataUsageMode !== 'validation-subject') return item;
 
       return {
@@ -493,17 +431,14 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           item.id,
           item.attachedSchema ? (item.acquisition.protocolName || '') : ''
         ),
-        // Keep the attached schema if present
         attachedSchema: item.attachedSchema
       } as WorkspaceItem;
     });
   }, [updateItemWithCleanup]);
 
-  // Detach schema (handles all item types, preserves attachedData)
-  // Auto-removes the item if it becomes completely empty
+  // Detach schema
   const detachSchema = useCallback((id: string) => {
     updateItemWithCleanup(id, item => {
-      // For schema-sourced items, convert to empty item (preserving any attached data)
       if (item.source === 'schema') {
         return {
           ...item,
@@ -513,11 +448,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           hasCreatedSchema: false,
           isEditing: false,
           acquisition: createEmptyAcquisition(item.id),
-          // Keep the attached data if present
           attachedData: item.attachedData
         };
       }
-      // For data-sourced items used as schema template, convert to empty (with or without attached data)
       if (item.source === 'data' && item.dataUsageMode !== 'validation-subject') {
         return {
           ...item,
@@ -527,11 +460,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           hasCreatedSchema: false,
           isEditing: false,
           acquisition: createEmptyAcquisition(item.id),
-          // Keep any attached data if present
           attachedData: item.attachedData
         };
       }
-      // For empty items with attached schema, reset acquisition properties
       if (item.source === 'empty' && item.attachedSchema) {
         return {
           ...item,
@@ -545,7 +476,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           attachedData: item.attachedData
         };
       }
-      // For other items, just clear attachedSchema and preserve attachedData
       return {
         ...item,
         attachedSchema: undefined,
@@ -554,14 +484,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     });
   }, [updateItemWithCleanup]);
 
-  // Update test data notes (for print report only, not exported to schema)
-  const updateTestDataNotes = useCallback((id: string, notes: string) => {
-    setItems(prev => prev.map(item =>
-      item.id === id ? { ...item, testDataNotes: notes } : item
-    ));
-  }, []);
-
-  // Confirm attachment selection (when multiple acquisitions were found)
+  // Confirm attachment selection
   const confirmAttachmentSelection = useCallback((acquisitionIndex: number) => {
     if (!pendingAttachmentSelection) return;
 
@@ -575,7 +498,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }
 
     setPendingAttachmentSelection(null);
-  }, [pendingAttachmentSelection]);
+  }, [pendingAttachmentSelection, setItems]);
 
   // Cancel attachment selection
   const cancelAttachmentSelection = useCallback(() => {
@@ -590,26 +513,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     const item = items.find(i => i.id === id);
     if (!item || !item.schemaOrigin) return;
 
-    setIsProcessing(true);
-    setProcessingTarget('data');
-    setProcessingError(null);
-    setProcessingProgress({
-      currentFile: 0,
-      totalFiles: 1,
-      currentOperation: 'Generating test data...',
-      percentage: 0
-    });
-
     try {
-      const dicomFiles = await generateDicomsFromAcquisition(item.acquisition, (message, pct) => {
-        setProcessingProgress(prev => ({
-          ...prev!,
-          currentOperation: message,
-          percentage: pct
-        }));
-      });
+      const dicomFiles = await generateDicomsFromAcquisition(item.acquisition, () => {});
 
-      // Process generated DICOMs
       const fileList = new DataTransfer();
       dicomFiles.forEach(file => fileList.items.add(file));
 
@@ -623,47 +529,24 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       }
     } catch (error) {
       console.error('Failed to generate test data:', error);
-      setProcessingError(error instanceof Error ? error.message : 'Unknown error occurred');
     }
-
-    setIsProcessing(false);
-    setProcessingTarget(null);
-    setProcessingProgress(null);
-  }, [items]);
-
-  // Destructure editing functions from hook
-  const {
-    updateAcquisition,
-    updateField,
-    deleteField,
-    convertFieldLevel,
-    addFields,
-    updateSeries,
-    addSeries,
-    deleteSeries,
-    updateSeriesName,
-    addValidationFunction,
-    updateValidationFunction,
-    deleteValidationFunction,
-  } = editing;
+  }, [items, setItems]);
 
   // Get acquisitions for schema export
   const getSchemaExport = useCallback(async (getSchemaContent: (id: string) => Promise<string | null>) => {
     const acquisitions: Acquisition[] = [];
 
     for (const item of items) {
-      // Skip empty items without meaningful schema content
       const hasSchemaContent =
-        item.attachedSchema ||                                    // Has attached schema from library
-        item.hasCreatedSchema ||                                  // User created a blank schema
-        item.source === 'schema' ||                               // Sourced from schema library
-        (item.source === 'data' && item.dataUsageMode !== 'validation-subject');  // Data used as schema template
+        item.attachedSchema ||
+        item.hasCreatedSchema ||
+        item.source === 'schema' ||
+        (item.source === 'data' && item.dataUsageMode !== 'validation-subject');
 
       if (!hasSchemaContent) {
         continue;
       }
 
-      // For items with attachedSchema (via "Choose"), convert the schema to acquisition
       if (item.attachedSchema) {
         const schemaAcq = await convertSchemaToAcquisition(
           item.attachedSchema.schema,
@@ -671,7 +554,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           getSchemaContent
         );
         if (schemaAcq) {
-          // Merge with any local edits from item.acquisition (name, tags, etc.)
           acquisitions.push({
             ...schemaAcq,
             protocolName: item.acquisition.protocolName || schemaAcq.protocolName,
@@ -680,7 +562,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           });
         }
       } else {
-        // For other items (schema-sourced, data-sourced, created blank), use acquisition directly
         acquisitions.push(item.acquisition);
       }
     }
@@ -700,9 +581,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       return;
     }
 
-    // Clear existing items first
-    setItems([]);
-    setSelectedId(null);
+    clearItems();
     schemaAcquisitionsRef.current = new Map();
     try {
       await dicompareAPI.clearSessionCache();
@@ -710,7 +589,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       console.error('Failed to clear session cache:', error);
     }
 
-    // Load schema metadata
     setSchemaMetadata({
       name: schema.name || '',
       description: schema.description || '',
@@ -718,7 +596,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       version: schema.version || '1.0',
     });
 
-    // Convert all acquisitions
     const acquisitionCount = schema.acquisitions?.length || 1;
     const newItems: WorkspaceItem[] = [];
 
@@ -742,11 +619,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
     setItems(newItems);
 
-    // Select first item if any
     if (newItems.length > 0) {
-      setSelectedId(newItems[0].id);
+      selectItem(newItems[0].id);
     }
-  }, []);
+  }, [clearItems, setItems, selectItem, setSchemaMetadata]);
 
   const value: WorkspaceContextType = {
     items,
@@ -779,19 +655,20 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     confirmAttachmentSelection,
     cancelAttachmentSelection,
     generateTestData,
-    updateAcquisition,
-    updateField,
-    deleteField,
-    convertFieldLevel,
-    addFields,
-    updateSeries,
-    addSeries,
-    deleteSeries,
-    updateSeriesName,
-    addValidationFunction,
-    updateValidationFunction,
-    deleteValidationFunction,
-    updateTestDataNotes,
+    // From SchemaEditingContext
+    updateAcquisition: editing.updateAcquisition,
+    updateField: editing.updateField,
+    deleteField: editing.deleteField,
+    convertFieldLevel: editing.convertFieldLevel,
+    addFields: editing.addFields,
+    updateSeries: editing.updateSeries,
+    addSeries: editing.addSeries,
+    deleteSeries: editing.deleteSeries,
+    updateSeriesName: editing.updateSeriesName,
+    addValidationFunction: editing.addValidationFunction,
+    updateValidationFunction: editing.updateValidationFunction,
+    deleteValidationFunction: editing.deleteValidationFunction,
+    updateTestDataNotes: editing.updateTestDataNotes,
     setSchemaMetadata,
     getSchemaExport,
     getSchemaAcquisition,

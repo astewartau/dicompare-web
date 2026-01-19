@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldCheck, Github, Layers } from 'lucide-react';
-import { WorkspaceProvider } from '../contexts/WorkspaceContext';
+import { WorkspaceProviders } from '../contexts/WorkspaceProviders';
 import { SchemaProvider } from '../contexts/SchemaContext';
 import ThemeToggle from '../components/common/ThemeToggle';
 import UnifiedWorkspace from '../components/workspace/UnifiedWorkspace';
@@ -9,7 +9,7 @@ import UnifiedWorkspace from '../components/workspace/UnifiedWorkspace';
 const UnifiedWorkspacePage: React.FC = () => {
   return (
     <SchemaProvider>
-      <WorkspaceProvider>
+      <WorkspaceProviders>
         <div className="min-h-screen bg-surface">
           {/* Header */}
           <header className="bg-surface-primary shadow-sm">
@@ -42,7 +42,7 @@ const UnifiedWorkspacePage: React.FC = () => {
             <UnifiedWorkspace />
           </div>
         </div>
-      </WorkspaceProvider>
+      </WorkspaceProviders>
     </SchemaProvider>
   );
 };

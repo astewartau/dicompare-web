@@ -47,8 +47,7 @@ const LandingPage: React.FC = () => {
                 MRI Protocol Validation for Global Collaboration
               </h2>
               <p className="text-xl text-content-secondary mb-10 drop-shadow-sm">
-                Validate your DICOMs against community protocols and standards. Build and share your own references for your study.
-                Generate and share your data compliance reports.
+                dicompare validates your DICOMs against community protocols and standards. You can also build and share your own schemas for multi-site studies or the community.
               </p>
 
               {/* Primary CTA */}
