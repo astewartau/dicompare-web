@@ -18,7 +18,7 @@ For offline use or better performance, download the desktop app:
 
 ### Download
 
-Get the latest release for your platform from [GitHub Releases](https://github.com/astewartau/dicompare/releases):
+Get the latest release for your platform from [GitHub Releases](https://github.com/astewartau/dicompare-web/releases):
 
 - **Windows**: `.exe` installer or portable version
 - **macOS**: `.dmg` disk image
@@ -89,5 +89,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [GitHub Repository](https://github.com/astewartau/dicompare)
-- [Report Issues](https://github.com/astewartau/dicompare/issues)
+- [GitHub Repository](https://github.com/astewartau/dicompare-web)
+- [Report Issues](https://github.com/astewartau/dicompare-web/issues)
