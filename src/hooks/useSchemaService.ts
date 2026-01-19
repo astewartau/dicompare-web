@@ -37,9 +37,9 @@ export const useSchemaService = () => {
       return uploadedContent;
     }
 
-    // Try library schemas
+    // Try library schemas (use relative path for file:// protocol compatibility)
     try {
-      const response = await fetch(`/schemas/${schemaId}.json`);
+      const response = await fetch(`./schemas/${schemaId}.json`);
       if (response.ok) {
         return await response.text();
       }

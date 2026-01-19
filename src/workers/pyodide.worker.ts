@@ -26,6 +26,45 @@ let pyodide: PyodideInstance | null = null;
 // Validation cache to avoid re-running validation for the same inputs
 const validationCache = new Map<string, any>();
 
+// Detect if running in Electron production (bundled app, no network required)
+function isElectronProduction(): boolean {
+  // In Electron production, we load from file:// protocol
+  // In Electron dev, we load from http://localhost which still has network access
+  return self.location.protocol === 'file:' ||
+         self.location.protocol === 'app:' ||
+         self.location.hostname === '';
+}
+
+// Detect if running in Electron at all (including dev mode)
+function isElectron(): boolean {
+  return isElectronProduction() ||
+         (typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron'));
+}
+
+// Get the base URL for Pyodide files
+function getPyodideBaseUrl(): string {
+  if (isElectronProduction()) {
+    // In Electron production, use bundled Pyodide
+    // Worker is in assets/, pyodide is in pyodide/, so go up one level
+    // We need absolute path for the pyodide.js import
+    const workerUrl = self.location.href;
+    const baseUrl = workerUrl.substring(0, workerUrl.lastIndexOf('/assets/') + 1);
+    return baseUrl + 'pyodide/';
+  }
+  // In browser or Electron dev mode, use CDN
+  return 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/';
+}
+
+// Get absolute URL for wheel files (for micropip)
+function getWheelBaseUrl(): string {
+  if (isElectronProduction()) {
+    const workerUrl = self.location.href;
+    const baseUrl = workerUrl.substring(0, workerUrl.lastIndexOf('/assets/') + 1);
+    return baseUrl + 'pyodide/wheels/';
+  }
+  return '';
+}
+
 // Simple hash function for cache keys
 function hashValidationInput(acquisition: any, schemaContent: string, acquisitionIndex?: number): string {
   const input = JSON.stringify({ acquisition, schemaContent, acquisitionIndex });
@@ -62,6 +101,11 @@ function sendProgress(id: string, progress: ProgressPayload): void {
 async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: string; dicompareVersion: string }> {
   console.log('[Worker] Initializing Pyodide...');
   const startTime = Date.now();
+  const inElectronProd = isElectronProduction();
+  const pyodideBaseUrl = getPyodideBaseUrl();
+
+  console.log(`[Worker] Running in ${inElectronProd ? 'Electron production (offline)' : 'browser/dev (CDN)'}`);
+  console.log(`[Worker] Pyodide base URL: ${pyodideBaseUrl}`);
 
   // Helper to send init progress
   const reportProgress = (message: string, percentage: number) => {
@@ -75,33 +119,89 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
     }
   };
 
-  // Load Pyodide from CDN
+  // Load Pyodide
   reportProgress('Loading Python runtime...', 10);
-  importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js');
+  importScripts(`${pyodideBaseUrl}pyodide.js`);
 
   pyodide = await loadPyodide({
-    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/',
+    indexURL: pyodideBaseUrl,
   });
 
   const loadTime = Date.now() - startTime;
   console.log(`[Worker] Pyodide loaded in ${loadTime}ms`);
 
   // Install core packages
-  reportProgress('Installing core packages...', 40);
+  reportProgress('Installing core packages...', 30);
   await pyodide.loadPackage(['micropip', 'sqlite3']);
 
-  // Detect environment - in worker, check if we're on localhost
-  const isDevelopment = self.location.hostname === 'localhost' ||
-                        self.location.hostname === '127.0.0.1';
+  // In Electron production, pre-load all Pyodide packages from local storage
+  // This prevents micropip from trying to fetch dependencies from PyPI
+  if (inElectronProd) {
+    reportProgress('Loading offline packages...', 40);
+    console.log('[Worker] Pre-loading Pyodide packages for offline use...');
+    // Load all required Pyodide built-in packages from local storage
+    // These will be loaded from indexURL (our local pyodide/ folder)
+    await pyodide.loadPackage([
+      'numpy', 'pandas', 'scipy', 'tqdm', 'jsonschema',
+      'python-dateutil', 'pytz', 'six', 'attrs', 'packaging',
+      'typing-extensions', 'setuptools', 'pillow', 'matplotlib',
+      'contourpy', 'cycler', 'fonttools', 'kiwisolver', 'pyparsing',
+      'referencing', 'jsonschema-specifications', 'rpds-py', 'pyrsistent'
+    ]);
+    console.log('[Worker] Pyodide packages loaded from local storage');
+  }
 
-  const packageSource = isDevelopment
-    ? 'http://localhost:8000/dist/dicompare-0.1.44-py3-none-any.whl'
-    : 'dicompare==0.1.44';
-
-  console.log(`[Worker] Installing dicompare from ${isDevelopment ? 'local' : 'PyPI'}...`);
+  // Determine package source based on environment
+  let packageSource: string;
+  const wheelBase = getWheelBaseUrl();
+  if (inElectronProd) {
+    // In Electron production, install from bundled wheel with absolute path
+    packageSource = wheelBase + 'dicompare-0.1.44-py3-none-any.whl';
+    console.log('[Worker] Installing dicompare from bundled wheel...');
+    console.log('[Worker] Wheel base URL:', wheelBase);
+  } else {
+    // Detect development vs production in browser/Electron dev
+    const isDevelopment = self.location.hostname === 'localhost' ||
+                          self.location.hostname === '127.0.0.1';
+    packageSource = isDevelopment
+      ? 'http://localhost:8000/dist/dicompare-0.1.44-py3-none-any.whl'
+      : 'dicompare==0.1.44';
+    console.log(`[Worker] Installing dicompare from ${isDevelopment ? 'local dev server' : 'PyPI'}...`);
+  }
 
   reportProgress('Loading DICOM analysis tools...', 60);
-  await pyodide.runPythonAsync(`
+
+  // For Electron production, we need to install dependencies from bundled wheels too
+  const installCode = inElectronProd ? `
+import micropip
+
+# Install bundled wheels for offline use with absolute file:// URLs
+wheel_base = '${wheelBase}'
+wheels_to_install = [
+    wheel_base + 'pydicom-2.4.4-py3-none-any.whl',
+    wheel_base + 'tabulate-0.9.0-py3-none-any.whl',
+    wheel_base + 'nibabel-5.3.3-py3-none-any.whl',
+    wheel_base + 'twixtools-0.24-py3-none-any.whl',
+    '${packageSource}',
+]
+
+for wheel in wheels_to_install:
+    try:
+        await micropip.install(wheel)
+        print(f"[Worker] Installed {wheel}")
+    except Exception as e:
+        print(f"[Worker] Warning: Could not install {wheel}: {e}")
+
+import dicompare
+import dicompare.interface
+import dicompare.validation
+import dicompare.schema
+import dicompare.io
+import json
+from typing import List, Dict, Any
+
+print("[Worker] dicompare modules imported successfully")
+` : `
 import micropip
 await micropip.install('${packageSource}')
 
@@ -114,7 +214,9 @@ import json
 from typing import List, Dict, Any
 
 print("[Worker] dicompare modules imported successfully")
-  `);
+`;
+
+  await pyodide.runPythonAsync(installCode);
 
   reportProgress('Finalizing...', 90);
 

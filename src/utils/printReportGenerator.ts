@@ -120,7 +120,41 @@ export function generatePrintReportHtml(options: PrintReportOptions): string {
 }
 
 /**
- * Open a print window with the given HTML content.
+ * Check if we're running in Electron
+ */
+export function isElectron(): boolean {
+  return typeof window !== 'undefined' && !!window.electronAPI;
+}
+
+/**
+ * Export to PDF (Electron only).
+ * Returns a promise that resolves to true if successful, false otherwise.
+ */
+export async function exportToPdf(html: string, defaultFilename: string): Promise<{ success: boolean; message?: string }> {
+  if (!window.electronAPI) {
+    return { success: false, message: 'PDF export is only available in the desktop app' };
+  }
+
+  try {
+    const result = await window.electronAPI.generatePdf(html, defaultFilename);
+
+    if (result.canceled) {
+      return { success: false, message: 'Export cancelled' };
+    }
+
+    if (result.success) {
+      return { success: true, message: `PDF saved to ${result.filePath}` };
+    }
+
+    return { success: false, message: result.error || 'Failed to generate PDF' };
+  } catch (error) {
+    console.error('PDF export failed:', error);
+    return { success: false, message: String(error) };
+  }
+}
+
+/**
+ * Open a print window with the given HTML content (browser only).
  */
 export function openPrintWindow(html: string): boolean {
   const printWindow = window.open('', '_blank');

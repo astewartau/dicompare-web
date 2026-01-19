@@ -34,7 +34,7 @@ const LandingPage: React.FC = () => {
           {/* Background Image - positioned to the top-right, bottom cropped */}
           <div
             className="absolute inset-0 bg-auto bg-right-top bg-no-repeat"
-            style={{ backgroundImage: 'url(/hero.png)', backgroundSize: 'auto 120%' }}
+            style={{ backgroundImage: 'url(./hero.png)', backgroundSize: 'auto 120%' }}
           >
             {/* Overlay gradient from solid left to transparent right */}
             <div className="absolute inset-0 bg-gradient-to-r from-surface via-surface/70 to-transparent" />

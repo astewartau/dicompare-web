@@ -15,7 +15,7 @@ import { convertSchemaToAcquisition } from '../../utils/schemaToAcquisition';
 import { buildReadmeItems } from '../../utils/readmeHelpers';
 import { fetchAndParseSchema } from '../../utils/schemaHelpers';
 import { getItemFlags } from '../../utils/workspaceHelpers';
-import { generatePrintReportHtml, openPrintWindow } from '../../utils/printReportGenerator';
+import { generatePrintReportHtml, openPrintWindow, isElectron, exportToPdf } from '../../utils/printReportGenerator';
 import { useDropZone } from '../../hooks/useDropZone';
 import DropZone from '../common/DropZone';
 import { SchemaLibraryPanel, AddFromDataPanel, SchemaInfoPanel } from './panels';
@@ -221,8 +221,11 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     }
   }, [uploadSchema]);
 
-  // Print acquisition
-  const handlePrintAcquisition = useCallback(() => {
+  // State for PDF export status
+  const [pdfExporting, setPdfExporting] = useState(false);
+
+  // Print acquisition (browser) or export to PDF (Electron)
+  const handlePrintAcquisition = useCallback(async () => {
     if (!selectedItem) return;
 
     const html = generatePrintReportHtml({
@@ -232,8 +235,21 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       schemaMetadata,
     });
 
-    if (!openPrintWindow(html)) {
-      alert('Please allow popups to print the acquisition.');
+    // In Electron, export to PDF
+    if (isElectron()) {
+      setPdfExporting(true);
+      const filename = `${selectedItem.acquisition.protocolName || 'acquisition'}-report.pdf`;
+      const result = await exportToPdf(html, filename);
+      setPdfExporting(false);
+
+      if (!result.success && result.message !== 'Export cancelled') {
+        alert(result.message || 'Failed to export PDF');
+      }
+    } else {
+      // In browser, open print window
+      if (!openPrintWindow(html)) {
+        alert('Please allow popups to print the acquisition.');
+      }
     }
   }, [selectedItem, loadedSchemaAcquisition, schemaMetadata]);
 
@@ -489,14 +505,19 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
 
   return (
     <div className="bg-surface-primary rounded-lg border border-border shadow-sm relative">
-      {/* Print button as floating tab extending upward */}
+      {/* Print/Export PDF button as floating tab extending upward */}
       <button
         onClick={handlePrintAcquisition}
-        className="absolute -top-7 right-4 inline-flex items-center px-2.5 py-1.5 text-xs rounded-t border border-b-0 border-border bg-surface-primary text-content-secondary hover:bg-surface-secondary hover:text-content-primary z-10"
-        title="Print acquisition report"
+        disabled={pdfExporting}
+        className={`absolute -top-7 right-4 inline-flex items-center px-2.5 py-1.5 text-xs rounded-t border border-b-0 border-border bg-surface-primary z-10 ${
+          pdfExporting
+            ? 'text-content-muted cursor-not-allowed'
+            : 'text-content-secondary hover:bg-surface-secondary hover:text-content-primary'
+        }`}
+        title={isElectron() ? "Export acquisition report as PDF" : "Print acquisition report"}
       >
         <Printer className="h-3.5 w-3.5 mr-1" />
-        Print
+        {pdfExporting ? 'Exporting...' : isElectron() ? 'Export PDF' : 'Print'}
       </button>
 
       {/* Header with split layout */}
