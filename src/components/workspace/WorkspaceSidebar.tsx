@@ -298,7 +298,7 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               ? 'text-brand-600 dark:text-brand-400 border-brand-500 bg-brand-50 dark:bg-brand-900/30'
               : 'text-content-tertiary border-border-secondary bg-surface-secondary'
           }`}>
-            Drop to add
+            Drop schemas to add
           </div>
         )}
 
@@ -325,7 +325,7 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               ? 'text-brand-600 dark:text-brand-400 border-brand-500 bg-brand-50 dark:bg-brand-900/30'
               : 'text-content-tertiary border-border-secondary bg-surface-secondary'
           }`}>
-            Drop to add
+            Drop schemas to add
           </div>
         )}
       </div>

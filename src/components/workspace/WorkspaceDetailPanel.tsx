@@ -724,7 +724,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
 
     const readmeHtml = readmeContent ? `
       <div class="readme-section">
-        <h2>Documentation</h2>
+        <h2>Reference Documentation</h2>
         ${schemaSource ? `
           <div class="readme-meta">
             <div class="readme-meta-item"><strong>Schema:</strong> ${escapeHtml(schemaSource)}${schemaVersion ? ` v${escapeHtml(schemaVersion)}` : ''}</div>
@@ -1477,21 +1477,20 @@ Any additional technical details or vendor-specific information."
               </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col">
-              <div className="flex-1 border border-border-secondary rounded-lg overflow-hidden">
-                <CodeMirror
-                  value={previewJson}
-                  extensions={[json()]}
-                  theme={theme === 'dark' ? 'dark' : 'light'}
-                  editable={false}
-                  height="100%"
-                  basicSetup={{
-                    lineNumbers: true,
-                    foldGutter: true,
-                    highlightActiveLine: false,
-                  }}
-                />
-              </div>
+            <div className="border border-border-secondary rounded-lg overflow-hidden max-h-[calc(100vh-350px)]">
+              <CodeMirror
+                value={previewJson}
+                extensions={[json()]}
+                theme={theme === 'dark' ? 'dark' : 'light'}
+                editable={false}
+                height="100%"
+                maxHeight="calc(100vh - 350px)"
+                basicSetup={{
+                  lineNumbers: true,
+                  foldGutter: true,
+                  highlightActiveLine: false,
+                }}
+              />
             </div>
           )}
         </div>

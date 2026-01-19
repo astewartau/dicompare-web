@@ -95,8 +95,8 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
                         self.location.hostname === '127.0.0.1';
 
   const packageSource = isDevelopment
-    ? 'http://localhost:8000/dist/dicompare-0.1.43-py3-none-any.whl'
-    : 'dicompare==0.1.43';
+    ? 'http://localhost:8000/dist/dicompare-0.1.44-py3-none-any.whl'
+    : 'dicompare==0.1.44';
 
   console.log(`[Worker] Installing dicompare from ${isDevelopment ? 'local' : 'PyPI'}...`);
 
@@ -125,7 +125,7 @@ import sys
 import dicompare
 json.dumps({
     'pyodide': '.'.join(map(str, sys.version_info[:3])),
-    'dicompare': getattr(dicompare, '__version__', '0.1.43')
+    'dicompare': getattr(dicompare, '__version__', '0.1.44')
 })
   `);
 
