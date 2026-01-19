@@ -341,7 +341,11 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                       : 'Not set') :
                   formData.validationRule.type === 'range' ?
                     (formData.validationRule.min !== undefined || formData.validationRule.max !== undefined
-                      ? `${formData.validationRule.min ?? '-∞'} to ${formData.validationRule.max ?? '∞'}`
+                      ? (formData.validationRule.min !== undefined && formData.validationRule.max !== undefined
+                          ? `[${formData.validationRule.min}, ${formData.validationRule.max}]`
+                          : formData.validationRule.min !== undefined
+                            ? `≥ ${formData.validationRule.min}`
+                            : `≤ ${formData.validationRule.max}`)
                       : 'Not set') :
                   formData.validationRule.type === 'contains' ?
                     (formData.validationRule.contains ? `contains "${formData.validationRule.contains}"` : 'Not set') :

@@ -232,3 +232,39 @@ export function hasValidDicomFiles(files: FileList): boolean {
     return !name.endsWith('.txt') && !name.endsWith('.json') && !name.endsWith('.xml') && !name.endsWith('.csv');
   });
 }
+
+/**
+ * Recursively get all files from a directory entry (for drag-and-drop folder uploads)
+ */
+export async function getAllFilesFromDirectory(dirEntry: FileSystemDirectoryEntry): Promise<File[]> {
+  const files: File[] = [];
+
+  return new Promise((resolve) => {
+    const reader = dirEntry.createReader();
+
+    const readEntries = () => {
+      reader.readEntries(async (entries) => {
+        if (entries.length === 0) {
+          resolve(files);
+          return;
+        }
+
+        for (const entry of entries) {
+          if (entry.isFile) {
+            const file = await new Promise<File>((fileResolve) => {
+              (entry as FileSystemFileEntry).file(fileResolve);
+            });
+            files.push(file);
+          } else if (entry.isDirectory) {
+            const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+            files.push(...subFiles);
+          }
+        }
+
+        readEntries();
+      });
+    };
+
+    readEntries();
+  });
+}

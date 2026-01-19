@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useSchemaContext } from '../contexts/SchemaContext';
 import { SchemaTemplate } from '../types/schema';
-import { dicompareAPI } from '../services/DicompareAPI';
+import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
 
 export interface SchemaAcquisition {
   id: string;
   protocolName: string;
   seriesDescription: string;
+  tags?: string[];
 }
 
 export interface UnifiedSchema extends SchemaTemplate {
@@ -17,6 +18,7 @@ export interface UnifiedSchema extends SchemaTemplate {
 export interface SchemaBinding {
   schemaId: string;
   acquisitionId?: string;
+  acquisitionName?: string;
   schema: UnifiedSchema;
 }
 
@@ -70,7 +72,8 @@ export const useSchemaService = () => {
       const parsed = acquisitionsData.map((acq: any, index: number) => ({
         id: index.toString(),
         protocolName: acq.protocolName,
-        seriesDescription: acq.seriesDescription
+        seriesDescription: acq.seriesDescription,
+        tags: acq.tags
       }));
 
       // Cache the result
@@ -83,6 +86,7 @@ export const useSchemaService = () => {
   };
 
   // Get all schemas (uploaded + library) with acquisition data
+  // Note: Schema-level tags don't exist per metaschema - tags are only at acquisition level
   const getAllUnifiedSchemas = (): UnifiedSchema[] => {
     const uploadedUnified: UnifiedSchema[] = uploadedSchemas.map(schema => ({
       id: schema.id,

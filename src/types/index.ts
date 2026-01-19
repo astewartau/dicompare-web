@@ -56,6 +56,14 @@ export interface SelectedValidationFunction extends ValidationFunction {
   enabledSystemFields?: string[];
 }
 
+// Acquisition Selection (for multi-select in schema builder)
+export interface AcquisitionSelection {
+  schemaId: string;
+  acquisitionIndex: number;
+  schemaName: string;        // For display
+  acquisitionName: string;   // For display
+}
+
 // Acquisition Types
 export interface Acquisition {
   id: string;
@@ -63,10 +71,12 @@ export interface Acquisition {
   seriesDescription: string;
   detailedDescription?: string; // Extended markdown description (detailed_description in schema)
   totalFiles: number;
+  sliceCount?: number; // Number of unique slice locations (actual slices, handles mosaic/enhanced DICOM)
   acquisitionFields: DicomField[];
   // seriesFields removed - field definitions now embedded in series[].fields[]
   series?: Series[];
   validationFunctions?: SelectedValidationFunction[]; // Add validation functions to acquisitions
+  tags?: string[]; // Tags/categories for organizing acquisitions
   metadata: {
     manufacturer?: string;
     magneticFieldStrength?: string;

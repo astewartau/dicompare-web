@@ -7,8 +7,9 @@
     "Cleaned by dicompare"
   ],
   "acquisitions": {
-    "ABCD_fMRI_DistortionMap_PA": {
+    "fMRI Field Map (P>>A)": {
       "description": "fMRI B0 field map - Posterior-Anterior phase encoding",
+      "tags": ["brain", "fieldmap", "fMRI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -188,8 +189,9 @@
       "rules": [],
       "detailed_description": "## fMRI Distortion Correction - PA Direction\n\nSpin-echo EPI field map for geometric distortion correction of functional MRI data. Acquired with posterior-to-anterior (PA) phase encoding direction."
     },
-    "ABCD_fMRI_task_MID": {
+    "Task fMRI - Monetary Incentive Delay (MID)": {
       "description": "Monetary Incentive Delay (MID) task fMRI",
+      "tags": ["brain", "fMRI", "task-based"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -369,6 +371,7 @@
     },
     "Localizer": {
       "description": "Localizer scan for slice positioning",
+      "tags": ["brain", "localizer"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -572,8 +575,9 @@
       "rules": [],
       "detailed_description": "## Localizer\n\nStandard localizer acquisition using 32-channel head coil for planning subsequent scan prescriptions. Acquired in orthogonal orientations (ROW and COL phase encoding) for optimal slice positioning.\n\n### Key Parameters (Siemens)\n- Sequence: 2D Gradient Echo\n- Resolution: 0.49 \u00d7 0.49 mm in-plane\n- Slice Thickness: 7 mm\n- TR/TE: 7.5/3.69 ms\n- Flip Angle: 20\u00b0"
     },
-    "ABCD_T2w_SPC_vNav": {
+    "T2-weighted 3D SPACE": {
       "description": "3D T2-weighted SPACE/CUBE with vNav motion correction",
+      "tags": ["brain", "structural", "T2-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -779,8 +783,9 @@
       "rules": [],
       "detailed_description": "## 3D T2-Weighted Structural Imaging (SPACE/CUBE)\n\nHigh-resolution T2-weighted fast spin echo with variable flip angle (SPACE on Siemens, CUBE on GE) for detection and quantification of white matter lesions and CSF. Uses volumetric navigators for prospective motion correction.\n\n### Clinical Purpose\n- White matter hyperintensity detection\n- CSF quantification\n- Lesion characterization\n- Complementary contrast to T1w\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | Flip | Time |\n|----------|--------|------------|-----|-----|------|------|\n| Siemens | 256\u00d7256 | 1.0 mm iso | 3200 ms | 565 ms | Variable | 6:35 |\n| Philips | 256\u00d7256 | 1.0 mm iso | 2500 ms | 251.6 ms | 90\u00b0 | 2:53 |\n| GE | 256\u00d7256 | 1.0 mm iso | 3200 ms | 60 ms | Variable | 5:50 |\n\n### Technical Notes\n- Parallel imaging: 2\u00d7 \n- Variable refocusing flip angle train for optimal contrast\n- 176-256 slices depending on platform"
     },
-    "ABCD_T1w_MPR_vNav": {
+    "T1-weighted 3D MPRAGE": {
       "description": "3D T1-weighted MPRAGE with vNav motion correction",
+      "tags": ["brain", "structural", "T1-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -961,8 +966,9 @@
       "rules": [],
       "detailed_description": "## 3D T1-Weighted Structural Imaging (MPRAGE)\n\nHigh-resolution T1-weighted magnetization-prepared rapid acquisition gradient echo (MPRAGE) scan for cortical and subcortical segmentation. Uses volumetric navigators (vNav) for prospective motion correction and selective reacquisition.\n\n### Clinical Purpose\n- Cortical surface reconstruction\n- Subcortical volume segmentation\n- Gray/white matter differentiation\n- Anatomical reference for functional data\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | TI | Flip | Time |\n|----------|--------|------------|-----|-----|------|------|------|\n| Siemens | 256\u00d7256 | 1.0 mm iso | 2500 ms | 2.88 ms | 1060 ms | 8\u00b0 | 7:12 |\n| Philips | 256\u00d7256 | 1.0 mm iso | 6.31 ms | 2.9 ms | 1060 ms | 8\u00b0 | 5:38 |\n| GE | 256\u00d7256 | 1.0 mm iso | 2500 ms | 2 ms | 1060 ms | 8\u00b0 | 6:09 |\n\n### Technical Notes\n- Parallel imaging: 2\u00d7 (GRAPPA/SENSE/ARC)\n- Prospective motion correction via vNav (Siemens, Philips) or PROMO (GE)\n- 176-208 slices depending on platform"
     },
-    "ABCD_dMRI": {
+    "Diffusion MRI (Multi-shell HARDI)": {
       "description": "High angular resolution diffusion imaging (HARDI) with multi-shell acquisition",
+      "tags": ["brain", "dMRI", "multiband", "HARDI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1142,8 +1148,9 @@
       "detailed_description": "## Diffusion-Weighted Imaging (HARDI)\n\nHigh angular resolution diffusion imaging (HARDI) with multiple b-values for white matter tract segmentation and diffusion measurement. Includes fast integrated B0 distortion correction using reversed polarity gradient (RPG) method.\n\n### Clinical Purpose\n- White matter tract segmentation\n- Fractional anisotropy (FA) mapping\n- Mean diffusivity (MD) measurement\n- Tractography and connectomics\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | Flip | Directions | b-values | Time |\n|----------|--------|------------|-----|-----|------|------------|----------|------|\n| Siemens | 140\u00d7140 | 1.7 mm iso | 4100 ms | 88 ms | 90\u00b0 | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 7:31 |\n| Philips | 140\u00d7140 | 1.7 mm iso | 5300 ms | 89 ms | 78\u00b0 | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 9:14 |\n| GE | 140\u00d7140 | 1.7 mm iso | 4100 ms | 81.9 ms | 77\u00b0 | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 7:30 |\n\n### Technical Notes\n- Multiband acceleration: 3\u00d7\n- Partial Fourier: 6/8 (Siemens/GE) or 0.6 (Philips)\n- 81 slices\n- Multi-shell scheme enables advanced diffusion models (NODDI, etc.)",
       "series": []
     },
-    "ABCD_dMRI_DistortionMap_AP": {
+    "Diffusion Field Map (A>>P)": {
       "description": "Diffusion B0 field map - Anterior-Posterior phase encoding",
+      "tags": ["brain", "fieldmap", "dMRI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1332,8 +1339,9 @@
       "rules": [],
       "detailed_description": "## dMRI Distortion Correction - AP Direction\n\nReversed polarity gradient field map for EPI distortion correction of diffusion data. Acquired with anterior-to-posterior (AP) phase encoding direction, paired with PA acquisition for topup/FSL distortion correction."
     },
-    "ABCD_dMRI_DistortionMap_PA": {
+    "Diffusion Field Map (P>>A)": {
       "description": "Diffusion B0 field map - Posterior-Anterior phase encoding",
+      "tags": ["brain", "fieldmap", "dMRI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1522,8 +1530,9 @@
       "rules": [],
       "detailed_description": "## dMRI Distortion Correction - PA Direction\n\nReversed polarity gradient field map for EPI distortion correction of diffusion data. Acquired with posterior-to-anterior (PA) phase encoding direction, paired with AP acquisition for topup/FSL distortion correction."
     },
-    "ABCD_fMRI_DistortionMap_AP": {
+    "fMRI Field Map (A>>P)": {
       "description": "fMRI B0 field map - Anterior-Posterior phase encoding",
+      "tags": ["brain", "fieldmap", "fMRI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1703,8 +1712,9 @@
       "rules": [],
       "detailed_description": "## fMRI Distortion Correction - AP Direction\n\nSpin-echo EPI field map for geometric distortion correction of functional MRI data. Acquired with anterior-to-posterior (AP) phase encoding direction."
     },
-    "ABCD_fMRI_rest": {
+    "Resting-State fMRI": {
       "description": "Resting-state fMRI with multiband acceleration",
+      "tags": ["brain", "fMRI", "resting-state", "multiband"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1882,8 +1892,9 @@
       "rules": [],
       "detailed_description": "## Resting-State Functional MRI\n\nHigh spatial and temporal resolution simultaneous multi-slice (SMS)/multiband EPI resting-state fMRI for examining functional connectivity. Participants passively view a crosshair with eyes open.\n\n### Protocol\n- 4 runs of 5 minutes each (20 minutes total)\n- 2 runs acquired after T1w\n- 2 runs acquired after T2w\n- Eyes open, passive fixation crosshair viewing\n\n### Key Parameters (from Table 2)\n| Parameter | Value |\n|-----------|-------|\n| Matrix | 90 \u00d7 90 |\n| Resolution | 2.4 mm isotropic |\n| TR | 800 ms |\n| TE | 30 ms |\n| Flip Angle | 52\u00b0 |\n| Slices | 60 |\n| Multiband Factor | 6 |\n\n### Technical Notes\n- High temporal resolution (TR=800ms) enabled by multiband\n- Mean frame-to-frame displacement: 0.22 mm (SD=0.20)\n- FIRMM real-time motion monitoring at Siemens sites"
     },
-    "ABCD_fMRI_task_EN-back": {
+    "Task fMRI - Emotional N-back": {
       "description": "Emotional N-back (EN-back) task fMRI",
+      "tags": ["brain", "fMRI", "task-based"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -2061,8 +2072,9 @@
       "rules": [],
       "detailed_description": "## Emotional N-back Task (EN-back)\n\nTask-based fMRI measuring working memory and emotion regulation. Variant of the HCP n-back task with emotional face stimuli.\n\n### Cognitive Domains (from Table 1)\n- **Memory**: Working memory (2-back vs 0-back), encoding, retrieval\n- **Emotion Regulation**: Reactivity to fearful/happy vs neutral faces\n\n### Neural Correlates\n- Dorsolateral prefrontal cortex\n- Parietal cortex\n- Premotor cortex\n- Hippocampus/parahippocampus\n- Amygdala\n- Ventral striatum\n\n### Task Design\n- 2 runs, 8 blocks each\n- Block types: 2-back (high load) and 0-back (low load)\n- Stimulus types: Happy faces, fearful faces, neutral faces, places\n- 160 trials total (40 per stimulus type)\n- NimStim + RADIATE face stimulus sets\n\n### Key Parameters\n- Same as resting-state fMRI (2.4mm, TR=800ms, MB=6)\n\n### References\n- Barch et al. (2013) - HCP task design\n- Cohen et al. (2016)"
     },
-    "ABCD_fMRI_task_SST": {
+    "Task fMRI - Stop Signal Task (SST)": {
       "description": "Stop Signal Task (SST) fMRI",
+      "tags": ["brain", "fMRI", "task-based"],
       "fields": [
         {
           "field": "SeriesDescription",

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit2, ArrowLeftRight } from 'lucide-react';
+import { Plus, Trash2, Edit2, ArrowLeftRight, Eye, EyeOff } from 'lucide-react';
 import { Series, SeriesField } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
@@ -43,8 +43,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
     fieldTag?: string;
     fieldName?: string;
   } | null>(null);
-  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
+  const [showStatusMessages, setShowStatusMessages] = useState(false);
 
   const isComplianceMode = mode === 'compliance';
 
@@ -174,8 +174,17 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 </th>
               ))}
               {isComplianceMode && (
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
-                  Status
+                <th className={`px-2 py-1.5 text-xs font-medium text-content-tertiary uppercase tracking-wider ${showStatusMessages ? 'min-w-[100px] text-left' : 'text-center'}`}>
+                  <div className={`flex items-center gap-1 ${showStatusMessages ? 'justify-start' : 'justify-center'}`}>
+                    <span>Status</span>
+                    <button
+                      onClick={() => setShowStatusMessages(!showStatusMessages)}
+                      className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
+                      title={showStatusMessages ? "Hide status messages" : "Show status messages"}
+                    >
+                      {showStatusMessages ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                    </button>
+                  </div>
                 </th>
               )}
               {isEditMode && (
@@ -192,8 +201,6 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 className={`${seriesIndex % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
                   isEditMode ? 'hover:bg-surface-hover transition-colors' : ''
                 }`}
-                onMouseEnter={() => setHoveredRow(seriesIndex)}
-                onMouseLeave={() => setHoveredRow(null)}
               >
                 <td className="px-2 py-1.5 whitespace-nowrap font-medium text-content-primary sticky left-0 bg-inherit min-w-[140px]">
                   {isEditMode && onSeriesNameUpdate ? (
@@ -228,7 +235,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       isIncomplete ? 'ring-2 ring-red-500 ring-inset bg-red-50' : ''
                     }`}>
                       <div
-                        className={`${isEditMode ? 'cursor-pointer hover:bg-brand-500/10 rounded px-1 -mx-1' : ''}`}
+                        className={`${isEditMode ? 'cursor-pointer hover:bg-brand-500/20 rounded px-1 -mx-1' : ''}`}
                         onClick={() => {
                           if (isEditMode) {
                             // If field doesn't exist in this series, we'll handle creating it
@@ -246,16 +253,13 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                             <p className="text-xs text-content-primary break-words">
                               {seriesField ? formatSeriesFieldValue(seriesField.value, seriesField.validationRule) : '-'}
                             </p>
-                            {isEditMode && seriesField && (
+                            {seriesField && (
                               <p className="text-xs text-content-tertiary mt-0.5">
                                 {formatFieldTypeInfo(
                                   inferDataTypeFromValue(seriesField.value),
                                   seriesField.validationRule
                                 )}
                               </p>
-                            )}
-                            {!isEditMode && !isComplianceMode && (
-                              <p className="text-xs mt-0.5 invisible">&nbsp;</p>
                             )}
                           </div>
                         </div>
@@ -264,46 +268,40 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                   );
                 })}
                 {isComplianceMode && (
-                  <td className="px-2 py-1.5 text-center">
+                  <td className="px-2 py-1.5">
                     {(() => {
                       // Find series validation result by series name
                       const seriesResult = complianceResults.find(r =>
                         r.validationType === 'series' && r.seriesName === ser.name
                       );
 
-                      if (!seriesResult || seriesResult.status === 'unknown') {
-                        return (
+                      const message = seriesResult?.message || "No validation result available";
+                      const status = seriesResult?.status || 'unknown';
+
+                      return (
+                        <div className={`flex items-center gap-2 ${showStatusMessages ? 'justify-start' : 'justify-center'}`}>
                           <CustomTooltip
-                            content="No validation result available"
+                            content={message}
                             position="top"
                             delay={100}
                           >
-                            <div className="inline-flex items-center justify-center cursor-help">
-                              <StatusIcon status="unknown" />
+                            <div className="inline-flex items-center justify-center cursor-help flex-shrink-0">
+                              <StatusIcon status={status} />
                             </div>
                           </CustomTooltip>
-                        );
-                      }
-
-                      return (
-                        <CustomTooltip
-                          content={seriesResult.message}
-                          position="top"
-                          delay={100}
-                        >
-                          <div className="inline-flex items-center justify-center cursor-help">
-                            <StatusIcon status={seriesResult.status} />
-                          </div>
-                        </CustomTooltip>
+                          {showStatusMessages && message && (
+                            <span className="text-xs text-content-secondary">
+                              {message}
+                            </span>
+                          )}
+                        </div>
                       );
                     })()}
                   </td>
                 )}
                 {isEditMode && (
                   <td className="px-2 py-1.5 text-right">
-                    <div className={`${
-                      hoveredRow === seriesIndex ? 'opacity-100' : 'opacity-0'
-                    } transition-opacity`}>
+                    <div>
                       <button
                         onClick={() => onSeriesDelete(seriesIndex)}
                         className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"

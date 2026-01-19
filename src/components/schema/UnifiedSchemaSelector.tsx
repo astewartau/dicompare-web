@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, Pencil } from 'lucide-react';
+import { useDraggable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
-import { Acquisition } from '../../types';
+import { Acquisition, AcquisitionSelection } from '../../types';
 
 interface UnifiedSchemaSelectorProps {
   // Data
@@ -19,12 +21,27 @@ interface UnifiedSchemaSelectorProps {
   onSchemaUpload?: (file: File) => void;
   onSchemaDownload?: (schemaId: string) => void;
 
+  // Multi-select mode (for selecting multiple acquisitions)
+  multiSelectMode?: boolean;
+  selectedAcquisitions?: AcquisitionSelection[];
+  onAcquisitionToggle?: (selection: AcquisitionSelection) => void;
+
   // UI Options
   expandable?: boolean;
   selectedSchemaId?: string;
 
   // Utility
   getSchemaContent: (schemaId: string) => Promise<string | null>;
+
+  // Drag-and-drop support (uses dnd-kit - must be used within a DndContext)
+  enableDragDrop?: boolean;
+
+  // README support
+  onSchemaReadmeClick?: (schemaId: string, schemaName: string) => void;
+  onAcquisitionReadmeClick?: (schemaId: string, schemaName: string, acquisitionIndex: number, acquisitionName: string) => void;
+
+  // Edit support (load schema into workspace for editing)
+  onSchemaEdit?: (schemaId: string) => void;
 }
 
 interface DeleteConfirmModalProps {
@@ -77,6 +94,96 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   );
 };
 
+// Draggable wrapper for schema headers (drags entire schema with all acquisitions)
+interface DraggableSchemaProps {
+  schemaId: string;
+  schemaName: string;
+  acquisitionCount: number;
+  enabled: boolean;
+  children: React.ReactNode;
+}
+
+const DraggableSchema: React.FC<DraggableSchemaProps> = ({
+  schemaId,
+  schemaName,
+  acquisitionCount,
+  enabled,
+  children
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `schema-drag-${schemaId}`,
+    data: {
+      type: 'schema',
+      schemaId,
+      schemaName,
+      acquisitionCount
+    },
+    disabled: !enabled
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  if (!enabled) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      {children}
+    </div>
+  );
+};
+
+// Draggable wrapper for individual acquisition items
+interface DraggableAcquisitionProps {
+  selection: AcquisitionSelection;
+  acquisition: Acquisition;
+  schemaName: string;
+  tags?: string[];
+  enabled: boolean;
+  children: (isDraggable: boolean) => React.ReactNode;
+}
+
+const DraggableAcquisition: React.FC<DraggableAcquisitionProps> = ({
+  selection,
+  acquisition,
+  schemaName,
+  tags,
+  enabled,
+  children
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `acq-drag-${selection.schemaId}-${selection.acquisitionIndex}`,
+    data: {
+      type: 'acquisition',
+      selection,
+      acquisition,
+      schemaName,
+      tags
+    },
+    disabled: !enabled
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0 : 1,  // Hide completely when dragging - overlay shows the preview
+  };
+
+  if (!enabled) {
+    return <>{children(false)}</>;
+  }
+
+  // Apply listeners to the entire wrapper so dragging works from anywhere on the card
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
+      {children(true)}
+    </div>
+  );
+};
+
 const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   librarySchemas,
   uploadedSchemas,
@@ -85,12 +192,26 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   onAcquisitionSelect,
   onSchemaUpload,
   onSchemaDownload,
+  multiSelectMode = false,
+  selectedAcquisitions = [],
+  onAcquisitionToggle,
   expandable = true,
   selectedSchemaId,
-  getSchemaContent
+  getSchemaContent,
+  enableDragDrop = false,
+  onSchemaReadmeClick,
+  onAcquisitionReadmeClick,
+  onSchemaEdit
 }) => {
   const { deleteSchema } = useSchemaContext();
-  const [activeTab, setActiveTab] = useState<'library' | 'uploaded'>('library');
+
+  // Filter state (replaces tab-based navigation)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [showLibrary, setShowLibrary] = useState(true);
+  const [showCustom, setShowCustom] = useState(true);
+
+  // UI state
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [dragActive, setDragActive] = useState(false);
   const [schemaAcquisitions, setSchemaAcquisitions] = useState<Record<string, Acquisition[]>>({});
@@ -100,8 +221,279 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     schemaId: '',
     schemaName: ''
   });
+  const [showNonMatchingFor, setShowNonMatchingFor] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'nested' | 'flat'>('flat');
 
-  const displayedSchemas = activeTab === 'library' ? librarySchemas : uploadedSchemas;
+  // Refs to track loading state (avoids stale closure issues)
+  const loadingInProgressRef = React.useRef<Set<string>>(new Set());
+  const loadedSchemasRef = React.useRef<Set<string>>(new Set());
+
+  // Combine all schemas with source indicator
+  const allSchemas = useMemo(() => [
+    ...librarySchemas.map(s => ({ ...s, source: 'library' as const })),
+    ...uploadedSchemas.map(s => ({ ...s, source: 'uploaded' as const }))
+  ], [librarySchemas, uploadedSchemas]);
+
+  // Filter schemas based on search, tags, and source toggles
+  const filteredSchemas = useMemo(() => {
+    let schemas = allSchemas;
+
+    // Filter by source
+    schemas = schemas.filter(s =>
+      (showLibrary && s.source === 'library') ||
+      (showCustom && s.source === 'uploaded')
+    );
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      schemas = schemas.filter(s =>
+        s.name.toLowerCase().includes(query) ||
+        s.description?.toLowerCase().includes(query)
+      );
+    }
+
+    // Filter by selected tags (AND logic - show schemas where at least one acquisition has ALL selected tags)
+    if (selectedTags.length > 0) {
+      schemas = schemas.filter(s => {
+        // Check if at least one acquisition has ALL selected tags (acquisition-level tags only)
+        return s.acquisitions?.some((acq) => {
+          const acqTags = acq.tags || [];
+          return selectedTags.every(tag => acqTags.includes(tag));
+        }) || false;
+      });
+    }
+
+    return schemas;
+  }, [allSchemas, showLibrary, showCustom, searchQuery, selectedTags]);
+
+  // Get all unique tags with counts (counting acquisitions, not schemas)
+  const tagsWithCounts = useMemo(() => {
+    // Use schemas filtered by source and search, but not by tags
+    let schemasForTags = allSchemas;
+
+    // Filter by source
+    schemasForTags = schemasForTags.filter(s =>
+      (showLibrary && s.source === 'library') ||
+      (showCustom && s.source === 'uploaded')
+    );
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      schemasForTags = schemasForTags.filter(s =>
+        s.name.toLowerCase().includes(query) ||
+        s.description?.toLowerCase().includes(query)
+      );
+    }
+
+    const tagCounts = new Map<string, number>();
+
+    schemasForTags.forEach(schema => {
+      // Only count acquisition-level tags (schema-level tags don't exist per metaschema)
+      if (schema.acquisitions) {
+        schema.acquisitions.forEach(acq => {
+          const acqTags = acq.tags || [];
+          acqTags.forEach(tag => {
+            tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+          });
+        });
+      }
+    });
+
+    return Array.from(tagCounts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  }, [allSchemas, showLibrary, showCustom, searchQuery]);
+
+  // Toggle a tag in the selected tags list
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag)
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
+
+  // Toggle showing non-matching acquisitions for a schema
+  const toggleShowNonMatching = (schemaId: string) => {
+    setShowNonMatchingFor(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(schemaId)) newSet.delete(schemaId);
+      else newSet.add(schemaId);
+      return newSet;
+    });
+  };
+
+  // Auto-expand schemas when tag filter is applied
+  useEffect(() => {
+    if (selectedTags.length > 0) {
+      const schemaIds = filteredSchemas.map(s => s.id);
+      setExpandedSchemas(new Set(schemaIds));
+      // Also reset the non-matching visibility when filter changes
+      setShowNonMatchingFor(new Set());
+    }
+  }, [selectedTags.join(',')]);
+
+  // Load acquisitions for expanded schemas
+  useEffect(() => {
+    expandedSchemas.forEach(id => {
+      loadSchemaAcquisitions(id);
+    });
+  }, [expandedSchemas]);
+
+  // Load all acquisitions when in flat view mode
+  useEffect(() => {
+    if (viewMode === 'flat') {
+      filteredSchemas.forEach(s => {
+        loadSchemaAcquisitions(s.id);
+      });
+    }
+  }, [viewMode, filteredSchemas.map(s => s.id).join(',')]);
+
+  // Check if an acquisition has a specific tag (acquisition-level tags only)
+  const acquisitionHasTag = (acq: { tags?: string[] }, tag: string): boolean => {
+    const acqTags = acq.tags || [];
+    return acqTags.includes(tag);
+  };
+
+  // Get indices of acquisitions that match the current tag filter (AND logic)
+  const getMatchingAcquisitionIndices = (schema: UnifiedSchema, acquisitions: Acquisition[]): number[] => {
+    if (selectedTags.length === 0) {
+      // No filter - all acquisitions match
+      return acquisitions.map((_, index) => index);
+    }
+    return acquisitions.map((_, index) => index).filter(index =>
+      selectedTags.every(tag =>
+        acquisitionHasTag({ tags: schema.acquisitions?.[index]?.tags }, tag)
+      )
+    );
+  };
+
+  // Flattened acquisitions list for flat view mode
+  const flattenedAcquisitions = useMemo(() => {
+    if (viewMode !== 'flat') return [];
+
+    return filteredSchemas.flatMap(schema => {
+      const acquisitions = schemaAcquisitions[schema.id] || [];
+      return acquisitions
+        .map((acquisition, index) => {
+          const matchesTag = selectedTags.length === 0 ||
+            selectedTags.every(tag => acquisitionHasTag(
+              { tags: schema.acquisitions?.[index]?.tags },
+              tag
+            ));
+          return { schema, acquisition, index, matchesTag };
+        })
+        .filter(item => item.matchesTag);
+    });
+  }, [viewMode, filteredSchemas, schemaAcquisitions, selectedTags]);
+
+  // Check if flat view is still loading acquisitions
+  const isFlatViewLoading = viewMode === 'flat' && loadingSchemas.size > 0;
+
+  // Multi-select helpers
+  const isAcquisitionSelected = (schemaId: string, acquisitionIndex: number): boolean => {
+    return selectedAcquisitions.some(
+      sel => sel.schemaId === schemaId && sel.acquisitionIndex === acquisitionIndex
+    );
+  };
+
+  // Get selection state - optionally filtered to only count specific indices
+  const getSchemaSelectionState = (schemaId: string, totalAcquisitions: number, matchingIndices?: number[]): 'all' | 'some' | 'none' => {
+    if (matchingIndices !== undefined) {
+      // Only count selections within the matching indices
+      const selectedMatchingCount = matchingIndices.filter(index => isAcquisitionSelected(schemaId, index)).length;
+      if (selectedMatchingCount === 0) return 'none';
+      if (selectedMatchingCount === matchingIndices.length) return 'all';
+      return 'some';
+    }
+    // Original behavior - count all
+    const selectedCount = selectedAcquisitions.filter(sel => sel.schemaId === schemaId).length;
+    if (selectedCount === 0) return 'none';
+    if (selectedCount === totalAcquisitions) return 'all';
+    return 'some';
+  };
+
+  // Select/deselect acquisitions - optionally filtered to specific indices
+  const handleSelectAllInSchema = (schema: UnifiedSchema, acquisitions: Acquisition[], matchingIndices?: number[]) => {
+    if (!onAcquisitionToggle) return;
+
+    const indicesToToggle = matchingIndices ?? acquisitions.map((_, i) => i);
+    const selectionState = getSchemaSelectionState(schema.id, indicesToToggle.length, matchingIndices);
+
+    if (selectionState === 'all') {
+      // Deselect all matching - toggle each selected one
+      indicesToToggle.forEach((index) => {
+        if (isAcquisitionSelected(schema.id, index)) {
+          onAcquisitionToggle({
+            schemaId: schema.id,
+            acquisitionIndex: index,
+            schemaName: schema.name,
+            acquisitionName: acquisitions[index].protocolName
+          });
+        }
+      });
+    } else {
+      // Select all matching not yet selected
+      indicesToToggle.forEach((index) => {
+        if (!isAcquisitionSelected(schema.id, index)) {
+          onAcquisitionToggle({
+            schemaId: schema.id,
+            acquisitionIndex: index,
+            schemaName: schema.name,
+            acquisitionName: acquisitions[index].protocolName
+          });
+        }
+      });
+    }
+  };
+
+  // Handler for Select All checkbox in schema header - loads acquisitions on demand
+  const handleSelectAllClick = (schema: UnifiedSchema, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't trigger expand/collapse
+
+    const acquisitions = schemaAcquisitions[schema.id];
+
+    if (!acquisitions) {
+      // Trigger loading - checkbox will work once loaded
+      loadSchemaAcquisitions(schema.id);
+      return;
+    }
+
+    // If we have tag filters, only toggle matching acquisitions
+    const matchingIndices = selectedTags.length > 0 ? getMatchingAcquisitionIndices(schema, acquisitions) : undefined;
+    handleSelectAllInSchema(schema, acquisitions, matchingIndices);
+  };
+
+  const loadSchemaAcquisitions = async (schemaId: string) => {
+    // Use refs to check loading state (avoids stale closure issues)
+    if (loadedSchemasRef.current.has(schemaId) || loadingInProgressRef.current.has(schemaId)) {
+      return;
+    }
+
+    loadingInProgressRef.current.add(schemaId);
+    setLoadingSchemas(prev => new Set(prev).add(schemaId));
+
+    try {
+      const schema = [...librarySchemas, ...uploadedSchemas].find(s => s.id === schemaId);
+
+      if (schema) {
+        const acquisitions = await convertSchemaToAcquisitions(schema, getSchemaContent);
+        loadedSchemasRef.current.add(schemaId);
+        setSchemaAcquisitions(prev => ({ ...prev, [schemaId]: acquisitions }));
+      }
+    } catch (error) {
+      console.error(`Failed to load acquisitions for schema ${schemaId}:`, error);
+    } finally {
+      loadingInProgressRef.current.delete(schemaId);
+      setLoadingSchemas(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(schemaId);
+        return newSet;
+      });
+    }
+  };
 
   const toggleSchemaExpansion = async (schemaId: string) => {
     if (!expandable) return;
@@ -116,28 +508,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       }
       return newSet;
     });
-  };
-
-  const loadSchemaAcquisitions = async (schemaId: string) => {
-    if (schemaAcquisitions[schemaId] || loadingSchemas.has(schemaId)) return;
-
-    setLoadingSchemas(prev => new Set(prev).add(schemaId));
-
-    try {
-      const schema = [...librarySchemas, ...uploadedSchemas].find(s => s.id === schemaId);
-      if (schema) {
-        const acquisitions = await convertSchemaToAcquisitions(schema, getSchemaContent);
-        setSchemaAcquisitions(prev => ({ ...prev, [schemaId]: acquisitions }));
-      }
-    } catch (error) {
-      console.error(`Failed to load acquisitions for schema ${schemaId}:`, error);
-    } finally {
-      setLoadingSchemas(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(schemaId);
-        return newSet;
-      });
-    }
   };
 
   const handleSchemaClick = (schemaId: string) => {
@@ -167,7 +537,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       const file = e.dataTransfer.files[0];
       if (file.name.endsWith('.json')) {
         onSchemaUpload?.(file);
-        setActiveTab('uploaded');
       }
     }
   };
@@ -175,7 +544,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       onSchemaUpload?.(e.target.files[0]);
-      setActiveTab('uploaded');
     }
   };
 
@@ -192,10 +560,9 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     if (deleteModal.schemaId) {
       try {
         await deleteSchema(deleteModal.schemaId);
-        console.log('✅ Schema deleted successfully:', deleteModal.schemaId);
+        console.log('Schema deleted successfully:', deleteModal.schemaId);
       } catch (error) {
-        console.error('❌ Failed to delete schema:', error);
-        // You could show a toast notification here if needed
+        console.error('Failed to delete schema:', error);
       }
     }
     setDeleteModal({ isOpen: false, schemaId: '', schemaName: '' });
@@ -227,234 +594,797 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     }
   };
 
-  return (
-    <>
-      <div className="bg-surface-primary rounded-lg shadow-md p-6 border border-border h-fit">
-        {/* Tabs */}
-        <div className="border-b border-border mb-4">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('library')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'library'
-                  ? 'border-brand-600 text-brand-600'
-                  : 'border-transparent text-content-tertiary hover:text-content-secondary hover:border-border-secondary'
-              }`}
-            >
-              <div className="flex items-center">
-                <Library className="h-4 w-4 mr-2" />
-                Library
-                {librarySchemas.length > 0 && (
-                  <span className="ml-2 px-2 py-0.5 text-xs bg-surface-secondary text-content-secondary rounded-full">
-                    {librarySchemas.length}
-                  </span>
-                )}
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('uploaded')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'uploaded'
-                  ? 'border-brand-600 text-brand-600'
-                  : 'border-transparent text-content-tertiary hover:text-content-secondary hover:border-border-secondary'
-              }`}
-            >
-              <div className="flex items-center">
-                <FolderOpen className="h-4 w-4 mr-2" />
-                Custom
-                {uploadedSchemas.length > 0 && (
-                  <span className="ml-2 px-2 py-0.5 text-xs bg-surface-secondary text-content-secondary rounded-full">
-                    {uploadedSchemas.length}
-                  </span>
-                )}
-              </div>
-            </button>
-          </nav>
-        </div>
+  // Render a schema card
+  const renderSchemaCard = (schema: UnifiedSchema & { source: 'library' | 'uploaded' }) => {
+    const isExpanded = expandedSchemas.has(schema.id);
+    const acquisitions = schemaAcquisitions[schema.id] || [];
+    const isLoading = loadingSchemas.has(schema.id);
+    const isSelected = selectedSchemaId === schema.id;
 
-        {/* Upload Area - only show on uploaded tab */}
-        {onSchemaUpload && activeTab === 'uploaded' && (
-          <div className="mb-4">
-            <div
-              className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-                dragActive
-                  ? 'border-brand-500 bg-brand-50'
-                  : 'border-border-secondary hover:border-content-muted'
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleFileInput}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <Upload className="h-6 w-6 text-content-muted mx-auto mb-2" />
-              <p className="text-sm text-content-secondary mb-1">
-                Drop schema file here or click to browse
+    // For tag filtering, compute matching indices
+    const loadedAcqs = schemaAcquisitions[schema.id];
+    const matchingIndices = loadedAcqs && selectedTags.length > 0
+      ? getMatchingAcquisitionIndices(schema, loadedAcqs)
+      : undefined;
+    const matchingCount = matchingIndices?.length ??
+      (selectedTags.length > 0
+        ? (schema.acquisitions?.filter((_, i) =>
+            selectedTags.every(tag => acquisitionHasTag({ tags: schema.acquisitions?.[i]?.tags }, tag))
+          ).length || 0)
+        : (schema.acquisitions?.length || 1));
+    const selectionState = getSchemaSelectionState(schema.id, matchingCount, matchingIndices);
+
+    return (
+      <div
+        key={schema.id}
+        className={`border rounded-lg bg-surface-primary shadow-sm transition-all ${
+          isSelected ? 'border-brand-500 ring-2 ring-brand-100' : 'border-border'
+        }`}
+      >
+        {/* Schema Header - wrapped with DraggableSchema for dnd-kit support */}
+        <DraggableSchema
+          schemaId={schema.id}
+          schemaName={schema.name}
+          acquisitionCount={schema.acquisitions?.length || 1}
+          enabled={enableDragDrop}
+        >
+          <div
+            className={`px-4 py-3 rounded-t-lg cursor-pointer transition-colors ${
+              selectionMode === 'schema'
+                ? 'hover:bg-surface-secondary'
+                : expandable
+                  ? 'hover:bg-surface-secondary'
+                  : ''
+            } ${enableDragDrop ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            onClick={() => handleSchemaClick(schema.id)}
+          >
+          <div className="flex items-center justify-between">
+            {/* Drag handle for schema */}
+            {enableDragDrop && (
+              <GripVertical className="h-4 w-4 text-content-muted mr-2 flex-shrink-0" />
+            )}
+            {/* Select All checkbox in header */}
+            {multiSelectMode && (
+              <div
+                className="flex items-center justify-center mr-3 cursor-pointer"
+                onClick={(e) => handleSelectAllClick(schema, e)}
+                title={selectedTags.length > 0 ? `Select all ${matchingCount} matching acquisitions` : `Select all ${schema.acquisitions?.length || 1} acquisitions`}
+              >
+                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                  loadingSchemas.has(schema.id)
+                    ? 'border-border-secondary bg-surface-secondary'
+                    : selectionState === 'all'
+                      ? 'bg-brand-600 border-brand-600'
+                      : selectionState === 'some'
+                        ? 'bg-brand-600 border-brand-600'
+                        : 'border-border-secondary bg-surface-primary hover:border-brand-400'
+                }`}>
+                  {loadingSchemas.has(schema.id) ? (
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-brand-600"></div>
+                  ) : selectionState === 'all' ? (
+                    <Check className="h-3 w-3 text-white" />
+                  ) : selectionState === 'some' ? (
+                    <Minus className="h-3 w-3 text-white" />
+                  ) : null}
+                </div>
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center">
+                <h3 className="text-sm font-semibold text-content-primary truncate">
+                  {schema.name}
+                </h3>
+                {schema.source === 'library' && (
+                  <Library className="h-3 w-3 text-content-tertiary ml-2 flex-shrink-0" title="Library schema" />
+                )}
+                {schema.source === 'uploaded' && (
+                  <FolderOpen className="h-3 w-3 text-content-tertiary ml-2 flex-shrink-0" title="Custom schema" />
+                )}
+              </div>
+              <p className="text-xs text-content-secondary truncate mt-1">
+                {schema.description || 'No description available'}
               </p>
-              <p className="text-xs text-content-tertiary">
-                Supports .json files
-              </p>
+              <div className="mt-2 flex items-center space-x-3 text-xs text-content-tertiary">
+                <span>v{schema.version || '1.0.0'}</span>
+                {schema.isMultiAcquisition && (
+                  <>
+                    <span>•</span>
+                    <span className="px-2 py-0.5 bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded-full">
+                      {schema.acquisitions.length} acquisitions
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 ml-4">
+              {/* Edit button - load schema into workspace */}
+              {onSchemaEdit && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSchemaEdit(schema.id);
+                  }}
+                  className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
+                  title="Edit schema"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* README button */}
+              {onSchemaReadmeClick && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSchemaReadmeClick(schema.id, schema.name);
+                  }}
+                  className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
+                  title="View README"
+                >
+                  <BookOpen className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* Download button */}
+              <button
+                onClick={(e) => handleDownload(schema.id, schema.name, e)}
+                className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
+                title="Save schema"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+
+              {/* Delete button - only for custom schemas */}
+              {schema.source === 'uploaded' && (
+                <button
+                  onClick={(e) => handleDelete(schema.id, schema.name, e)}
+                  className="p-1 text-content-tertiary hover:text-status-error transition-colors"
+                  title="Delete schema"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* Expand chevron */}
+              {expandable && selectionMode === 'acquisition' && (
+                <div className="p-1 text-content-secondary">
+                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </div>
+              )}
             </div>
           </div>
-        )}
+          </div>
+        </DraggableSchema>
 
-        {/* Schema List */}
-        <div className="space-y-4 max-h-96 overflow-y-auto">
-          {displayedSchemas.map((schema) => {
-            const isExpanded = expandedSchemas.has(schema.id);
-            const acquisitions = schemaAcquisitions[schema.id] || [];
-            const isLoading = loadingSchemas.has(schema.id);
-            const isSelected = selectedSchemaId === schema.id;
+        {/* Expanded Acquisitions */}
+        {expandable && isExpanded && selectionMode === 'acquisition' && (
+          <div className="p-4 border-t border-border bg-surface-secondary">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600"></div>
+                <span className="ml-2 text-sm text-content-secondary">Loading acquisitions...</span>
+              </div>
+            ) : acquisitions.length > 0 ? (
+              (() => {
+                // Split acquisitions into matching and non-matching
+                const allAcqs = acquisitions.map((acquisition, index) => ({
+                  acquisition,
+                  index,
+                  matchesTag: selectedTags.length === 0 ||
+                    selectedTags.every(tag =>
+                      acquisitionHasTag(
+                        { tags: schema.acquisitions?.[index]?.tags },
+                        tag
+                      )
+                    )
+                }));
+                const matchingAcqs = allAcqs.filter(a => a.matchesTag);
+                const nonMatchingAcqs = allAcqs.filter(a => !a.matchesTag);
+                const showNonMatching = showNonMatchingFor.has(schema.id);
 
-            return (
-              <div
-                key={schema.id}
-                className={`border rounded-lg bg-surface-primary shadow-sm transition-all ${
-                  isSelected ? 'border-brand-500 ring-2 ring-brand-100' : 'border-border'
-                }`}
-              >
-                {/* Schema Header */}
-                <div
-                  className={`px-4 py-3 rounded-t-lg cursor-pointer transition-colors ${
-                    selectionMode === 'schema'
-                      ? 'hover:bg-surface-secondary'
-                      : expandable
-                        ? 'hover:bg-surface-secondary'
-                        : ''
-                  }`}
-                  onClick={() => handleSchemaClick(schema.id)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-content-primary truncate">
-                        {schema.name}
-                      </h3>
-                      <p className="text-xs text-content-secondary truncate mt-1">
-                        {schema.description || 'No description available'}
-                      </p>
-                      <div className="mt-2 flex items-center space-x-3 text-xs text-content-tertiary">
-                        <span>v{schema.version || '1.0.0'}</span>
-                        {schema.authors?.length > 0 && (
-                          <>
-                            <span>•</span>
-                            <span>{schema.authors.join(', ')}</span>
-                          </>
-                        )}
-                        {schema.isMultiAcquisition && (
-                          <>
-                            <span>•</span>
-                            <span className="px-2 py-0.5 bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded-full">
-                              {schema.acquisitions.length} acquisitions
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2 ml-4">
-                      {/* Download button - always visible */}
-                      <button
-                        onClick={(e) => handleDownload(schema.id, schema.name, e)}
-                        className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
-                        title="Save schema"
+                const renderAcquisitionCard = ({ acquisition, index, matchesTag }: { acquisition: Acquisition; index: number; matchesTag: boolean }) => {
+                  const isAcqSelected = multiSelectMode && isAcquisitionSelected(schema.id, index);
+                  const acqSelection: AcquisitionSelection = {
+                    schemaId: schema.id,
+                    acquisitionIndex: index,
+                    schemaName: schema.name,
+                    acquisitionName: acquisition.protocolName
+                  };
+
+                  return multiSelectMode ? (
+                    <DraggableAcquisition
+                      key={acquisition.id}
+                      selection={acqSelection}
+                      acquisition={acquisition}
+                      schemaName={schema.name}
+                      tags={schema.acquisitions?.[index]?.tags}
+                      enabled={enableDragDrop}
+                    >
+                      {(isDraggable) => (
+                      <div
+                        onClick={() => onAcquisitionToggle?.(acqSelection)}
+                        className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
+                          isAcqSelected
+                            ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                            : 'border-border-secondary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700'
+                        }`}
                       >
-                        <Download className="h-4 w-4" />
-                      </button>
-
-                      {/* Delete button - only for custom schemas */}
-                      {activeTab === 'uploaded' && (
-                        <button
-                          onClick={(e) => handleDelete(schema.id, schema.name, e)}
-                          className="p-1 text-content-tertiary hover:text-status-error transition-colors"
-                          title="Delete schema"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-
-                      {/* Expand chevron */}
-                      {expandable && selectionMode === 'acquisition' && (
-                        <div className="p-1 text-content-secondary">
-                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      <div className="flex items-start space-x-3">
+                        {/* Drag handle visual indicator - entire card is draggable */}
+                        {enableDragDrop && (
+                          <div className="p-1 -m-1">
+                            <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
+                          </div>
+                        )}
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
+                          isAcqSelected
+                            ? 'bg-brand-600 border-brand-600'
+                            : 'border-border-secondary bg-surface-primary'
+                        }`}>
+                          {isAcqSelected && <Check className="h-3 w-3 text-white" />}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expanded Acquisitions */}
-                {expandable && isExpanded && selectionMode === 'acquisition' && (
-                  <div className="p-4 border-t border-border bg-surface-secondary">
-                    {isLoading ? (
-                      <div className="flex items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600"></div>
-                        <span className="ml-2 text-sm text-content-secondary">Loading acquisitions...</span>
-                      </div>
-                    ) : acquisitions.length > 0 ? (
-                      <div className="space-y-2">
-                        {acquisitions.map((acquisition, index) => (
-                          <button
-                            key={acquisition.id}
-                            onClick={() => onAcquisitionSelect?.(schema.id, index)}
-                            className="w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700 transition-all"
-                          >
-                            <div className="flex items-start space-x-3">
-                              <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <div className="font-medium text-sm text-content-primary">
-                                  {acquisition.protocolName}
-                                </div>
-                                {acquisition.seriesDescription && (
-                                  <div className="text-xs text-content-secondary mt-1">
-                                    {acquisition.seriesDescription}
-                                  </div>
-                                )}
-                                <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
-                                  {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
-                                    <span className="flex items-center">
-                                      <List className="h-3 w-3 mr-1" />
-                                      {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
-                                    </span>
-                                  )}
-                                  {acquisition.series && acquisition.series.length > 0 && (
-                                    <span>
-                                      {acquisition.series.length} series
-                                    </span>
-                                  )}
-                                  {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
-                                    <span className="text-brand-600 dark:text-brand-400">
-                                      {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-content-primary">
+                            {acquisition.protocolName}
+                          </div>
+                          {acquisition.seriesDescription && (
+                            <div className="text-xs text-content-secondary mt-1">
+                              {acquisition.seriesDescription}
                             </div>
+                          )}
+                          {/* Show acquisition tags */}
+                          {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {schema.acquisitions[index].tags.map(tag => (
+                                <span
+                                  key={tag}
+                                  className={`px-1.5 py-0.5 text-xs rounded ${
+                                    selectedTags.includes(tag)
+                                      ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
+                                      : 'bg-surface-tertiary text-content-tertiary'
+                                  }`}
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
+                            {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                              <span className="flex items-center">
+                                <List className="h-3 w-3 mr-1" />
+                                {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                              </span>
+                            )}
+                            {acquisition.series && acquisition.series.length > 0 && (
+                              <span>
+                                {acquisition.series.length} series
+                              </span>
+                            )}
+                            {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                              <span className="text-brand-600 dark:text-brand-400">
+                                {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {/* README button for acquisition */}
+                        {onAcquisitionReadmeClick && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAcquisitionReadmeClick(schema.id, schema.name, index, acquisition.protocolName);
+                            }}
+                            className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start"
+                            title="View README"
+                          >
+                            <BookOpen className="h-4 w-4" />
                           </button>
-                        ))}
+                        )}
                       </div>
-                    ) : (
-                      <div className="text-center py-4 text-sm text-content-tertiary">
-                        No acquisitions found in this schema
                       </div>
+                      )}
+                    </DraggableAcquisition>
+                  ) : (
+                    <button
+                      key={acquisition.id}
+                      onClick={() => onAcquisitionSelect?.(schema.id, index)}
+                      className="w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary transition-all hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700"
+                    >
+                      <div className="flex items-start space-x-3">
+                        <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-content-primary">
+                            {acquisition.protocolName}
+                          </div>
+                          {acquisition.seriesDescription && (
+                            <div className="text-xs text-content-secondary mt-1">
+                              {acquisition.seriesDescription}
+                            </div>
+                          )}
+                          {/* Show acquisition tags */}
+                          {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {schema.acquisitions[index].tags.map(tag => (
+                                <span
+                                  key={tag}
+                                  className={`px-1.5 py-0.5 text-xs rounded ${
+                                    selectedTags.includes(tag)
+                                      ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
+                                      : 'bg-surface-tertiary text-content-tertiary'
+                                  }`}
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
+                            {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                              <span className="flex items-center">
+                                <List className="h-3 w-3 mr-1" />
+                                {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                              </span>
+                            )}
+                            {acquisition.series && acquisition.series.length > 0 && (
+                              <span>
+                                {acquisition.series.length} series
+                              </span>
+                            )}
+                            {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                              <span className="text-brand-600 dark:text-brand-400">
+                                {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {/* README button for acquisition */}
+                        {onAcquisitionReadmeClick && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAcquisitionReadmeClick(schema.id, schema.name, index, acquisition.protocolName);
+                            }}
+                            className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start cursor-pointer"
+                            title="View README"
+                          >
+                            <BookOpen className="h-4 w-4" />
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                };
+
+                return (
+                  <div className="space-y-2">
+                    {/* Render matching acquisitions */}
+                    {matchingAcqs.map(renderAcquisitionCard)}
+
+                    {/* Show non-matching summary if there are any and tags are selected */}
+                    {nonMatchingAcqs.length > 0 && selectedTags.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => toggleShowNonMatching(schema.id)}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 border border-dashed border-border-secondary rounded-lg text-sm text-content-tertiary hover:text-content-secondary hover:border-content-muted transition-colors"
+                        >
+                          {showNonMatching ? (
+                            <>
+                              <ChevronUp className="h-4 w-4" />
+                              Hide {nonMatchingAcqs.length} acquisition{nonMatchingAcqs.length !== 1 ? 's' : ''} not matching criteria
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-4 w-4" />
+                              Show {nonMatchingAcqs.length} acquisition{nonMatchingAcqs.length !== 1 ? 's' : ''} not matching criteria
+                            </>
+                          )}
+                        </button>
+
+                        {/* Render non-matching acquisitions when expanded */}
+                        {showNonMatching && (
+                          <div className="space-y-2 opacity-60">
+                            {nonMatchingAcqs.map(renderAcquisitionCard)}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
-                )}
+                );
+              })()
+            ) : (
+              <div className="text-center py-4 text-sm text-content-tertiary">
+                No acquisitions found in this schema
               </div>
-            );
-          })}
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="bg-surface-primary rounded-lg shadow-md border border-border h-[800px] flex">
+        {/* Left Sidebar - Tags */}
+        <div className="w-48 border-r border-border p-4 flex-shrink-0 flex flex-col">
+          <h3 className="font-medium text-sm text-content-primary mb-3 flex items-center flex-shrink-0">
+            <Tag className="h-4 w-4 mr-2" />
+            Filter by Tag
+          </h3>
+          {tagsWithCounts.length > 0 ? (
+            <div className="space-y-1 flex-1 overflow-y-auto min-h-0">
+              {tagsWithCounts.map(({ tag, count }) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className={`flex items-center justify-between w-full px-2 py-1.5 rounded text-sm transition-colors ${
+                    selectedTags.includes(tag)
+                      ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
+                      : 'hover:bg-surface-secondary text-content-secondary'
+                  }`}
+                >
+                  <span className="truncate">{tag}</span>
+                  <span className={`text-xs ml-2 ${selectedTags.includes(tag) ? 'text-brand-600 dark:text-brand-400' : 'text-content-tertiary'}`}>
+                    {count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-content-tertiary">No tags available</p>
+          )}
         </div>
 
-        {displayedSchemas.length === 0 && (
-          <p className="text-sm text-content-tertiary text-center py-8">
-            {activeTab === 'library'
-              ? 'No library schemas available.'
-              : 'No custom schemas. Load a schema to get started.'}
-          </p>
-        )}
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Header with search and source toggles */}
+          <div className="p-4 border-b border-border">
+            <div className="flex items-center gap-4">
+              {/* Search */}
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-content-tertiary" />
+                <input
+                  type="text"
+                  placeholder="Search schemas..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-border-secondary rounded-lg bg-surface-primary text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Source toggles */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowLibrary(!showLibrary)}
+                  className={`flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
+                    showLibrary
+                      ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
+                      : 'bg-surface-secondary text-content-tertiary hover:text-content-secondary'
+                  }`}
+                  title="Toggle library schemas"
+                >
+                  <Library className="h-4 w-4 mr-1.5" />
+                  Library
+                  {showLibrary && <Check className="h-3 w-3 ml-1.5" />}
+                </button>
+                <button
+                  onClick={() => setShowCustom(!showCustom)}
+                  className={`flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
+                    showCustom
+                      ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
+                      : 'bg-surface-secondary text-content-tertiary hover:text-content-secondary'
+                  }`}
+                  title="Toggle custom schemas"
+                >
+                  <FolderOpen className="h-4 w-4 mr-1.5" />
+                  Custom
+                  {showCustom && <Check className="h-3 w-3 ml-1.5" />}
+                </button>
+              </div>
+
+              {/* View mode toggle */}
+              <div className="border-l border-border-secondary pl-4 ml-2">
+                <label className="flex items-center gap-2 text-sm text-content-secondary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={viewMode === 'nested'}
+                    onChange={(e) => setViewMode(e.target.checked ? 'nested' : 'flat')}
+                    className="w-4 h-4 rounded border-border-secondary text-brand-600 focus:ring-brand-500 focus:ring-offset-0"
+                  />
+                  Group schemas
+                </label>
+              </div>
+            </div>
+
+            {/* Active filters */}
+            {selectedTags.length > 0 && (
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                <span className="text-sm text-content-secondary">Filters:</span>
+                {selectedTags.map(tag => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    className="flex items-center px-2 py-1 bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded text-xs hover:bg-brand-200 dark:hover:bg-brand-900/50 transition-colors"
+                  >
+                    {tag}
+                    <X className="h-3 w-3 ml-1" />
+                  </button>
+                ))}
+                <button
+                  onClick={() => setSelectedTags([])}
+                  className="text-xs text-content-tertiary hover:text-content-secondary transition-colors"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Schema list */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {/* Upload Area - always show when onSchemaUpload is provided */}
+            {onSchemaUpload && (
+              <div className="mb-4">
+                <div
+                  className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                    dragActive
+                      ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                      : 'border-border-secondary hover:border-content-muted'
+                  }`}
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileInput}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <Upload className="h-6 w-6 text-content-muted mx-auto mb-2" />
+                  <p className="text-sm text-content-secondary mb-1">
+                    Drop schema file here or click to browse
+                  </p>
+                  <p className="text-xs text-content-tertiary">
+                    Supports .json files
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {viewMode === 'nested' ? (
+              <>
+                <div className="text-sm text-content-secondary mb-3">
+                  {filteredSchemas.length} {filteredSchemas.length === 1 ? 'schema' : 'schemas'} found
+                </div>
+                {filteredSchemas.length > 0 ? (
+                  <div className="space-y-4">
+                    {filteredSchemas.map(schema => renderSchemaCard(schema))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-content-tertiary">
+                      {searchQuery || selectedTags.length > 0
+                        ? 'No schemas match your filters.'
+                        : !showLibrary && !showCustom
+                          ? 'Enable Library or Custom to see schemas.'
+                          : 'No schemas available.'}
+                    </p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="text-sm text-content-secondary mb-3">
+                  {isFlatViewLoading ? (
+                    <span className="flex items-center">
+                      <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-brand-600 mr-2"></span>
+                      Loading acquisitions...
+                    </span>
+                  ) : (
+                    <>{flattenedAcquisitions.length} {flattenedAcquisitions.length === 1 ? 'acquisition' : 'acquisitions'}{selectedTags.length > 0 ? ' matching' : ' found'}</>
+                  )}
+                </div>
+                {isFlatViewLoading && flattenedAcquisitions.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600"></div>
+                    <span className="ml-2 text-sm text-content-secondary">Loading acquisitions...</span>
+                  </div>
+                ) : flattenedAcquisitions.length > 0 ? (
+                  <div className="space-y-2">
+                    {flattenedAcquisitions.map(({ schema, acquisition, index }) => {
+                      const isAcqSelected = multiSelectMode && isAcquisitionSelected(schema.id, index);
+                      const flatAcqSelection: AcquisitionSelection = {
+                        schemaId: schema.id,
+                        acquisitionIndex: index,
+                        schemaName: schema.name,
+                        acquisitionName: acquisition.protocolName
+                      };
+
+                      return multiSelectMode ? (
+                        <DraggableAcquisition
+                          key={`${schema.id}-${index}`}
+                          selection={flatAcqSelection}
+                          acquisition={acquisition}
+                          schemaName={schema.name}
+                          tags={schema.acquisitions?.[index]?.tags}
+                          enabled={enableDragDrop}
+                        >
+                          {(isDraggable) => (
+                          <div
+                            onClick={() => onAcquisitionToggle?.(flatAcqSelection)}
+                            className={`w-full text-left border rounded-lg p-3 bg-surface-primary cursor-pointer transition-all ${
+                              isAcqSelected
+                                ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                                : 'border-border-secondary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700'
+                            }`}
+                          >
+                          <div className="flex items-start space-x-3">
+                            {/* Drag handle visual indicator - entire card is draggable */}
+                            {enableDragDrop && (
+                              <div className="p-1 -m-1">
+                                <GripVertical className="h-4 w-4 text-content-muted mt-0.5 flex-shrink-0" />
+                              </div>
+                            )}
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
+                              isAcqSelected
+                                ? 'bg-brand-600 border-brand-600'
+                                : 'border-border-secondary bg-surface-primary'
+                            }`}>
+                              {isAcqSelected && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-content-primary">
+                                  {acquisition.protocolName}
+                                </span>
+                                <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
+                                  {schema.name}
+                                </span>
+                              </div>
+                              {acquisition.seriesDescription && (
+                                <div className="text-xs text-content-secondary mt-1">
+                                  {acquisition.seriesDescription}
+                                </div>
+                              )}
+                              {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {schema.acquisitions[index].tags.map(tag => (
+                                    <span
+                                      key={tag}
+                                      className={`px-1.5 py-0.5 text-xs rounded ${
+                                        selectedTags.includes(tag)
+                                          ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
+                                          : 'bg-surface-tertiary text-content-tertiary'
+                                      }`}
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
+                                {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                                  <span className="flex items-center">
+                                    <List className="h-3 w-3 mr-1" />
+                                    {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                  </span>
+                                )}
+                                {acquisition.series && acquisition.series.length > 0 && (
+                                  <span>{acquisition.series.length} series</span>
+                                )}
+                                {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                                  <span className="text-brand-600 dark:text-brand-400">
+                                    {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {onAcquisitionReadmeClick && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAcquisitionReadmeClick(schema.id, schema.name, index, acquisition.protocolName);
+                                }}
+                                className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start"
+                                title="View README"
+                              >
+                                <BookOpen className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                          </div>
+                          )}
+                        </DraggableAcquisition>
+                      ) : (
+                        <button
+                          key={`${schema.id}-${index}`}
+                          onClick={() => onAcquisitionSelect?.(schema.id, index)}
+                          className="w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary transition-all hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700"
+                        >
+                          <div className="flex items-start space-x-3">
+                            <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-content-primary">
+                                  {acquisition.protocolName}
+                                </span>
+                                <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
+                                  {schema.name}
+                                </span>
+                              </div>
+                              {acquisition.seriesDescription && (
+                                <div className="text-xs text-content-secondary mt-1">
+                                  {acquisition.seriesDescription}
+                                </div>
+                              )}
+                              {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {schema.acquisitions[index].tags.map(tag => (
+                                    <span
+                                      key={tag}
+                                      className={`px-1.5 py-0.5 text-xs rounded ${
+                                        selectedTags.includes(tag)
+                                          ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
+                                          : 'bg-surface-tertiary text-content-tertiary'
+                                      }`}
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
+                                {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                                  <span className="flex items-center">
+                                    <List className="h-3 w-3 mr-1" />
+                                    {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                  </span>
+                                )}
+                                {acquisition.series && acquisition.series.length > 0 && (
+                                  <span>{acquisition.series.length} series</span>
+                                )}
+                                {acquisition.validationFunctions && acquisition.validationFunctions.length > 0 && (
+                                  <span className="text-brand-600 dark:text-brand-400">
+                                    {acquisition.validationFunctions.length} validation {acquisition.validationFunctions.length === 1 ? 'rule' : 'rules'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {onAcquisitionReadmeClick && (
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAcquisitionReadmeClick(schema.id, schema.name, index, acquisition.protocolName);
+                                }}
+                                className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start cursor-pointer"
+                                title="View README"
+                              >
+                                <BookOpen className="h-4 w-4" />
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-content-tertiary">
+                      {searchQuery || selectedTags.length > 0
+                        ? 'No acquisitions match your filters.'
+                        : !showLibrary && !showCustom
+                          ? 'Enable Library or Custom to see acquisitions.'
+                          : 'No acquisitions available.'}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Delete Confirmation Modal */}

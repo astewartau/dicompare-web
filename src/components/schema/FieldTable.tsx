@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, ArrowRightLeft, Loader } from 'lucide-react';
+import { Trash2, ArrowRightLeft, Loader, Eye, EyeOff, Pencil } from 'lucide-react';
 import { DicomField, Acquisition } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
-import { formatFieldValue, formatFieldTypeInfo } from '../../utils/fieldFormatters';
+import { formatFieldValue, formatFieldTypeInfo, formatFieldDisplay } from '../../utils/fieldFormatters';
 import { ComplianceFieldResult } from '../../types/schema';
 import CustomTooltip from '../common/CustomTooltip';
 import StatusIcon from '../common/StatusIcon';
@@ -18,7 +18,6 @@ interface FieldTableProps {
   schemaId?: string;
   schemaAcquisitionId?: string;
   acquisition?: Acquisition;
-  realAcquisition?: Acquisition; // The actual DICOM data for compliance validation
   getSchemaContent?: (id: string) => Promise<string | null>;
   isDataProcessing?: boolean; // Prevent validation during DICOM upload
   // Pass validation results from parent instead of computing them here
@@ -38,7 +37,6 @@ const FieldTable: React.FC<FieldTableProps> = ({
   schemaId,
   schemaAcquisitionId,
   acquisition,
-  realAcquisition,
   getSchemaContent,
   isDataProcessing = false,
   complianceResultsProp,
@@ -47,6 +45,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
   onFieldDelete,
 }) => {
   const [editingField, setEditingField] = useState<DicomField | null>(null);
+  const [showStatusMessages, setShowStatusMessages] = useState(false);
   const isComplianceMode = mode === 'compliance';
 
   // Use compliance results from props instead of computing them
@@ -118,8 +117,22 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 {isComplianceMode ? 'Expected Value' : 'Value'}
               </th>
               {isComplianceMode && (
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
-                  Status
+                <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                  Actual Value
+                </th>
+              )}
+              {isComplianceMode && (
+                <th className={`px-2 py-1.5 text-xs font-medium text-content-tertiary uppercase tracking-wider ${showStatusMessages ? 'min-w-[100px] text-left' : 'text-center'}`}>
+                  <div className={`flex items-center gap-1 ${showStatusMessages ? 'justify-start' : 'justify-center'}`}>
+                    <span>Status</span>
+                    <button
+                      onClick={() => setShowStatusMessages(!showStatusMessages)}
+                      className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
+                      title={showStatusMessages ? "Hide status messages" : "Show status messages"}
+                    >
+                      {showStatusMessages ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                    </button>
+                  </div>
                 </th>
               )}
               {isEditMode && (
@@ -131,7 +144,10 @@ const FieldTable: React.FC<FieldTableProps> = ({
           </thead>
           <tbody className="bg-surface-primary divide-y divide-border">
             {fields.map((field, index) => {
-              const fieldIdentifier = field.tag || field.name;
+              // For unique identification: use tag for standard DICOM fields, name/keyword for derived fields
+              // Note: some derived fields have tag="derived" which is not unique
+              const isDerivedTag = !field.tag || field.tag === 'derived' || field.tag === null;
+              const fieldIdentifier = isDerivedTag ? (field.keyword || field.name) : field.tag;
               const fieldKey = `${acquisitionId}-${fieldIdentifier}`;
               const isIncomplete = incompleteFields.has(fieldKey);
 
@@ -166,34 +182,52 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 </td>
                 <td className="px-2 py-1.5">
                   <div
-                    className={`${isEditMode ? 'cursor-pointer hover:bg-blue-500/10 rounded px-1 -mx-1' : ''}`}
+                    className={`${isEditMode ? 'cursor-pointer hover:bg-brand-500/20 rounded px-1 -mx-1' : ''}`}
                     onClick={() => isEditMode && setEditingField(field)}
                   >
                     <p className="text-xs text-content-primary break-words">{formatFieldValue(field)}</p>
-                    {(isEditMode || isComplianceMode) && (
-                      <p className="text-xs text-content-tertiary mt-0.5">{fieldTypeDisplay}</p>
-                    )}
-                    {!isEditMode && !isComplianceMode && (
-                      <p className="text-xs mt-0.5 invisible">&nbsp;</p>
-                    )}
+                    <p className="text-xs text-content-tertiary mt-0.5">{fieldTypeDisplay}</p>
                   </div>
                 </td>
+                {isComplianceMode && (
+                  <td className="px-2 py-1.5">
+                    {complianceResult?.actualValue !== undefined && complianceResult?.actualValue !== null ? (
+                      <p className="text-xs text-content-primary break-words">{formatFieldDisplay(complianceResult.actualValue)}</p>
+                    ) : (
+                      <span className="text-xs text-content-muted italic">—</span>
+                    )}
+                  </td>
+                )}
                 {isComplianceMode && complianceResult && (
-                  <td className="px-2 py-1.5 text-center">
-                    <CustomTooltip
-                      content={complianceResult.message}
-                      position="top"
-                      delay={100}
-                    >
-                      <div className="inline-flex items-center justify-center cursor-help">
-                        <StatusIcon status={complianceResult.status} />
-                      </div>
-                    </CustomTooltip>
+                  <td className="px-2 py-1.5">
+                    <div className={`flex items-center gap-2 ${showStatusMessages ? 'justify-start' : 'justify-center'}`}>
+                      <CustomTooltip
+                        content={complianceResult.message}
+                        position="top"
+                        delay={100}
+                      >
+                        <div className="inline-flex items-center justify-center cursor-help flex-shrink-0">
+                          <StatusIcon status={complianceResult.status} />
+                        </div>
+                      </CustomTooltip>
+                      {showStatusMessages && complianceResult.message && (
+                        <span className="text-xs text-content-secondary">
+                          {complianceResult.message}
+                        </span>
+                      )}
+                    </div>
                   </td>
                 )}
                 {isEditMode && (
                   <td className="px-2 py-1.5 text-right">
-                    <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end space-x-1">
+                      <button
+                        onClick={() => setEditingField(field)}
+                        className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
+                        title="Edit field"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
                       <button
                         onClick={() => onFieldConvert(fieldIdentifier)}
                         className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"

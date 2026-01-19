@@ -1,5 +1,8 @@
-import { DicomField, Series, SelectedValidationFunction } from '../types';
+import { Acquisition, DicomField, Series, SelectedValidationFunction } from '../types';
 import { inferDataTypeFromValue } from './datatypeInference';
+import { getFieldByKeyword } from '../services/dicomFieldService';
+import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
+import JSZip from 'jszip';
 
 export interface TestDataRow {
   [fieldName: string]: any;
@@ -446,4 +449,143 @@ export function generateTestDataFromSchema(
   }
 
   return rows;
+}
+
+/**
+ * Generates DICOM files from an acquisition by:
+ * 1. Collecting all fields (acquisition + series)
+ * 2. Extracting validation field values
+ * 3. Ensuring ProtocolName exists
+ * 4. Generating test data
+ * 5. Creating DICOMs via API
+ * 6. Extracting from ZIP
+ *
+ * @param acquisition The acquisition to generate DICOMs for
+ * @param onProgress Optional callback for progress updates
+ * @returns Array of generated DICOM File objects
+ */
+export async function generateDicomsFromAcquisition(
+  acquisition: Acquisition,
+  onProgress?: (message: string, percentage: number) => void
+): Promise<File[]> {
+  onProgress?.('Collecting fields...', 10);
+
+  // Build all fields list (acquisition + series)
+  const allFields: DicomField[] = [...(acquisition.acquisitionFields || [])];
+
+  // Add series fields - handle both array and object formats
+  const seriesFieldMap = new Map<string, DicomField>();
+  (acquisition.series || []).forEach(series => {
+    if (Array.isArray(series.fields)) {
+      series.fields.forEach((field: any) => {
+        if (!seriesFieldMap.has(field.tag)) {
+          seriesFieldMap.set(field.tag, {
+            ...field,
+            level: 'series'
+          });
+        }
+      });
+    } else if (typeof series.fields === 'object' && series.fields) {
+      Object.entries(series.fields).forEach(([tag, fieldData]: [string, any]) => {
+        if (!seriesFieldMap.has(tag)) {
+          seriesFieldMap.set(tag, {
+            tag: tag,
+            name: fieldData.name || fieldData.field || tag,
+            value: fieldData.value,
+            level: 'series',
+            ...fieldData
+          });
+        }
+      });
+    }
+  });
+  allFields.push(...Array.from(seriesFieldMap.values()));
+
+  onProgress?.('Extracting validation values...', 20);
+
+  // Extract validation field values from validation functions
+  const { validationFieldValues, maxValidationRows } = extractValidationFieldValues(
+    acquisition.validationFunctions || [],
+    allFields,
+    acquisition.series || []
+  );
+
+  onProgress?.('Checking ProtocolName...', 30);
+
+  // Ensure ProtocolName field exists if not in schema
+  const hasProtocolName = allFields.some(f => f.name === 'ProtocolName');
+  if (!hasProtocolName && acquisition.protocolName) {
+    const protocolNameFieldDef = await getFieldByKeyword('ProtocolName');
+    if (protocolNameFieldDef) {
+      const cleanedName = acquisition.protocolName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+
+      allFields.push({
+        name: protocolNameFieldDef.keyword,
+        tag: protocolNameFieldDef.tag,
+        vr: protocolNameFieldDef.vr,
+        level: 'acquisition',
+        value: cleanedName,
+        dataType: 'String'
+      } as DicomField);
+    }
+  }
+
+  onProgress?.('Generating test data...', 40);
+
+  // Generate test data using existing utility
+  const testData = generateTestDataFromSchema(
+    allFields,
+    acquisition.series || [],
+    validationFieldValues,
+    maxValidationRows
+  );
+
+  // Add fields from testData that aren't in allFields (from validation tests)
+  const existingFieldNames = new Set(allFields.map(f => f.name));
+  const testDataFieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
+
+  for (const fieldName of testDataFieldNames) {
+    if (!existingFieldNames.has(fieldName)) {
+      const fieldDef = await getFieldByKeyword(fieldName);
+      if (fieldDef) {
+        allFields.push({
+          name: fieldName,
+          tag: fieldDef.tag.replace(/[()]/g, ''),
+          vr: fieldDef.vr || '',
+          level: 'acquisition',
+          dataType: inferDataTypeFromValue(testData[0][fieldName]),
+          value: testData[0][fieldName]
+        } as DicomField);
+      }
+    }
+  }
+
+  onProgress?.('Generating DICOM files...', 50);
+
+  // Generate DICOMs from the test data
+  const zipBlob = await dicompareAPI.generateTestDicomsFromSchema(
+    acquisition,
+    testData,
+    allFields
+  );
+
+  onProgress?.('Extracting DICOM files...', 70);
+
+  // Extract DICOMs from ZIP
+  const zip = await JSZip.loadAsync(zipBlob);
+  const dicomFiles: File[] = [];
+
+  for (const [filename, zipEntry] of Object.entries(zip.files)) {
+    if (!zipEntry.dir && filename.endsWith('.dcm')) {
+      const blob = await zipEntry.async('blob');
+      dicomFiles.push(new File([blob], filename, { type: 'application/dicom' }));
+    }
+  }
+
+  onProgress?.('Complete', 100);
+
+  return dicomFiles;
 }

@@ -10,7 +10,8 @@ export function buildValidationRuleFromSchema(schemaField: any): ValidationRule 
   if (schemaField.tolerance !== undefined) {
     return { type: 'tolerance', value: schemaField.value, tolerance: schemaField.tolerance };
   }
-  if (schemaField.min !== undefined && schemaField.max !== undefined) {
+  if (schemaField.min !== undefined || schemaField.max !== undefined) {
+    // Handle range with min-only, max-only, or both
     return { type: 'range', min: schemaField.min, max: schemaField.max };
   }
   if (schemaField.contains !== undefined) {
@@ -159,6 +160,20 @@ export function processSchemaFieldForUI(schemaField: any): any {
 
   const validationRule = buildValidationRuleFromSchema(schemaField);
 
+  // Determine fieldType: use explicit fieldType if provided, otherwise infer from tag value
+  // Tag values can be: standard DICOM format (XXXX,XXXX), or special values: "derived", "private", "custom"
+  let fieldType = schemaField.fieldType;
+  if (!fieldType && schemaField.tag) {
+    if (schemaField.tag === 'derived') {
+      fieldType = 'derived';
+    } else if (schemaField.tag === 'private') {
+      fieldType = 'private';
+    } else if (schemaField.tag === 'custom') {
+      fieldType = 'custom';
+    }
+    // If tag is a valid DICOM format, fieldType defaults to 'standard' (handled elsewhere)
+  }
+
   return {
     tag: schemaField.tag,
     name: schemaField.field || schemaField.name || schemaField.tag,
@@ -168,7 +183,7 @@ export function processSchemaFieldForUI(schemaField: any): any {
     level: schemaField.level || 'acquisition',
     dataType,
     validationRule,
-    fieldType: schemaField.fieldType  // Preserve field type (standard/derived)
+    fieldType  // Preserve explicit field type or infer from tag
   };
 }
 

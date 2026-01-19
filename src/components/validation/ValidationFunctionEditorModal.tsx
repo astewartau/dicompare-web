@@ -4,7 +4,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { linter, lintGutter } from '@codemirror/lint';
 import { SelectedFunction, TestCase, TestCaseExpectation } from './ValidationFunctionLibraryModal';
-import { pyodideManager } from '../../services/PyodideManager';
+import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface ValidationFunctionEditorModalProps {
@@ -18,7 +18,7 @@ interface ValidationFunctionEditorModalProps {
 const SYSTEM_FIELDS = {
   'Count': {
     name: 'Count',
-    description: 'Number of slices/images per row (typically from DICOM metadata)'
+    description: 'Number of unique slice locations per value combination (handles mosaic/enhanced DICOM)'
   }
 };
 
@@ -104,7 +104,7 @@ return test_data`;
   const initializePyodideIfNeeded = async () => {
     if (!pyodideReady) {
       try {
-        await pyodideManager.initialize();
+        await dicompareAPI.ensureInitialized();
         setPyodideReady(true);
       } catch (error) {
         console.error('Failed to initialize Pyodide:', error);
@@ -199,8 +199,8 @@ return test_data`;
     try {
       await initializePyodideIfNeeded();
 
+      // pandas is already loaded by the worker
       if (!pandasInstalled) {
-        await pyodideManager.loadPackage('pandas');
         setPandasInstalled(true);
       }
 
@@ -254,7 +254,7 @@ except Exception as e:
 output
 `;
 
-      const result = await pyodideManager.runPython(wrappedCode);
+      const result = await dicompareAPI.runPython(wrappedCode);
 
       // Check if result is undefined or null
       if (result === undefined || result === null) {
@@ -550,20 +550,13 @@ output
           ...prev,
           [testCase.id]: { passed: false, loading: true, error: statusMessage + '...' }
         }));
-        
-        // Install packages
+
+        // pandas and dicompare are already loaded by the worker
         if (!pandasInstalled) {
-          await pyodideManager.loadPackage('pandas');
           setPandasInstalled(true);
         }
-        
+
         if (!dicompareInstalled) {
-          // Load micropip first, then install dicompare
-          await pyodideManager.loadPackage('micropip');
-          await pyodideManager.runPython(`
-import micropip
-micropip.install("dicompare", keep_going=True)
-          `);
           setDicompareInstalled(true);
         }
       }
@@ -619,6 +612,13 @@ test_data = {${Object.entries(testCase.data).map(([field, values]) =>
 # Try to create DataFrame with better error handling
 try:
     value = pd.DataFrame(test_data)
+    # Compute smart Count if not already provided
+    # Count = actual slice count (handles mosaic/enhanced DICOM)
+    if "Count" not in value.columns:
+        if "SliceLocation" in value.columns:
+            value["Count"] = value["SliceLocation"].nunique()
+        else:
+            value["Count"] = len(value)
 except ValueError as e:
     if "All arrays must be of the same length" in str(e):
         # Provide more helpful error message
@@ -701,8 +701,8 @@ json.dumps({
 
       let result;
       try {
-        result = await pyodideManager.runPython(testData);
-      } catch (pythonError) {
+        result = await dicompareAPI.runPython(testData);
+      } catch (pythonError: any) {
         // Clean up error messages for common test setup issues
         let errorMessage = pythonError.message;
         

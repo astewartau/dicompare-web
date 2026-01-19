@@ -1,9 +1,8 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import LandingPage from './pages/LandingPage';
-import SchemaBuilder from './pages/SchemaBuilder';
-import ComplianceChecker from './pages/ComplianceChecker';
+import UnifiedWorkspacePage from './pages/UnifiedWorkspacePage';
 
 function App() {
   return (
@@ -12,8 +11,10 @@ function App() {
         <div className="min-h-screen bg-surface text-content-primary">
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/schema-builder/*" element={<SchemaBuilder />} />
-            <Route path="/compliance-checker/*" element={<ComplianceChecker />} />
+            <Route path="/workspace/*" element={<UnifiedWorkspacePage />} />
+            {/* Redirect legacy routes to workspace */}
+            <Route path="/schema-builder/*" element={<Navigate to="/workspace" replace />} />
+            <Route path="/compliance-checker/*" element={<Navigate to="/workspace" replace />} />
           </Routes>
         </div>
       </Router>

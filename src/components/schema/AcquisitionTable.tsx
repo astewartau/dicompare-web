@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText, Eye, EyeOff } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
-import { dicompareAPI } from '../../services/DicompareAPI';
+import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import FieldTable from './FieldTable';
 import SeriesTable from './SeriesTable';
 import DicomFieldSelector from '../common/DicomFieldSelector';
+import InlineTagInput from '../common/InlineTagInput';
+import { useTagSuggestions } from '../../hooks/useTagSuggestions';
 import ValidationFunctionLibraryModal from '../validation/ValidationFunctionLibraryModal';
 import ValidationFunctionEditorModal from '../validation/ValidationFunctionEditorModal';
 import FieldConversionModal from './FieldConversionModal';
@@ -24,11 +26,13 @@ interface AcquisitionTableProps {
   // Schema/compliance specific props
   schemaId?: string;
   schemaAcquisitionId?: string;
+  schemaAcquisition?: Acquisition; // For data-as-schema mode: the acquisition to use as schema (when no schemaId)
   getSchemaContent?: (id: string) => Promise<string | null>;
   title?: string;
   subtitle?: string;
   version?: string;
   authors?: string[];
+  hideHeader?: boolean; // Hide the header section (title, version, authors)
   // Collapse/deselect handlers
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -48,6 +52,8 @@ interface AcquisitionTableProps {
   onValidationFunctionAdd?: (func: SelectedValidationFunction) => void;
   onValidationFunctionUpdate?: (index: number, func: SelectedValidationFunction) => void;
   onValidationFunctionDelete?: (index: number) => void;
+  // Compliance results callback - called when validation results change
+  onComplianceResultsChange?: (results: ComplianceFieldResult[]) => void;
 }
 
 const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
@@ -59,11 +65,13 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   isDataProcessing = false,
   schemaId,
   schemaAcquisitionId,
+  schemaAcquisition,
   getSchemaContent,
   title,
   subtitle,
   version,
   authors,
+  hideHeader = false,
   isCollapsed = false,
   onToggleCollapse,
   onDeselect,
@@ -80,6 +88,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   onValidationFunctionAdd,
   onValidationFunctionUpdate,
   onValidationFunctionDelete,
+  onComplianceResultsChange,
 }) => {
   const [isExpanded, setIsExpanded] = useState(!isCollapsed);
   const [showValidationLibrary, setShowValidationLibrary] = useState(false);
@@ -91,13 +100,11 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [isValidatingRules, setIsValidatingRules] = useState(false);
   const [validationRuleError, setValidationRuleError] = useState<string | null>(null);
   const [allComplianceResults, setAllComplianceResults] = useState<ComplianceFieldResult[]>([]);
-  const [isComplianceSummaryExpanded, setIsComplianceSummaryExpanded] = useState(false);
-  const [isErrorsExpanded, setIsErrorsExpanded] = useState(true);
-  const [isWarningsExpanded, setIsWarningsExpanded] = useState(true);
-  const [isNaExpanded, setIsNaExpanded] = useState(true);
-  const [isPassedExpanded, setIsPassedExpanded] = useState(false);
   const [showTestDicomGenerator, setShowTestDicomGenerator] = useState(false);
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
+  const [showRuleStatusMessages, setShowRuleStatusMessages] = useState(false);
+  const [showUncheckedFields, setShowUncheckedFields] = useState(false);
+  const { allTags } = useTagSuggestions();
 
   const isComplianceMode = mode === 'compliance';
   const isSchemaMode = isComplianceMode || Boolean(schemaId);
@@ -114,34 +121,116 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
   const validationFunctions = acquisition.validationFunctions || [];
 
+  // Calculate fields in realAcquisition that aren't checked by the schema
+  const uncheckedFields = useMemo((): DicomField[] => {
+    if (!isComplianceMode) return [];
+    if (!realAcquisition) return [];
+
+    const realFields = realAcquisition.acquisitionFields || [];
+    const schemaFields = acquisition?.acquisitionFields || [];
+
+    // If no real fields, nothing to show
+    if (realFields.length === 0) return [];
+
+    // Normalize tag format: remove parentheses, spaces, commas and convert to uppercase
+    const normalizeTag = (tag: string | null | undefined): string | null => {
+      if (!tag) return null;
+      return tag.replace(/[(), ]/g, '').toUpperCase();
+    };
+
+    // Get all field identifiers from the schema (normalized)
+    const schemaFieldIds = new Set<string>();
+    const schemaKeywords = new Set<string>();
+    const schemaNames = new Set<string>();
+
+    schemaFields.forEach(f => {
+      const normalizedTag = normalizeTag(f.tag);
+      if (normalizedTag) schemaFieldIds.add(normalizedTag);
+      if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
+      if (f.name) schemaNames.add(f.name.toLowerCase());
+    });
+
+    // Also include series fields from schema
+    (acquisition?.series || []).forEach(s => {
+      const fields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+      fields.forEach((f: any) => {
+        const normalizedTag = normalizeTag(f.tag);
+        if (normalizedTag) schemaFieldIds.add(normalizedTag);
+        if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
+        if (f.name) schemaNames.add(f.name.toLowerCase());
+      });
+    });
+
+    // If schema has no fields defined, all real fields are "unchecked"
+    // but this is likely a loading state, so return empty
+    if (schemaFieldIds.size === 0 && schemaKeywords.size === 0 && schemaNames.size === 0) {
+      return [];
+    }
+
+    // Find fields in realAcquisition that aren't in the schema
+    return realFields.filter(f => {
+      const normalizedTag = normalizeTag(f.tag);
+      const hasTag = normalizedTag && schemaFieldIds.has(normalizedTag);
+      const hasKeyword = f.keyword && schemaKeywords.has(f.keyword.toLowerCase());
+      const hasName = f.name && schemaNames.has(f.name.toLowerCase());
+      return !hasTag && !hasKeyword && !hasName;
+    });
+  }, [isComplianceMode, realAcquisition, acquisition?.acquisitionFields, acquisition?.series]);
+
   // Update expanded state when isCollapsed prop changes
   useEffect(() => {
     setIsExpanded(!isCollapsed);
   }, [isCollapsed]);
 
   // Validation rule compliance effect
+  // Can validate with either schemaId (external schema) or schemaAcquisition (data-as-schema)
+  const hasSchemaForValidation = schemaId || schemaAcquisition;
   useEffect(() => {
-    if (isComplianceMode && schemaId && realAcquisition && getSchemaContent && !isDataProcessing) {
+    if (isComplianceMode && hasSchemaForValidation && realAcquisition && !isDataProcessing) {
       performValidationRuleCompliance();
     }
-  }, [isComplianceMode, schemaId, realAcquisition, schemaAcquisitionId, validationFunctions.length, isDataProcessing]);
+  }, [isComplianceMode, schemaId, schemaAcquisition, realAcquisition, schemaAcquisitionId, validationFunctions.length, isDataProcessing]);
+
+  // Notify parent when compliance results change (including when cleared)
+  useEffect(() => {
+    console.log('[AcquisitionTable] Notifying parent of compliance results change, count:', allComplianceResults.length);
+    if (onComplianceResultsChange) {
+      onComplianceResultsChange(allComplianceResults);
+    }
+  }, [allComplianceResults, onComplianceResultsChange]);
 
   const performValidationRuleCompliance = async () => {
-    if (!schemaId || !realAcquisition || !getSchemaContent) return;
+    if (!realAcquisition || (!schemaId && !schemaAcquisition)) return;
 
     setIsValidatingRules(true);
     setValidationRuleError(null);
+    // Clear old results to prevent showing stale data from previous item
+    setAllComplianceResults([]);
+    setValidationRuleResults([]);
 
     try {
       // For validation rules, we need to validate the actual functions against the real data
-      const validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
-        realAcquisition,
-        schemaId,
-        getSchemaContent,
-        schemaAcquisitionId
-      );
+      let validationResults;
+      if (schemaAcquisition) {
+        // Data-as-schema mode: validate using the acquisition object directly
+        validationResults = await dicompareAPI.validateAcquisitionAgainstAcquisition(
+          realAcquisition,
+          schemaAcquisition
+        );
+      } else if (schemaId && getSchemaContent) {
+        // Normal mode: validate using schema ID
+        validationResults = await dicompareAPI.validateAcquisitionAgainstSchema(
+          realAcquisition,
+          schemaId,
+          getSchemaContent,
+          schemaAcquisitionId
+        );
+      } else {
+        throw new Error('No schema available for validation');
+      }
 
       // Store ALL validation results
+      console.log('[AcquisitionTable] Setting validation results, count:', validationResults.length);
       setAllComplianceResults(validationResults);
 
       // Filter to get validation rule results only
@@ -296,8 +385,9 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   };
 
   return (
-    <div className="border border-border-secondary rounded-lg bg-surface-primary shadow-sm h-fit">
+    <div className={hideHeader ? 'bg-surface-primary h-fit' : 'border border-border-secondary rounded-lg bg-surface-primary shadow-sm h-fit'}>
       {/* Compact Header Bar */}
+      {!hideHeader && (
       <div className="px-3 py-2 bg-surface-secondary border-b border-border rounded-t-lg">
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
@@ -397,6 +487,19 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           </div>
         </div>
 
+        {/* Tags row - always visible, inline editable in edit mode */}
+        {!isSchemaMode && (
+          <div className="mt-2">
+            <InlineTagInput
+              tags={acquisition.tags || []}
+              onChange={(tags) => onUpdate('tags', tags)}
+              suggestions={allTags}
+              placeholder="Add..."
+              disabled={!isEditMode}
+            />
+          </div>
+        )}
+
         {/* Schema info or stats row */}
         <div className="mt-1 text-xs text-content-tertiary">
           {isSchemaMode ? (
@@ -422,12 +525,13 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           )}
         </div>
       </div>
+      )}
 
       {/* Compact Body Content */}
       {isExpanded && (
         <div className="p-3 space-y-3">
           {/* Validation Functions */}
-          {((isEditMode && !isComplianceMode) || (isComplianceMode && validationFunctions.length > 0)) && (
+          {((isEditMode && !isComplianceMode) || validationFunctions.length > 0) && (
             <div>
               {isEditMode && !isComplianceMode && (
                 <div className="flex items-center space-x-2 mb-2">
@@ -459,28 +563,31 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   )}
 
                   {/* Loading state */}
-                  {isComplianceMode && isValidatingRules && validationRuleResults.length === 0 && (
-                    <div className="border border-border rounded-md p-3 text-center mb-2">
-                      <Loader className="h-4 w-4 animate-spin mx-auto mb-2" />
-                      <p className="text-content-tertiary text-xs">Validating rules...</p>
-                    </div>
-                  )}
                   <div className="border border-border rounded-md overflow-hidden">
                     <table className="min-w-full divide-y divide-border">
                       <thead className="bg-surface-secondary">
                         <tr>
-                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider w-1/3">
+                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
                             Validation Rule
                           </th>
-                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider w-1/2">
+                          <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
                             Description
                           </th>
                           {isComplianceMode && (
-                            <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
-                              Status
+                            <th className={`px-2 py-1.5 text-xs font-medium text-content-tertiary uppercase tracking-wider ${showRuleStatusMessages ? 'min-w-[150px] text-left' : 'text-center'}`}>
+                              <div className={`flex items-center gap-1 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
+                                <span>Status</span>
+                                <button
+                                  onClick={() => setShowRuleStatusMessages(!showRuleStatusMessages)}
+                                  className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
+                                  title={showRuleStatusMessages ? "Hide status messages" : "Show status messages"}
+                                >
+                                  {showRuleStatusMessages ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                </button>
+                              </div>
                             </th>
                           )}
-                          {!isComplianceMode && (
+                          {isEditMode && !isComplianceMode && (
                             <th className="px-2 py-1.5 text-right text-xs font-medium text-content-tertiary uppercase tracking-wider w-16">
                               Actions
                             </th>
@@ -495,7 +602,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                             <tr
                               key={`${func.id}-${index}`}
                               className={`${index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
-                                !isComplianceMode ? 'hover:bg-surface-hover transition-colors' : ''
+                                isEditMode && !isComplianceMode ? 'hover:bg-surface-hover transition-colors' : ''
                               }`}
                             >
                               <td className="px-2 py-1.5">
@@ -514,35 +621,44 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                 <p className="text-xs text-content-primary break-words">{func.customDescription || func.description}</p>
                               </td>
                               {isComplianceMode && ruleResult && (
-                                <td className="px-2 py-1.5 text-center">
+                                <td className="px-2 py-1.5">
                                   {isValidatingRules ? (
-                                    <Loader className="h-4 w-4 animate-spin mx-auto text-content-tertiary" />
+                                    <div className="flex justify-center">
+                                      <Loader className="h-4 w-4 animate-spin text-content-tertiary" />
+                                    </div>
                                   ) : (
-                                    <CustomTooltip
-                                      content={ruleResult.message}
-                                      position="top"
-                                      delay={100}
-                                    >
-                                      <div className="inline-flex items-center justify-center cursor-help">
-                                        {getStatusIcon(ruleResult.status)}
-                                      </div>
-                                    </CustomTooltip>
+                                    <div className={`flex items-center gap-2 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
+                                      <CustomTooltip
+                                        content={ruleResult.message}
+                                        position="top"
+                                        delay={100}
+                                      >
+                                        <div className="inline-flex items-center justify-center cursor-help flex-shrink-0">
+                                          {getStatusIcon(ruleResult.status)}
+                                        </div>
+                                      </CustomTooltip>
+                                      {showRuleStatusMessages && ruleResult.message && (
+                                        <span className="text-xs text-content-secondary">
+                                          {ruleResult.message}
+                                        </span>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
                               )}
-                              {!isComplianceMode && (
+                              {isEditMode && !isComplianceMode && (
                                 <td className="px-2 py-1.5 text-right">
                                   <div className="flex items-center justify-end space-x-1">
                                     <button
                                       onClick={() => handleValidationFunctionEdit(index)}
-                                      className="p-1 text-content-muted hover:text-brand-600"
+                                      className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
                                       title="Edit function"
                                     >
                                       <Edit2 className="h-3 w-3" />
                                     </button>
                                     <button
                                       onClick={() => handleValidationFunctionDelete(index)}
-                                      className="p-1 text-content-muted hover:text-status-error"
+                                      className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"
                                       title="Remove function"
                                     >
                                       <Trash2 className="h-3 w-3" />
@@ -574,7 +690,6 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 schemaId={schemaId}
                 schemaAcquisitionId={schemaAcquisitionId}
                 acquisition={acquisition}
-                realAcquisition={realAcquisition}
                 getSchemaContent={getSchemaContent}
                 isDataProcessing={isDataProcessing}
                 complianceResultsProp={allComplianceResults.filter(r =>
@@ -608,299 +723,63 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
             </div>
           )}
 
-          {/* Compliance Summary - Only show in compliance mode */}
-          {isComplianceMode && realAcquisition && (
-            <div className="mt-4 border-t border-border pt-4">
-              {(() => {
-                // Use all compliance results directly (no combination needed)
-                const allResults = allComplianceResults;
-
-                // Count by status
-                const statusCounts = {
-                  pass: allResults.filter(r => r.status === 'pass').length,
-                  fail: allResults.filter(r => r.status === 'fail').length,
-                  warning: allResults.filter(r => r.status === 'warning').length,
-                  na: allResults.filter(r => r.status === 'na').length,
-                  unknown: allResults.filter(r => r.status === 'unknown').length
-                };
-
-                // Get errors, warnings, N/A, and passed for detailed list
-                const errors = allResults.filter(r => r.status === 'fail');
-                const warnings = allResults.filter(r => r.status === 'warning');
-                const naResults = allResults.filter(r => r.status === 'na');
-                const passedResults = allResults.filter(r => r.status === 'pass');
-
-                return (
-                  <>
-                    {/* Summary Header with Toggle */}
-                    <div
-                      className="flex items-center justify-between cursor-pointer hover:bg-surface-secondary -mx-2 px-2 py-1 rounded"
-                      onClick={() => setIsComplianceSummaryExpanded(!isComplianceSummaryExpanded)}
-                    >
-                      <div className="flex items-center space-x-2">
-                        <button
-                          className="p-0.5 text-content-tertiary hover:text-content-secondary"
-                          aria-label={isComplianceSummaryExpanded ? "Collapse summary" : "Expand summary"}
+          {/* Unchecked Fields (fields in data but not in schema) */}
+          {isComplianceMode && uncheckedFields.length > 0 && (
+            <div className="border border-border-secondary rounded-md overflow-hidden">
+              <button
+                onClick={() => setShowUncheckedFields(!showUncheckedFields)}
+                className="w-full px-3 py-2 bg-surface-secondary hover:bg-surface-tertiary transition-colors flex items-center justify-between text-left"
+              >
+                <span className="text-xs text-content-tertiary">
+                  <span className="font-medium">{uncheckedFields.length} field{uncheckedFields.length !== 1 ? 's' : ''}</span> in data not validated by schema
+                </span>
+                <ChevronDown className={`h-4 w-4 text-content-tertiary transition-transform ${showUncheckedFields ? 'rotate-180' : ''}`} />
+              </button>
+              {showUncheckedFields && (
+                <div className="border-t border-border">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-surface-tertiary">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                          Field
+                        </th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                          Value in Data
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-surface-primary divide-y divide-border">
+                      {uncheckedFields.map((field, index) => (
+                        <tr
+                          key={field.tag || field.name || index}
+                          className={index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'}
                         >
-                          {isComplianceSummaryExpanded ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </button>
-                        <h4 className="text-sm font-semibold text-content-primary">Compliance Summary</h4>
-                      </div>
-
-                      {/* Always show status counts in header */}
-                      <div className="flex items-center gap-2">
-                        {statusCounts.fail > 0 && (
-                          <div className="flex items-center space-x-1 bg-red-500/10 px-2 py-0.5 rounded-full">
-                            <XCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
-                            <span className="text-xs font-medium text-red-700 dark:text-red-300">{statusCounts.fail}</span>
-                          </div>
-                        )}
-                        {statusCounts.warning > 0 && (
-                          <div className="flex items-center space-x-1 bg-yellow-500/10 px-2 py-0.5 rounded-full">
-                            <AlertTriangle className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />
-                            <span className="text-xs font-medium text-yellow-700 dark:text-yellow-300">{statusCounts.warning}</span>
-                          </div>
-                        )}
-                        {statusCounts.pass > 0 && (
-                          <div className="flex items-center space-x-1 bg-green-500/10 px-2 py-0.5 rounded-full">
-                            <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
-                            <span className="text-xs font-medium text-green-700 dark:text-green-300">{statusCounts.pass}</span>
-                          </div>
-                        )}
-                        {statusCounts.na > 0 && (
-                          <div className="flex items-center space-x-1 bg-surface-secondary px-2 py-0.5 rounded-full">
-                            <HelpCircle className="h-3 w-3 text-content-tertiary" />
-                            <span className="text-xs font-medium text-content-secondary">{statusCounts.na}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Expandable Content */}
-                    {isComplianceSummaryExpanded && (
-                      <div className="mt-3">
-                        {/* Detailed Status Counts */}
-                        <div className="flex flex-wrap gap-3 mb-4">
-                          <div className="flex items-center space-x-1.5 bg-green-500/10 px-3 py-1.5 rounded-full">
-                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="text-sm font-medium text-green-700 dark:text-green-300">{statusCounts.pass} Passed</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 bg-red-500/10 px-3 py-1.5 rounded-full">
-                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                            <span className="text-sm font-medium text-red-700 dark:text-red-300">{statusCounts.fail} Failed</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 bg-yellow-500/10 px-3 py-1.5 rounded-full">
-                            <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                            <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">{statusCounts.warning} Warnings</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 bg-surface-secondary px-3 py-1.5 rounded-full">
-                            <HelpCircle className="h-4 w-4 text-content-tertiary" />
-                            <span className="text-sm font-medium text-content-secondary">{statusCounts.na} N/A</span>
-                          </div>
-                        </div>
-
-                        {/* Errors List */}
-                        {errors.length > 0 && (
-                          <div className="mb-3">
-                            <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-red-500/10 -mx-2 px-2 py-1 rounded mb-2"
-                              onClick={() => setIsErrorsExpanded(!isErrorsExpanded)}
-                            >
-                              <h5 className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center">
-                                <button
-                                  className="p-0.5 text-red-600 dark:text-red-400 hover:text-red-800 mr-1"
-                                  aria-label={isErrorsExpanded ? "Collapse errors" : "Expand errors"}
-                                >
-                                  {isErrorsExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                                <XCircle className="h-3.5 w-3.5 mr-1" />
-                                Errors ({errors.length})
-                              </h5>
-                            </div>
-                            {isErrorsExpanded && (
-                              <div className="space-y-1">
-                                {errors.map((error, idx) => (
-                                  <div key={idx} className="bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-red-800 dark:text-red-300">
-                                          {error.rule_name || error.fieldName}
-                                          {error.seriesName && (
-                                            <span className="ml-2 text-red-700 dark:text-red-400">({error.seriesName})</span>
-                                          )}
-                                        </p>
-                                        {error.rule_name && error.fieldName && (
-                                          <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{error.fieldName}</p>
-                                        )}
-                                        <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">{error.message}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Warnings List */}
-                        {warnings.length > 0 && (
-                          <div className="mb-3">
-                            <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-yellow-500/10 -mx-2 px-2 py-1 rounded mb-2"
-                              onClick={() => setIsWarningsExpanded(!isWarningsExpanded)}
-                            >
-                              <h5 className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 flex items-center">
-                                <button
-                                  className="p-0.5 text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 mr-1"
-                                  aria-label={isWarningsExpanded ? "Collapse warnings" : "Expand warnings"}
-                                >
-                                  {isWarningsExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                                <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-                                Warnings ({warnings.length})
-                              </h5>
-                            </div>
-                            {isWarningsExpanded && (
-                              <div className="space-y-1">
-                                {warnings.map((warning, idx) => (
-                                  <div key={idx} className="bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2">
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300">
-                                          {warning.rule_name || warning.fieldName}
-                                          {warning.seriesName && (
-                                            <span className="ml-2 text-yellow-700 dark:text-yellow-400">({warning.seriesName})</span>
-                                          )}
-                                        </p>
-                                        {warning.rule_name && warning.fieldName && (
-                                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-0.5">{warning.fieldName}</p>
-                                        )}
-                                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">{warning.message}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* N/A List */}
-                        {naResults.length > 0 && (
-                          <div className="mb-3">
-                            <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-surface-secondary -mx-2 px-2 py-1 rounded mb-2"
-                              onClick={() => setIsNaExpanded(!isNaExpanded)}
-                            >
-                              <h5 className="text-xs font-semibold text-content-secondary flex items-center">
-                                <button
-                                  className="p-0.5 text-content-tertiary hover:text-content-secondary mr-1"
-                                  aria-label={isNaExpanded ? "Collapse N/A" : "Expand N/A"}
-                                >
-                                  {isNaExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                                <HelpCircle className="h-3.5 w-3.5 mr-1" />
-                                N/A ({naResults.length})
-                              </h5>
-                            </div>
-                            {isNaExpanded && (
-                              <div className="space-y-1">
-                                {naResults.map((naResult, idx) => (
-                                  <div key={idx} className="bg-surface-secondary border border-border rounded px-3 py-2">
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-content-primary">
-                                          {naResult.seriesName ? `Series ${naResult.seriesName}:` : (naResult.rule_name || naResult.fieldName)}
-                                        </p>
-                                        {naResult.rule_name && naResult.fieldName && (
-                                          <p className="text-xs text-content-secondary mt-0.5">{naResult.fieldName}</p>
-                                        )}
-                                        <p className="text-xs text-content-secondary mt-0.5">{naResult.message}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Passed List */}
-                        {passedResults.length > 0 && (
-                          <div className="mb-3">
-                            <div
-                              className="flex items-center justify-between cursor-pointer hover:bg-green-500/10 -mx-2 px-2 py-1 rounded mb-2"
-                              onClick={() => setIsPassedExpanded(!isPassedExpanded)}
-                            >
-                              <h5 className="text-xs font-semibold text-green-700 dark:text-green-400 flex items-center">
-                                <button
-                                  className="p-0.5 text-green-600 dark:text-green-400 hover:text-green-800 mr-1"
-                                  aria-label={isPassedExpanded ? "Collapse passed" : "Expand passed"}
-                                >
-                                  {isPassedExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                                Passed ({passedResults.length})
-                              </h5>
-                            </div>
-                            {isPassedExpanded && (
-                              <div className="space-y-1">
-                                {passedResults.map((passedResult, idx) => (
-                                  <div key={idx} className="bg-green-500/10 border border-green-500/20 rounded px-3 py-2">
-                                    <div className="flex items-start">
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-green-800 dark:text-green-300">
-                                          {passedResult.seriesName ? passedResult.seriesName : (passedResult.rule_name || passedResult.fieldName)}
-                                        </p>
-                                        {!passedResult.seriesName && passedResult.rule_name && passedResult.fieldName && (
-                                          <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">{passedResult.fieldName}</p>
-                                        )}
-                                        <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">{passedResult.message}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Success message if all pass */}
-                        {errors.length === 0 && warnings.length === 0 && naResults.length === 0 && statusCounts.pass > 0 && (
-                          <div className="bg-green-500/10 border border-green-500/20 rounded px-4 py-3">
-                            <div className="flex items-center">
-                              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mr-2" />
-                              <p className="text-sm text-green-800 dark:text-green-300 font-medium">
-                                All compliance checks passed successfully!
+                          <td className="px-2 py-1.5">
+                            <div>
+                              <p className="text-xs font-medium text-content-secondary">
+                                {field.keyword || field.name}
+                              </p>
+                              <p className="text-xs text-content-muted font-mono">
+                                {field.fieldType === 'derived' ? 'Derived field' :
+                                 field.fieldType === 'custom' ? 'Custom field' :
+                                 field.fieldType === 'private' ? 'Private field' :
+                                 (field.tag || 'Unknown tag')}
                               </p>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <p className="text-xs text-content-secondary break-words">
+                              {Array.isArray(field.value)
+                                ? field.value.join(', ')
+                                : String(field.value ?? '')}
+                            </p>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

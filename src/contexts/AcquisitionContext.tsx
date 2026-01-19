@@ -9,6 +9,7 @@ interface SchemaMetadata {
   description: string;
   authors: string[];
   version: string;
+  tags?: string[];
 }
 
 interface AcquisitionContextType {
