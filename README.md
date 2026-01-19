@@ -1,46 +1,93 @@
-# Getting Started with Create React App
+# DICOMpare
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+MRI protocol validation for global collaboration. Validate your DICOMs against community protocols and standards, or build and share your own schemas for multi-site studies.
 
-## Available Scripts
+**Your data never leaves your computer** — all processing happens locally in your browser or desktop app.
 
-In the project directory, you can run:
+## Use Online
 
-### `npm start`
+The easiest way to use DICOMpare is through the web app:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+**[dicompare.vercel.app](https://dicompare.vercel.app)**
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+No installation required. Works in any modern browser.
 
-### `npm test`
+## Desktop App
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+For offline use or better performance, download the desktop app:
 
-### `npm run build`
+### Download
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Get the latest release for your platform from [GitHub Releases](https://github.com/astewartau/dicompare/releases):
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- **Windows**: `.exe` installer or portable version
+- **macOS**: `.dmg` disk image
+- **Linux**: `.AppImage` or `.deb` package
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Features
 
-### `npm run eject`
+The desktop app includes:
+- Full offline support (no internet required after installation)
+- PDF export for compliance reports
+- All Python dependencies bundled (Pyodide)
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+## Development
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### Prerequisites
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+- Node.js 18+
+- npm
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+### Web Development
 
-## Learn More
+```bash
+# Install dependencies
+npm install
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+# Start development server
+npm run dev
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Electron Development
+
+```bash
+# Download Pyodide packages for offline use
+npm run download:pyodide
+
+# Start Electron in development mode
+npm run dev:electron
+```
+
+### Building
+
+```bash
+# Build web app
+npm run build
+
+# Build desktop app (choose your platform)
+npm run build:linux
+npm run build:mac
+npm run build:win
+```
+
+## How It Works
+
+1. **Load Data or Schema** — Upload your DICOM files or select from community protocols
+2. **Compare & Validate** — Check compliance or edit schemas to match your study requirements
+3. **Export & Share** — Download JSON schemas or PDF compliance reports
+
+## Tech Stack
+
+- React 19 + TypeScript
+- Tailwind CSS
+- Pyodide (Python in WebAssembly)
+- Electron (desktop app)
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+## Links
+
+- [GitHub Repository](https://github.com/astewartau/dicompare)
+- [Report Issues](https://github.com/astewartau/dicompare/issues)

@@ -34,7 +34,7 @@ const LandingPage: React.FC = () => {
           {/* Background Image - positioned to the top-right, bottom cropped */}
           <div
             className="absolute inset-0 bg-auto bg-right-top bg-no-repeat"
-            style={{ backgroundImage: 'url(/hero.png)', backgroundSize: 'auto 120%' }}
+            style={{ backgroundImage: 'url(./hero.png)', backgroundSize: 'auto 120%' }}
           >
             {/* Overlay gradient from solid left to transparent right */}
             <div className="absolute inset-0 bg-gradient-to-r from-surface via-surface/70 to-transparent" />
@@ -47,8 +47,7 @@ const LandingPage: React.FC = () => {
                 MRI Protocol Validation for Global Collaboration
               </h2>
               <p className="text-xl text-content-secondary mb-10 drop-shadow-sm">
-                Validate your data against community protocols and standards. Build validation schemas for your study.
-                Perfect for multi-site studies and protocol compliance.
+                dicompare validates your DICOMs against community protocols and standards. You can also build and share your own schemas for multi-site studies or the community.
               </p>
 
               {/* Primary CTA */}

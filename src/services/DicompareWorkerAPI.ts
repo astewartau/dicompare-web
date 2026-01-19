@@ -7,17 +7,7 @@ import type { WorkerRequest, WorkerResponse, PendingRequest, ProgressPayload } f
 import { SchemaTemplate } from '../types/schema';
 import { Acquisition as UIAcquisition } from '../types';
 import { FileObject } from '../utils/fileUploadUtils';
-
-// Re-export types from DicompareAPI for compatibility
-export type {
-  AnalysisResult,
-  Acquisition,
-  FieldInfo,
-  SeriesInfo,
-  ValidationResult,
-  FieldDictionary,
-  ValidationTemplate
-} from './DicompareAPI';
+import { fieldToSchemaField } from '../utils/schemaFieldConverters';
 
 class DicompareWorkerAPI {
   private worker: Worker | null = null;
@@ -224,7 +214,7 @@ class DicompareWorkerAPI {
       }
       schemaContent = content;
     } else {
-      const response = await fetch(`/schemas/${schemaId}.json`);
+      const response = await fetch(`./schemas/${schemaId}.json`);
       if (!response.ok) {
         throw new Error(`Failed to fetch schema ${schemaId}: ${response.statusText}`);
       }
@@ -303,7 +293,7 @@ class DicompareWorkerAPI {
 
     if (acquisition.acquisitionFields) {
       for (const field of acquisition.acquisitionFields) {
-        acqEntry.fields.push(this.fieldToSchemaField(field));
+        acqEntry.fields.push(fieldToSchemaField(field));
       }
     }
 
@@ -315,7 +305,7 @@ class DicompareWorkerAPI {
         };
         if (series.fields) {
           for (const field of series.fields) {
-            seriesEntry.fields.push(this.fieldToSchemaField(field));
+            seriesEntry.fields.push(fieldToSchemaField(field));
           }
         }
         acqEntry.series.push(seriesEntry);
@@ -336,37 +326,6 @@ class DicompareWorkerAPI {
     schema.acquisitions[acqName] = acqEntry;
 
     return JSON.stringify(schema);
-  }
-
-  private fieldToSchemaField(field: any): any {
-    const schemaField: any = {
-      field: field.name || field.keyword || field.tag
-    };
-
-    if (field.tag) {
-      schemaField.tag = field.tag;
-    }
-
-    if (field.value !== undefined && field.value !== null && field.value !== '') {
-      schemaField.value = field.value;
-    }
-
-    if (field.validationRule) {
-      if (field.validationRule.type === 'tolerance' && field.validationRule.tolerance !== undefined) {
-        schemaField.tolerance = field.validationRule.tolerance;
-      }
-      if (field.validationRule.type === 'contains' && field.validationRule.contains) {
-        schemaField.contains = field.validationRule.contains;
-      }
-      if (field.validationRule.type === 'contains_any' && field.validationRule.contains_any) {
-        schemaField.contains_any = field.validationRule.contains_any;
-      }
-      if (field.validationRule.type === 'contains_all' && field.validationRule.contains_all) {
-        schemaField.contains_all = field.validationRule.contains_all;
-      }
-    }
-
-    return schemaField;
   }
 
   // ==========================================================================
@@ -453,7 +412,7 @@ class DicompareWorkerAPI {
    */
   async getExampleSchemas(): Promise<SchemaTemplate[]> {
     try {
-      const response = await fetch('/schemas/index.json');
+      const response = await fetch('./schemas/index.json');
       if (!response.ok) {
         console.warn('Could not fetch schema index');
         return [];
@@ -464,9 +423,11 @@ class DicompareWorkerAPI {
       const schemas = await Promise.all(
         paths.map(async (path) => {
           try {
+            // Convert absolute paths to relative for file:// protocol compatibility
+            const relativePath = path.startsWith('/') ? '.' + path : path;
             const id = path.replace('/schemas/', '').replace('.json', '');
 
-            const schemaResponse = await fetch(path);
+            const schemaResponse = await fetch(relativePath);
             if (!schemaResponse.ok) {
               console.warn(`Could not fetch schema at ${path}: ${schemaResponse.status}`);
               return null;
@@ -519,7 +480,7 @@ class DicompareWorkerAPI {
     if (schemaContent) {
       content = schemaContent;
     } else {
-      const response = await fetch(`/schemas/${schemaId}.json`);
+      const response = await fetch(`./schemas/${schemaId}.json`);
       if (!response.ok) {
         throw new Error(`Failed to fetch schema ${schemaId}`);
       }

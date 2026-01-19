@@ -1,4 +1,5 @@
 import { WorkspaceItem } from '../contexts/WorkspaceContext';
+import { Acquisition } from '../types';
 import { getAllFilesFromDirectory } from './fileUploadUtils';
 
 /**
@@ -57,6 +58,22 @@ export function getItemFlags(item: WorkspaceItem): ItemFlags {
     hasSchema,
     hasData,
     isUsedAsSchema,
+  };
+}
+
+/**
+ * Create an empty acquisition object with sensible defaults.
+ * Eliminates repeated empty acquisition creation pattern.
+ */
+export function createEmptyAcquisition(id: string, protocolName = ''): Acquisition {
+  return {
+    id,
+    protocolName,
+    seriesDescription: '',
+    totalFiles: 0,
+    acquisitionFields: [],
+    series: [],
+    metadata: {}
   };
 }
 

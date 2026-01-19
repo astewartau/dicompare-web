@@ -23,3 +23,10 @@ yarn-debug.log*
 yarn-error.log*
 
 dist/
+
+# Electron
+/out
+/release
+
+# Pyodide offline bundle (downloaded at build time)
+/public/pyodide

@@ -22,9 +22,10 @@ import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { AcquisitionSelection } from '../../types';
 import WorkspaceSidebar, { SCHEMA_INFO_ID, ADD_FROM_DATA_ID, ADD_NEW_ID } from './WorkspaceSidebar';
 import WorkspaceDetailPanel, { SchemaInfoTab } from './WorkspaceDetailPanel';
+import { getItemFlags } from '../../utils/workspaceHelpers';
 import AttachSchemaModal from './AttachSchemaModal';
-import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
-import { buildReadmeItems } from '../../utils/readmeHelpers';
+import SchemaReadmeModal from '../schema/SchemaReadmeModal';
+import { useReadmeModal } from '../../hooks/useReadmeModal';
 
 const UnifiedWorkspace: React.FC = () => {
   const {
@@ -38,7 +39,6 @@ const UnifiedWorkspace: React.FC = () => {
     pendingAttachmentSelection,
     addFromSchema,
     addFromData,
-    addFromScratch,
     addEmpty,
     createSchemaForItem,
     detachCreatedSchema,
@@ -67,8 +67,16 @@ const UnifiedWorkspace: React.FC = () => {
     isLoading: schemasLoading
   } = useSchemaService();
 
+  // README modal hook
+  const {
+    showReadmeModal,
+    readmeModalData,
+    handleSchemaReadmeClick,
+    handleAcquisitionReadmeClick,
+    closeReadmeModal
+  } = useReadmeModal(getSchemaContent);
+
   // Local UI state
-  const [activeTab, setActiveTab] = useState<'schema' | 'data'>('schema');
   const [schemaInfoTab, setSchemaInfoTab] = useState<SchemaInfoTab>('welcome');
   const [showAttachSchemaModal, setShowAttachSchemaModal] = useState(false);
   const [isAttachModalFromStaged, setIsAttachModalFromStaged] = useState(false); // Track if modal opened from staged view
@@ -77,14 +85,6 @@ const UnifiedWorkspace: React.FC = () => {
   const [activeDragData, setActiveDragData] = useState<any>(null);
   const [activeDragWidth, setActiveDragWidth] = useState<number | null>(null);
   const [isOverDropZone, setIsOverDropZone] = useState(false);
-
-  // README modal state
-  const [showReadmeModal, setShowReadmeModal] = useState(false);
-  const [readmeModalData, setReadmeModalData] = useState<{
-    schemaName: string;
-    readmeItems: ReadmeItem[];
-    initialSelection: string;
-  } | null>(null);
 
   // Track previous selection to exit edit mode when navigating away
   const previousSelectedId = useRef<string | null>(null);
@@ -110,41 +110,6 @@ const UnifiedWorkspace: React.FC = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  // README click handlers
-  const handleSchemaReadmeClick = async (schemaId: string, schemaName: string) => {
-    try {
-      const content = await getSchemaContent(schemaId);
-      if (content) {
-        const schemaData = JSON.parse(content);
-        setReadmeModalData({
-          schemaName,
-          readmeItems: buildReadmeItems(schemaData, schemaName),
-          initialSelection: 'schema'
-        });
-        setShowReadmeModal(true);
-      }
-    } catch (error) {
-      console.error('Failed to load schema README:', error);
-    }
-  };
-
-  const handleAcquisitionReadmeClick = async (schemaId: string, schemaName: string, acquisitionIndex: number) => {
-    try {
-      const content = await getSchemaContent(schemaId);
-      if (content) {
-        const schemaData = JSON.parse(content);
-        setReadmeModalData({
-          schemaName,
-          readmeItems: buildReadmeItems(schemaData, schemaName),
-          initialSelection: `acquisition-${acquisitionIndex}`
-        });
-        setShowReadmeModal(true);
-      }
-    } catch (error) {
-      console.error('Failed to load acquisition README:', error);
-    }
-  };
 
   // Schema selection handlers
   const handleSchemaFirstToggle = (selection: AcquisitionSelection) => {
@@ -174,16 +139,6 @@ const UnifiedWorkspace: React.FC = () => {
     if (!files) return;
     await addFromData(files, mode);
   }, [addFromData]);
-
-  // Scratch handler (legacy, for backwards compatibility)
-  const handleAddFromScratch = useCallback(() => {
-    addFromScratch();
-  }, [addFromScratch]);
-
-  // Empty handler - creates a truly empty item
-  const handleAddEmpty = useCallback(() => {
-    addEmpty();
-  }, [addEmpty]);
 
   // Create schema for current empty item
   const handleCreateSchema = useCallback(() => {
@@ -394,8 +349,6 @@ const UnifiedWorkspace: React.FC = () => {
               isSchemaInfo={selectedId === SCHEMA_INFO_ID || (!selectedId && !selectedItem)}
               schemaInfoTab={schemaInfoTab}
               setSchemaInfoTab={setSchemaInfoTab}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
               isProcessing={isProcessing}
               processingProgress={processingProgress}
               pendingSchemaSelections={pendingSchemaSelections}
@@ -407,8 +360,6 @@ const UnifiedWorkspace: React.FC = () => {
               onSchemaToggle={handleSchemaFirstToggle}
               onConfirmSchemas={confirmSchemaSelections}
               onFileUpload={handleFileUpload}
-              onAddFromScratch={handleAddFromScratch}
-              onAddEmpty={handleAddEmpty}
               onCreateSchema={handleCreateSchema}
               onDetachCreatedSchema={handleDetachCreatedSchema}
               onToggleEditing={() => selectedId && toggleEditing(selectedId)}
@@ -442,11 +393,7 @@ const UnifiedWorkspace: React.FC = () => {
             // For workspace items being reordered
             const draggedItem = items.find(i => i.id === activeDragId);
             if (draggedItem) {
-              const hasData = (draggedItem.source === 'data' && draggedItem.dataUsageMode === 'validation-subject') || draggedItem.attachedData !== undefined;
-              const hasSchema = draggedItem.source === 'schema' ||
-                (draggedItem.source === 'data' && draggedItem.dataUsageMode !== 'validation-subject') ||
-                (draggedItem.source === 'empty' && draggedItem.hasCreatedSchema) ||
-                draggedItem.attachedSchema !== undefined;
+              const { hasData, hasSchema } = getItemFlags(draggedItem);
               return (
                 <div className="border rounded-lg p-3 bg-surface-primary shadow-lg border-brand-500 w-64">
                   <div className="flex items-start">
@@ -572,10 +519,7 @@ const UnifiedWorkspace: React.FC = () => {
       {/* README Modal */}
       <SchemaReadmeModal
         isOpen={showReadmeModal}
-        onClose={() => {
-          setShowReadmeModal(false);
-          setReadmeModalData(null);
-        }}
+        onClose={closeReadmeModal}
         schemaName={readmeModalData?.schemaName || ''}
         readmeItems={readmeModalData?.readmeItems || []}
         initialSelection={readmeModalData?.initialSelection || 'schema'}
