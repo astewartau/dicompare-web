@@ -27,8 +27,17 @@ CORE_FILES=(
     "pyodide-lock.json"
 )
 
+# Get file size cross-platform
+get_file_size() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        stat -f%z "$1" 2>/dev/null || echo 0
+    else
+        stat -c%s "$1" 2>/dev/null || wc -c < "$1" 2>/dev/null || echo 0
+    fi
+}
+
 for file in "${CORE_FILES[@]}"; do
-    if [ ! -f "$DEST_DIR/$file" ] || [ $(stat -c%s "$DEST_DIR/$file" 2>/dev/null || echo 0) -lt 1000 ]; then
+    if [ ! -f "$DEST_DIR/$file" ] || [ $(get_file_size "$DEST_DIR/$file") -lt 1000 ]; then
         echo "   Downloading $file..."
         curl -sL "$PYODIDE_BASE/$file" -o "$DEST_DIR/$file"
     else
@@ -39,6 +48,9 @@ done
 # Use Python to extract package info from lock file and download
 echo ""
 echo "⬇️  Downloading Pyodide built-in packages..."
+
+# Set UTF-8 encoding for Windows compatibility
+export PYTHONIOENCODING=utf-8
 
 python3 << 'PYTHON_SCRIPT'
 import json
@@ -112,7 +124,7 @@ for pkg_name in NEEDED_PACKAGES:
     if result.returncode != 0:
         print(f"   Warning: Failed to download {file_name}")
 
-print("\n✅ Pyodide packages downloaded")
+print("\n[OK] Pyodide packages downloaded")
 PYTHON_SCRIPT
 
 # Download pure Python wheels from PyPI that aren't in Pyodide
