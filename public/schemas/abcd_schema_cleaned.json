@@ -968,7 +968,7 @@
     },
     "Diffusion MRI (Multi-shell HARDI)": {
       "description": "High angular resolution diffusion imaging (HARDI) with multi-shell acquisition",
-      "tags": ["brain", "dMRI", "multiband", "HARDI"],
+      "tags": ["brain", "dMRI", "diffusion", "multiband", "HARDI"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1150,7 +1150,7 @@
     },
     "Diffusion Field Map (A>>P)": {
       "description": "Diffusion B0 field map - Anterior-Posterior phase encoding",
-      "tags": ["brain", "fieldmap", "dMRI"],
+      "tags": ["brain", "fieldmap", "dMRI", "diffusion"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1341,7 +1341,7 @@
     },
     "Diffusion Field Map (P>>A)": {
       "description": "Diffusion B0 field map - Posterior-Anterior phase encoding",
-      "tags": ["brain", "fieldmap", "dMRI"],
+      "tags": ["brain", "fieldmap", "dMRI", "diffusion"],
       "fields": [
         {
           "field": "SeriesDescription",

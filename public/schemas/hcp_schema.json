@@ -1212,7 +1212,7 @@
     },
     "Diffusion MRI (Multi-shell HARDI)": {
       "description": "High angular resolution diffusion imaging (HARDI) with multi-shell acquisition",
-      "tags": ["brain", "dMRI", "multiband", "HARDI"],
+      "tags": ["brain", "dMRI", "diffusion", "multiband", "HARDI"],
       "detailed_description": "## Diffusion MRI (HARDI)\n\nHigh angular resolution diffusion imaging with multi-shell acquisition using spin-echo EPI. Enables advanced diffusion modeling including NODDI, CSD, and high-quality tractography. Six runs are acquired with paired phase encoding directions (RL/LR).\n\n### Documented Parameters (from HCP Appendix I)\n| Parameter | Value |\n|-----------|-------|\n| Sequence | cmrr_mbep2d_diff (epse) |\n| Acquisition Time | 9:41 per run |\n| Voxel Size | 1.25 \u00d7 1.25 \u00d7 1.25 mm |\n| TR | 5520 ms |\n| TE | 89.5 ms |\n| Flip Angle | 78\u00b0 |\n| Slices | 111 |\n| FOV Read | 210 mm |\n| FOV Phase | 85.7% |\n| Base Resolution | 168 |\n| Phase Resolution | 100% |\n| Phase Partial Fourier | 6/8 |\n| Orientation | Transverse (T > C-20.0) |\n| Phase Encoding | R >> L or L >> R (paired) |\n| Multiband Factor | 3 |\n| Bandwidth | 1488 Hz/Px |\n| Echo Spacing | 0.78 ms |\n| EPI Factor | 144 |\n| Diffusion Scheme | Monopolar |\n| Refocus Flip Angle | 160\u00b0 |\n\n### Diffusion Encoding\n| b-value (s/mm\u00b2) | Directions per run |\n|-----------------|-------------------|\n| 0 | 6 (interspersed) |\n| 1000 | ~30 |\n| 2000 | ~30 |\n| 3000 | ~30 |\n| **Total** | ~95-97 per run |\n\nThree different gradient tables are used (dir95, dir96, dir97), each acquired with both RL and LR phase encoding for a total of 6 runs.\n\n### Source\nHCP S1200 Release Reference Manual - Appendix I, Page 46-50",
       "fields": [
         {

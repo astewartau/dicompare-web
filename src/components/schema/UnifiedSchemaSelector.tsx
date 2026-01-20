@@ -94,6 +94,42 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     ...uploadedSchemas.map(s => ({ ...s, source: 'uploaded' as const }))
   ], [librarySchemas, uploadedSchemas]);
 
+  // Helper function to check if all keywords match a schema (used for nested view)
+  const schemaMatchesKeywords = (schema: UnifiedSchema, keywords: string[]): boolean => {
+    // Build searchable text from schema name and description
+    const schemaText = `${schema.name} ${schema.description || ''}`.toLowerCase();
+
+    // Build searchable text from all acquisitions (names, descriptions, and tags)
+    const acquisitionTexts = schema.acquisitions?.map(acq =>
+      `${acq.protocolName || ''} ${acq.seriesDescription || ''} ${(acq.tags || []).join(' ')}`
+    ).join(' ').toLowerCase() || '';
+
+    const combinedText = `${schemaText} ${acquisitionTexts}`;
+
+    // All keywords must match somewhere in the combined text
+    return keywords.every(keyword => combinedText.includes(keyword));
+  };
+
+  // Helper function to check if all keywords match an individual acquisition (used for flat view)
+  const acquisitionMatchesKeywords = (
+    schema: UnifiedSchema,
+    acqIndex: number,
+    keywords: string[]
+  ): boolean => {
+    const acq = schema.acquisitions?.[acqIndex];
+    if (!acq) return false;
+
+    // Build searchable text from this specific acquisition
+    const acquisitionText = `${acq.protocolName || ''} ${acq.seriesDescription || ''} ${(acq.tags || []).join(' ')}`.toLowerCase();
+
+    // Also include schema name/description so you can search for "MS FLAIR" and find FLAIR acquisitions in MS schemas
+    const schemaText = `${schema.name} ${schema.description || ''}`.toLowerCase();
+    const combinedText = `${schemaText} ${acquisitionText}`;
+
+    // All keywords must match somewhere in the combined text for this acquisition
+    return keywords.every(keyword => combinedText.includes(keyword));
+  };
+
   // Filter schemas based on search, tags, and source toggles
   const filteredSchemas = useMemo(() => {
     let schemas = allSchemas;
@@ -104,13 +140,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       (showCustom && s.source === 'uploaded')
     );
 
-    // Filter by search query
+    // Filter by search query (keyword-based - all keywords must match)
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      schemas = schemas.filter(s =>
-        s.name.toLowerCase().includes(query) ||
-        s.description?.toLowerCase().includes(query)
-      );
+      const keywords = searchQuery.toLowerCase().split(/\s+/).filter(k => k.length > 0);
+      schemas = schemas.filter(s => schemaMatchesKeywords(s, keywords));
     }
 
     // Filter by selected tags (AND logic - show schemas where at least one acquisition has ALL selected tags)
@@ -138,13 +171,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       (showCustom && s.source === 'uploaded')
     );
 
-    // Filter by search query
+    // Filter by search query (keyword-based)
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      schemasForTags = schemasForTags.filter(s =>
-        s.name.toLowerCase().includes(query) ||
-        s.description?.toLowerCase().includes(query)
-      );
+      const keywords = searchQuery.toLowerCase().split(/\s+/).filter(k => k.length > 0);
+      schemasForTags = schemasForTags.filter(s => schemaMatchesKeywords(s, keywords));
     }
 
     const tagCounts = new Map<string, number>();
@@ -202,14 +232,18 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     });
   }, [expandedSchemas]);
 
-  // Load all acquisitions when in flat view mode
+  // Load all acquisitions when in flat view mode (load from all source-filtered schemas, not search-filtered)
   useEffect(() => {
     if (viewMode === 'flat') {
-      filteredSchemas.forEach(s => {
+      const schemasToLoad = allSchemas.filter(s =>
+        (showLibrary && s.source === 'library') ||
+        (showCustom && s.source === 'uploaded')
+      );
+      schemasToLoad.forEach(s => {
         loadSchemaAcquisitions(s.id);
       });
     }
-  }, [viewMode, filteredSchemas.map(s => s.id).join(',')]);
+  }, [viewMode, allSchemas, showLibrary, showCustom]);
 
   // Check if an acquisition has a specific tag (acquisition-level tags only)
   const acquisitionHasTag = (acq: { tags?: string[] }, tag: string): boolean => {
@@ -234,20 +268,36 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const flattenedAcquisitions = useMemo(() => {
     if (viewMode !== 'flat') return [];
 
-    return filteredSchemas.flatMap(schema => {
+    // Parse search keywords for acquisition-level filtering
+    const keywords = searchQuery.trim()
+      ? searchQuery.toLowerCase().split(/\s+/).filter(k => k.length > 0)
+      : [];
+
+    // In flat view, use all schemas filtered by source only (not by search)
+    // We'll filter at the acquisition level instead
+    let schemasForFlat = allSchemas.filter(s =>
+      (showLibrary && s.source === 'library') ||
+      (showCustom && s.source === 'uploaded')
+    );
+
+    return schemasForFlat.flatMap(schema => {
       const acquisitions = schemaAcquisitions[schema.id] || [];
       return acquisitions
         .map((acquisition, index) => {
+          // Check tag match
           const matchesTag = selectedTags.length === 0 ||
             selectedTags.every(tag => acquisitionHasTag(
               { tags: schema.acquisitions?.[index]?.tags },
               tag
             ));
-          return { schema, acquisition, index, matchesTag };
+          // Check keyword match at the acquisition level
+          const matchesKeywords = keywords.length === 0 ||
+            acquisitionMatchesKeywords(schema, index, keywords);
+          return { schema, acquisition, index, matchesTag, matchesKeywords };
         })
-        .filter(item => item.matchesTag);
+        .filter(item => item.matchesTag && item.matchesKeywords);
     });
-  }, [viewMode, filteredSchemas, schemaAcquisitions, selectedTags]);
+  }, [viewMode, allSchemas, showLibrary, showCustom, schemaAcquisitions, selectedTags, searchQuery]);
 
   // Check if flat view is still loading acquisitions
   const isFlatViewLoading = viewMode === 'flat' && loadingSchemas.size > 0;
@@ -626,7 +676,12 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
               </div>
             ) : acquisitions.length > 0 ? (
               (() => {
-                // Split acquisitions into matching and non-matching
+                // Parse search keywords for acquisition-level filtering
+                const keywords = searchQuery.trim()
+                  ? searchQuery.toLowerCase().split(/\s+/).filter(k => k.length > 0)
+                  : [];
+
+                // Split acquisitions into matching and non-matching (by both tags AND keywords)
                 const allAcqs = acquisitions.map((acquisition, index) => ({
                   acquisition,
                   index,
@@ -636,10 +691,12 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                         { tags: schema.acquisitions?.[index]?.tags },
                         tag
                       )
-                    )
+                    ),
+                  matchesKeywords: keywords.length === 0 ||
+                    acquisitionMatchesKeywords(schema, index, keywords)
                 }));
-                const matchingAcqs = allAcqs.filter(a => a.matchesTag);
-                const nonMatchingAcqs = allAcqs.filter(a => !a.matchesTag);
+                const matchingAcqs = allAcqs.filter(a => a.matchesTag && a.matchesKeywords);
+                const nonMatchingAcqs = allAcqs.filter(a => !a.matchesTag || !a.matchesKeywords);
                 const showNonMatching = showNonMatchingFor.has(schema.id);
 
                 const renderAcquisitionCard = ({ acquisition, index, matchesTag }: { acquisition: Acquisition; index: number; matchesTag: boolean }) => {
@@ -821,8 +878,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                     {/* Render matching acquisitions */}
                     {matchingAcqs.map(renderAcquisitionCard)}
 
-                    {/* Show non-matching summary if there are any and tags are selected */}
-                    {nonMatchingAcqs.length > 0 && selectedTags.length > 0 && (
+                    {/* Show non-matching summary if there are any and filters are applied */}
+                    {nonMatchingAcqs.length > 0 && (selectedTags.length > 0 || keywords.length > 0) && (
                       <>
                         <button
                           onClick={() => toggleShowNonMatching(schema.id)}
@@ -906,7 +963,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-content-tertiary" />
                 <input
                   type="text"
-                  placeholder="Search schemas..."
+                  placeholder="Search schemas, acquisitions, tags..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-border-secondary rounded-lg bg-surface-primary text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
