@@ -396,7 +396,7 @@ function buildReadmeHtml(
 }
 
 function buildTestNotesHtml(isComplianceMode: boolean, testDataNotes?: string): string {
-  if (!isComplianceMode || !testDataNotes) return '';
+  if (!testDataNotes) return '';
 
   // Use custom renderer to demote headers (H1→H3, H2→H4, etc.)
   const demotedRenderer = createDemotedHeaderRenderer(2);
