@@ -3,13 +3,27 @@
  * Generates HTML for printing acquisition compliance reports.
  */
 
-import { marked } from 'marked';
+import { marked, Renderer } from 'marked';
 import { WorkspaceItem, SchemaMetadata } from '../contexts/WorkspaceContext';
 import { Acquisition, DicomField } from '../types';
 import { ComplianceFieldResult } from '../types/schema';
 import { getItemFlags } from './workspaceHelpers';
 import { escapeHtml, normalizeTag } from './stringHelpers';
 import { formatFieldDisplay, buildValidationRuleFromField } from './fieldFormatters';
+
+/**
+ * Create a custom marked renderer that demotes headers by a specified number of levels.
+ * This ensures markdown content headers are subordinate to the section title.
+ */
+function createDemotedHeaderRenderer(demoteBy: number = 2): Renderer {
+  const renderer = new Renderer();
+  renderer.heading = ({ text, depth }: { text: string; depth: number }) => {
+    const newDepth = Math.min(depth + demoteBy, 6); // Cap at H6
+    const originalClass = `readme-h${depth}`; // Track original level for styling
+    return `<h${newDepth} class="${originalClass}">${text}</h${newDepth}>\n`;
+  };
+  return renderer;
+}
 
 export interface PrintReportOptions {
   selectedItem: WorkspaceItem;
@@ -368,11 +382,15 @@ function buildReadmeHtml(
     </div>
   ` : '';
 
+  // Use custom renderer to demote headers (H1→H3, H2→H4, etc.)
+  const demotedRenderer = createDemotedHeaderRenderer(2);
+  const parsedContent = marked.parse(content, { renderer: demotedRenderer }) as string;
+
   return `
     <div class="readme-section">
       <h2>Reference Documentation</h2>
       ${metaHtml}
-      <div class="readme-content">${marked.parse(content)}</div>
+      <div class="readme-content">${parsedContent}</div>
     </div>
   `;
 }
@@ -380,10 +398,14 @@ function buildReadmeHtml(
 function buildTestNotesHtml(isComplianceMode: boolean, testDataNotes?: string): string {
   if (!isComplianceMode || !testDataNotes) return '';
 
+  // Use custom renderer to demote headers (H1→H3, H2→H4, etc.)
+  const demotedRenderer = createDemotedHeaderRenderer(2);
+  const parsedContent = marked.parse(testDataNotes, { renderer: demotedRenderer }) as string;
+
   return `
     <div class="test-notes-section">
       <h2>Test Data Notes</h2>
-      <div class="test-notes-content">${marked.parse(testDataNotes)}</div>
+      <div class="test-notes-content">${parsedContent}</div>
     </div>
   `;
 }
@@ -572,24 +594,27 @@ function getPrintStyles(): string {
     .unchecked-header { color: #333; margin-top: 0; }
     .unchecked-table th { background: #f9fafb; }
     .unchecked-table td { color: #1a1a1a; }
-    .readme-section { margin-top: 32px; padding-top: 24px; border-top: 2px solid #e5e5e5; }
-    .readme-meta { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; }
-    .readme-meta-item { font-size: 12px; color: #475569; margin: 4px 0; }
-    .readme-meta-item strong { color: #1e293b; }
-    .readme-content { font-size: 13px; line-height: 1.6; color: #333; }
-    .readme-content h2.readme-h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; border-bottom: none; padding-bottom: 0; }
-    .readme-content h3 { font-size: 15px; margin-top: 20px; margin-bottom: 8px; border-bottom: none; padding-bottom: 0; }
-    .readme-content h4 { font-size: 13px; margin-top: 16px; margin-bottom: 6px; }
+    .readme-section { margin-top: 32px; border-top: 2px solid #3b82f6; background: #eff6ff; border-radius: 8px; padding: 20px; }
+    .readme-section > h2 { color: #1e40af; margin-top: 0; margin-bottom: 16px; border-bottom: none; padding-bottom: 0; }
+    .readme-meta { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; }
+    .readme-meta-item { font-size: 12px; color: #1e40af; margin: 4px 0; }
+    .readme-meta-item strong { color: #1e3a8a; }
+    .readme-content { font-size: 13px; line-height: 1.6; color: #1e3a8a; }
+    .readme-content .readme-h1 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 12px; border-bottom: none; padding-bottom: 0; color: #1e40af; }
+    .readme-content .readme-h2 { font-size: 14px; font-weight: 600; margin-top: 20px; margin-bottom: 8px; border-bottom: none; padding-bottom: 0; color: #1e40af; }
+    .readme-content .readme-h3 { font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 6px; color: #1e40af; }
+    .readme-content .readme-h4 { font-size: 12px; font-weight: 600; margin-top: 14px; margin-bottom: 6px; color: #1e40af; }
     .readme-content p { margin: 12px 0; }
     .readme-content ul, .readme-content ol { margin: 12px 0; padding-left: 24px; }
     .readme-content li { margin: 4px 0; }
     .readme-content a { color: #2563eb; text-decoration: underline; }
-    .readme-content code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 11px; }
-    .test-notes-section { margin-top: 32px; padding-top: 24px; border-top: 2px solid #fbbf24; background: #fffbeb; border-radius: 8px; padding: 20px; }
-    .test-notes-section h2 { color: #92400e; margin-top: 0; margin-bottom: 16px; }
+    .readme-content code { background: #dbeafe; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 11px; color: #1e40af; }
+    .test-notes-section { margin-top: 32px; border-top: 2px solid #fbbf24; background: #fffbeb; border-radius: 8px; padding: 20px; }
+    .test-notes-section > h2 { color: #92400e; margin-top: 0; margin-bottom: 16px; border-bottom: none; padding-bottom: 0; }
     .test-notes-content { font-size: 13px; line-height: 1.6; color: #451a03; }
-    .test-notes-content h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; }
-    .test-notes-content h3 { font-size: 15px; margin-top: 20px; margin-bottom: 8px; }
+    .test-notes-content .readme-h1 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 12px; color: #92400e; }
+    .test-notes-content .readme-h2 { font-size: 14px; font-weight: 600; margin-top: 20px; margin-bottom: 8px; color: #92400e; }
+    .test-notes-content .readme-h3 { font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 6px; color: #92400e; }
     .test-notes-content p { margin: 12px 0; }
     .test-notes-content ul, .test-notes-content ol { margin: 12px 0; padding-left: 24px; }
     .test-notes-content li { margin: 4px 0; }

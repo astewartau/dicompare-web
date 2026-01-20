@@ -31,12 +31,18 @@ const LandingPage: React.FC = () => {
       <main className="flex-1">
         {/* Hero Section */}
         <div className="relative overflow-hidden bg-surface">
-          {/* Background Image - positioned to the top-right, bottom cropped */}
+          {/* Background Image - Light mode version */}
           <div
-            className="absolute inset-0 bg-auto bg-right-top bg-no-repeat"
+            className="absolute inset-0 bg-auto bg-right-top bg-no-repeat dark:hidden"
+            style={{ backgroundImage: 'url(./hero-light.png)', backgroundSize: 'auto 120%' }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-surface via-surface/70 to-transparent" />
+          </div>
+          {/* Background Image - Dark mode version */}
+          <div
+            className="absolute inset-0 bg-auto bg-right-top bg-no-repeat hidden dark:block"
             style={{ backgroundImage: 'url(./hero.png)', backgroundSize: 'auto 120%' }}
           >
-            {/* Overlay gradient from solid left to transparent right */}
             <div className="absolute inset-0 bg-gradient-to-r from-surface via-surface/70 to-transparent" />
           </div>
 

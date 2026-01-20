@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { DicomField, FieldDataType, ValidationConstraint, ValidationRule } from '../../types';
 import { inferDataTypeFromValue, convertValueToDataType } from '../../utils/datatypeInference';
-import DataTypeSelector from '../common/DataTypeSelector';
-import ValidationConstraintSelector from '../common/ValidationConstraintSelector';
-import TypeSpecificInputs from '../common/TypeSpecificInputs';
-import ConstraintInputWidgets from '../common/ConstraintInputWidgets';
 
 interface FieldEditModalProps {
   field: DicomField;
@@ -15,6 +11,25 @@ interface FieldEditModalProps {
   isSeriesValue?: boolean; // True when editing a series-specific value
 }
 
+// Compact data type options
+const DATA_TYPES: { value: FieldDataType; label: string }[] = [
+  { value: 'string', label: 'String' },
+  { value: 'number', label: 'Number' },
+  { value: 'list_string', label: 'String[]' },
+  { value: 'list_number', label: 'Number[]' },
+  { value: 'json', label: 'JSON' },
+];
+
+// Compact constraint options with data type compatibility
+const CONSTRAINTS: { value: ValidationConstraint; label: string; types: string[] }[] = [
+  { value: 'exact', label: 'Exact', types: ['string', 'number', 'list_string', 'list_number', 'json'] },
+  { value: 'tolerance', label: '± Tolerance', types: ['number', 'list_number'] },
+  { value: 'range', label: 'Range', types: ['number', 'list_number'] },
+  { value: 'contains', label: 'Contains', types: ['string'] },
+  { value: 'contains_any', label: 'Any of', types: ['string', 'list_string', 'list_number'] },
+  { value: 'contains_all', label: 'All of', types: ['list_string', 'list_number'] },
+];
+
 const FieldEditModal: React.FC<FieldEditModalProps> = ({
   field,
   value,
@@ -23,7 +38,6 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   isSeriesValue = false,
 }) => {
   const [formData, setFormData] = useState(() => {
-    // Determine the initial value - for contains_any/contains_all, use the constraint values
     let initialValue: any;
     if (field.validationRule.type === 'contains_any' && field.validationRule.contains_any) {
       initialValue = field.validationRule.contains_any;
@@ -46,6 +60,14 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [listInput, setListInput] = useState(() => {
+    const val = formData.value;
+    return Array.isArray(val) ? val.join(', ') : (val?.toString() || '');
+  });
+  const [toleranceValueInput, setToleranceValueInput] = useState(() => {
+    const val = formData.validationRule.value;
+    return Array.isArray(val) ? val.join(', ') : (val?.toString() || '');
+  });
 
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
@@ -236,147 +258,322 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
     }));
   };
 
+  // Update list input when value changes
+  useEffect(() => {
+    const val = formData.value;
+    setListInput(Array.isArray(val) ? val.join(', ') : (val?.toString() || ''));
+  }, [formData.value]);
+
+  // Update tolerance value input when validation rule value changes
+  useEffect(() => {
+    const val = formData.validationRule.value;
+    setToleranceValueInput(Array.isArray(val) ? val.join(', ') : (val?.toString() || ''));
+  }, [formData.validationRule.value]);
+
+  // Parse list input on blur
+  const handleListBlur = () => {
+    const isNumeric = formData.dataType === 'number' || formData.dataType === 'list_number';
+    const values = listInput.split(',').map(v => v.trim()).filter(v => v.length > 0);
+
+    if (isNumeric) {
+      const nums = values.map(v => parseFloat(v)).filter(n => !isNaN(n));
+      setFormData(prev => ({ ...prev, value: nums.length === 1 && prev.dataType === 'number' ? nums[0] : nums }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        value: values.length === 1 && prev.dataType === 'string' ? values[0] : values
+      }));
+    }
+  };
+
+  // Parse tolerance value input on blur
+  const handleToleranceValueBlur = () => {
+    const values = toleranceValueInput.split(',').map(v => v.trim()).filter(v => v.length > 0);
+    const nums = values.map(v => parseFloat(v)).filter(n => !isNaN(n));
+
+    if (formData.dataType === 'list_number') {
+      handleConstraintValueChange({ value: nums });
+    } else {
+      handleConstraintValueChange({ value: nums.length > 0 ? nums[0] : undefined });
+    }
+  };
+
+  // Get available constraints for current data type
+  const availableConstraints = CONSTRAINTS.filter(c => c.types.includes(formData.dataType));
+
+  // Ensure current constraint is valid for data type
+  useEffect(() => {
+    if (!availableConstraints.some(c => c.value === formData.validationRule.type)) {
+      handleConstraintChange('exact');
+    }
+  }, [formData.dataType]);
+
+  const needsListInput = ['contains_any', 'contains_all'].includes(formData.validationRule.type) ||
+    formData.dataType === 'list_string' || formData.dataType === 'list_number';
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface-primary rounded-lg shadow-xl max-w-xl w-full mx-4 max-h-[85vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div>
-            <h3 className="text-lg font-semibold text-content-primary">
-              {isSeriesValue ? 'Edit Series Value' : 'Edit Field'}
-            </h3>
-            <p className="text-sm text-content-secondary">{field.name} ({field.tag})</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div
+        className="bg-surface-primary rounded-xl shadow-2xl w-full max-w-md overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Compact Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface-secondary">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-semibold text-content-primary truncate">{field.name}</span>
+            <span className="text-xs text-content-tertiary font-mono shrink-0">{field.tag}</span>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-content-tertiary hover:text-content-primary transition-colors"
+            className="p-1.5 -mr-1.5 text-content-tertiary hover:text-content-primary hover:bg-surface-hover rounded-lg transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Body */}
         <div className="p-4 space-y-4">
-          {/* Data Type and Constraint - Side by side for compactness */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Type & Validation as pill selectors */}
+          <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-content-primary mb-1">
-                Data Type
-              </label>
-              <DataTypeSelector
-                value={formData.dataType}
-                onChange={handleDataTypeChange}
-                hideLabel={true}
-              />
+              <label className="block text-xs font-medium text-content-secondary mb-1.5">Type</label>
+              <div className="flex flex-wrap gap-1.5">
+                {DATA_TYPES.map(dt => (
+                  <button
+                    key={dt.value}
+                    onClick={() => handleDataTypeChange(dt.value)}
+                    className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                      formData.dataType === dt.value
+                        ? 'bg-brand-600 text-white shadow-sm'
+                        : 'bg-surface-secondary text-content-secondary hover:bg-surface-hover hover:text-content-primary'
+                    }`}
+                  >
+                    {dt.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-content-primary mb-1">
-                Validation
-              </label>
-              <ValidationConstraintSelector
-                value={formData.validationRule.type}
-                onChange={handleConstraintChange}
-                dataType={formData.dataType}
-                hideLabel={true}
-              />
+              <label className="block text-xs font-medium text-content-secondary mb-1.5">Validation</label>
+              <div className="flex flex-wrap gap-1.5">
+                {availableConstraints.map(c => (
+                  <button
+                    key={c.value}
+                    onClick={() => handleConstraintChange(c.value)}
+                    className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                      formData.validationRule.type === c.value
+                        ? 'bg-brand-600 text-white shadow-sm'
+                        : 'bg-surface-secondary text-content-secondary hover:bg-surface-hover hover:text-content-primary'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Field Value - Show for exact, contains_any, contains_all (they all use formData.value) */}
-          {['exact', 'contains_any', 'contains_all'].includes(formData.validationRule.type) && (
+          {/* Value Input - contextual based on constraint */}
+          {formData.validationRule.type === 'exact' && (
             <div>
-              <label className="block text-sm font-medium text-content-primary mb-1">
-                {formData.validationRule.type === 'exact' ? 'Value' :
-                 formData.validationRule.type === 'contains_any' ? 'Values to Search For (must contain any)' :
-                 'Required Elements (must contain all)'}
-              </label>
-              <TypeSpecificInputs
-                dataType={formData.dataType}
-                value={formData.value}
-                onChange={(newValue) => setFormData(prev => ({ ...prev, value: newValue }))}
-                error={errors.value}
-                forceListInput={formData.validationRule.type === 'contains_any' || formData.validationRule.type === 'contains_all'}
-              />
-              {errors.value && <p className="text-red-600 dark:text-red-400 text-xs mt-1">{errors.value}</p>}
-              {formData.validationRule.type !== 'exact' && (
-                <p className="mt-1 text-xs text-content-tertiary">
-                  {formData.validationRule.type === 'contains_any'
-                    ? 'Field must contain at least one of these values'
-                    : 'Field must contain all of these values'}
-                </p>
+              <label className="block text-xs font-medium text-content-secondary mb-1.5">Value</label>
+              {formData.dataType === 'json' ? (
+                <textarea
+                  value={typeof formData.value === 'string' ? formData.value : JSON.stringify(formData.value, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const parsed = JSON.parse(e.target.value);
+                      setFormData(prev => ({ ...prev, value: parsed }));
+                    } catch {
+                      setFormData(prev => ({ ...prev, value: e.target.value }));
+                    }
+                  }}
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  placeholder='{"key": "value"}'
+                />
+              ) : needsListInput ? (
+                <>
+                  <input
+                    type="text"
+                    value={listInput}
+                    onChange={(e) => setListInput(e.target.value)}
+                    onBlur={handleListBlur}
+                    className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    placeholder="value1, value2, value3"
+                  />
+                  {Array.isArray(formData.value) && formData.value.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {formData.value.map((v: any, i: number) => (
+                        <span key={i} className={`px-2 py-0.5 text-xs rounded-full ${
+                          formData.dataType === 'list_number'
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                        }`}>
+                          {String(v)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : formData.dataType === 'number' ? (
+                <input
+                  type="number"
+                  value={formData.value ?? ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, value: e.target.value === '' ? '' : parseFloat(e.target.value) }))}
+                  step="any"
+                  className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  placeholder="Enter number"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={formData.value ?? ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, value: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  placeholder="Enter value"
+                />
               )}
+              {errors.value && <p className="text-red-500 text-xs mt-1">{errors.value}</p>}
             </div>
           )}
 
-          {/* Constraint-specific parameters (for tolerance, range, contains only) */}
-          {['tolerance', 'range', 'contains'].includes(formData.validationRule.type) && (
+          {formData.validationRule.type === 'tolerance' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className={formData.dataType === 'list_number' ? 'col-span-2' : ''}>
+                  <label className="block text-xs font-medium text-content-secondary mb-1.5">
+                    {formData.dataType === 'list_number' ? 'Values' : 'Value'}
+                  </label>
+                  {formData.dataType === 'list_number' ? (
+                    <input
+                      type="text"
+                      value={toleranceValueInput}
+                      onChange={(e) => setToleranceValueInput(e.target.value)}
+                      onBlur={handleToleranceValueBlur}
+                      className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                      placeholder="1.25, 1.25, 2.5"
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      value={formData.validationRule.value ?? ''}
+                      onChange={(e) => handleConstraintValueChange({ value: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                      step="any"
+                      className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                      placeholder="2000"
+                    />
+                  )}
+                </div>
+                <div className={formData.dataType === 'list_number' ? 'col-span-2' : ''}>
+                  <label className="block text-xs font-medium text-content-secondary mb-1.5">± Tolerance</label>
+                  <input
+                    type="number"
+                    value={formData.validationRule.tolerance ?? ''}
+                    onChange={(e) => handleConstraintValueChange({ tolerance: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                    min="0"
+                    step="any"
+                    className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    placeholder="50"
+                  />
+                </div>
+              </div>
+              {formData.dataType === 'list_number' && Array.isArray(formData.validationRule.value) && formData.validationRule.value.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {formData.validationRule.value.map((v: number, i: number) => (
+                    <span key={i} className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                      {v} ± {formData.validationRule.tolerance ?? 0}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {errors.constraint && <p className="text-red-500 text-xs mt-1">{errors.constraint}</p>}
+            </div>
+          )}
+
+          {formData.validationRule.type === 'range' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-content-secondary mb-1.5">Min</label>
+                <input
+                  type="number"
+                  value={formData.validationRule.min ?? ''}
+                  onChange={(e) => handleConstraintValueChange({ min: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                  step="any"
+                  className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  placeholder="Min"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-content-secondary mb-1.5">Max</label>
+                <input
+                  type="number"
+                  value={formData.validationRule.max ?? ''}
+                  onChange={(e) => handleConstraintValueChange({ max: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                  step="any"
+                  className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  placeholder="Max"
+                />
+              </div>
+              {errors.constraint && <p className="text-red-500 text-xs mt-1 col-span-2">{errors.constraint}</p>}
+            </div>
+          )}
+
+          {formData.validationRule.type === 'contains' && (
             <div>
-              <label className="block text-sm font-medium text-content-primary mb-1">
-                Parameters
-              </label>
-              <ConstraintInputWidgets
-                constraint={formData.validationRule.type}
-                value={formData.validationRule}
-                onChange={handleConstraintValueChange}
+              <label className="block text-xs font-medium text-content-secondary mb-1.5">Contains substring</label>
+              <input
+                type="text"
+                value={formData.validationRule.contains || ''}
+                onChange={(e) => handleConstraintValueChange({ contains: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                placeholder="BOLD"
               />
-              {errors.constraint && <p className="text-red-600 dark:text-red-400 text-xs mt-1">{errors.constraint}</p>}
+              {errors.constraint && <p className="text-red-500 text-xs mt-1">{errors.constraint}</p>}
             </div>
           )}
 
-          {/* Compact Preview */}
-          <div className="bg-surface-secondary p-3 rounded border border-border">
-            <div className="text-xs text-content-secondary space-y-1">
-              <div className="flex justify-between">
-                <span className="font-medium">Type:</span>
-                <span>{formData.dataType}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Value:</span>
-                <span className="text-right max-w-[200px] truncate">{
-                  formData.validationRule.type === 'exact' ?
-                    (Array.isArray(formData.value) ? `[${formData.value.join(', ')}]` : String(formData.value ?? '')) :
-                  formData.validationRule.type === 'tolerance' ?
-                    (formData.validationRule.value !== undefined && formData.validationRule.value !== null
-                      ? `${formData.validationRule.value} ±${formData.validationRule.tolerance ?? 0}`
-                      : 'Not set') :
-                  formData.validationRule.type === 'range' ?
-                    (formData.validationRule.min !== undefined || formData.validationRule.max !== undefined
-                      ? (formData.validationRule.min !== undefined && formData.validationRule.max !== undefined
-                          ? `[${formData.validationRule.min}, ${formData.validationRule.max}]`
-                          : formData.validationRule.min !== undefined
-                            ? `≥ ${formData.validationRule.min}`
-                            : `≤ ${formData.validationRule.max}`)
-                      : 'Not set') :
-                  formData.validationRule.type === 'contains' ?
-                    (formData.validationRule.contains ? `contains "${formData.validationRule.contains}"` : 'Not set') :
-                  formData.validationRule.type === 'contains_any' ?
-                    (Array.isArray(formData.value) && formData.value.length > 0
-                      ? `contains any [${formData.value.slice(0, 3).join(', ')}${formData.value.length > 3 ? '...' : ''}]`
-                      : 'Not set') :
-                  formData.validationRule.type === 'contains_all' ?
-                    (Array.isArray(formData.value) && formData.value.length > 0
-                      ? `contains all [${formData.value.slice(0, 3).join(', ')}${formData.value.length > 3 ? '...' : ''}]`
-                      : 'Not set') :
-                    'Not specified'
-                }</span>
-              </div>
+          {['contains_any', 'contains_all'].includes(formData.validationRule.type) && (
+            <div>
+              <label className="block text-xs font-medium text-content-secondary mb-1.5">
+                {formData.validationRule.type === 'contains_any' ? 'Match any of' : 'Must contain all'}
+              </label>
+              <input
+                type="text"
+                value={listInput}
+                onChange={(e) => setListInput(e.target.value)}
+                onBlur={handleListBlur}
+                className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                placeholder="value1, value2, value3"
+              />
+              {Array.isArray(formData.value) && formData.value.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {formData.value.map((v: any, i: number) => (
+                    <span key={i} className="px-2 py-0.5 bg-brand-500/10 text-brand-700 dark:text-brand-300 text-xs rounded-full">
+                      {String(v)}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {errors.constraint && <p className="text-red-500 text-xs mt-1">{errors.constraint}</p>}
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end space-x-2 p-4 border-t border-border bg-surface-secondary">
+        {/* Compact Footer */}
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border bg-surface-secondary">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-sm text-content-primary border border-border-secondary rounded hover:bg-surface-hover transition-colors"
+            className="px-3 py-1.5 text-sm text-content-secondary hover:text-content-primary transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="inline-flex items-center px-3 py-1.5 text-sm bg-brand-600 text-white rounded hover:bg-brand-700 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors shadow-sm"
           >
-            <Save className="h-3.5 w-3.5 mr-1" />
+            <Check className="h-3.5 w-3.5" />
             Save
           </button>
         </div>
