@@ -160,9 +160,9 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
     console.log('[Worker] Installing dicompare from bundled wheel...');
     console.log('[Worker] Wheel base URL:', wheelBase);
   } else {
-    // Detect development vs production in browser/Electron dev
-    const isDevelopment = self.location.hostname === 'localhost' ||
-                          self.location.hostname === '127.0.0.1';
+    // Detect development vs production using Vite's build mode
+    // Note: Don't use hostname detection as localhost is used in production containers too
+    const isDevelopment = import.meta.env?.MODE === 'development';
     packageSource = isDevelopment
       ? 'http://localhost:8000/dist/dicompare-0.1.44-py3-none-any.whl'
       : 'dicompare==0.1.44';
