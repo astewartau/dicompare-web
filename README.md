@@ -7,6 +7,8 @@ It enables researchers to determine whether imaging protocols implemented at dif
 **Live service:** https://brainlife.io/dicompare  
 **Source code:** *(add GitHub URL here)*
 
+<img width="1386" height="844" alt="image" src="https://github.com/user-attachments/assets/1fc347ab-4daa-43a8-ab16-6a6013f33dd3" />
+
 ---
 
 ## Why DICOMpare?
@@ -18,8 +20,6 @@ In practice, protocol alignment is extremely difficult.
 Sites typically exchange protocol information through PDF documentation or vendor-specific exam cards. However, hardware configurations differ across scanners, software versions vary between sites, vendors encode parameters differently, and some parameters cannot be implemented identically on all systems. As a result, protocols that appear similar on paper often diverge substantially in practice.
 
 At present, there is no automated, vendor-neutral way to verify whether two implemented MRI protocols are actually equivalent.
-
-<img width="1386" height="844" alt="image" src="https://github.com/user-attachments/assets/1fc347ab-4daa-43a8-ab16-6a6013f33dd3" />
 
 ---
 
