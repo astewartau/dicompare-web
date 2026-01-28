@@ -1,16 +1,96 @@
 # DICOMpare
 
-MRI protocol validation for global collaboration. Validate your DICOMs against community protocols and standards, or build and share your own schemas for multi-site studies.
+**DICOMpare** is an open-source, vendor-independent tool for automated validation and comparison of MRI acquisition protocols using DICOM metadata.
 
-**Your data never leaves your computer** — all processing happens locally in your browser or desktop app.
+It enables researchers to determine whether imaging protocols implemented at different sites are truly equivalent, similar, or meaningfully different — a task that is currently manual, error-prone, and often infeasible in large, multi-site studies.
 
-## Use Online
+**Live service:** https://brainlife.io/dicompare  
+**Source code:** *(add GitHub URL here)*
 
-The easiest way to use DICOMpare is through the web app:
+---
 
-**[dicompare-web.vercel.app](https://dicompare-web.vercel.app)**
+## Why DICOMpare?
 
-No installation required. Works in any modern browser.
+Large-scale neuroimaging studies increasingly rely on data collected across multiple scanners, institutions, and countries. Ensuring that MRI acquisition protocols are harmonized across sites is essential for reproducibility, data comparability, statistical validity, and clinical or regulatory reliability.
+
+In practice, protocol alignment is extremely difficult.
+
+Sites typically exchange protocol information through PDF documentation or vendor-specific exam cards. However, hardware configurations differ across scanners, software versions vary between sites, vendors encode parameters differently, and some parameters cannot be implemented identically on all systems. As a result, protocols that appear similar on paper often diverge substantially in practice.
+
+At present, there is no automated, vendor-neutral way to verify whether two implemented MRI protocols are actually equivalent.
+
+<img width="1386" height="844" alt="image" src="https://github.com/user-attachments/assets/1fc347ab-4daa-43a8-ab16-6a6013f33dd3" />
+
+---
+
+## What DICOMpare Does
+
+DICOMpare performs structured comparisons of DICOM files to evaluate whether imaging protocols match a target reference or schema.
+
+It operates directly on DICOM metadata and provides automated, interpretable assessments of similarity and deviation between protocols.
+
+Users can compare imaging data in three primary ways.
+
+### 1. Reference-Based Comparison
+
+A user provides a set of reference DICOM files representing the *intended* protocol. DICOMpare compares new DICOM files against this reference set and reports differences in acquisition parameters.
+
+### 2. Template-Based Comparison
+
+DICOMpare includes preconfigured protocol templates derived from major large-scale studies. Users can compare their local imaging sequences against these standardized templates.
+
+Current templates include protocols modeled after:
+
+- UK Biobank  
+- Human Connectome Project (HCP)  
+- ABCD Study  
+- PING  
+
+These templates provide practical targets for harmonized data collection and replication of established acquisition strategies.
+
+### 3. Single-File or Schema-Based Validation
+
+A single DICOM file or a predefined schema can serve as the protocol definition. DICOMpare evaluates whether a set of DICOM instances conforms to that specification.
+
+---
+
+## Key Features
+
+### Vendor-Independent Protocol Validation
+
+DICOMpare works directly with DICOM metadata and does not depend on scanner manufacturer formats or proprietary exam card systems.
+
+### Browser-Based Operation
+
+DICOMpare runs in the browser, enabling local analysis without uploading imaging data. This avoids data transfer and reduces privacy and regulatory concerns.
+
+### Pre-Acquisition Validation
+
+Protocols can be validated *before* large-scale data collection begins. Investigators can define the intended protocol, implement it at each site, and verify equivalence across scanners before participant scanning starts. This prevents costly scan time loss and downstream data incompatibility.
+
+### Open Source and Extensible
+
+DICOMpare is released as open-source software and designed to grow with community contributions. The protocol template library will expand as new major studies and standards emerge.
+
+---
+
+## Example Use Case
+
+A research consortium spanning South Africa, Texas, and Australia plans a joint neuroimaging study.
+
+Without DICOMpare, teams must manually exchange protocol PDFs, attempt to reproduce parameters across different scanners, and rely on expert judgment to assess whether protocols truly match. Even small, unnoticed differences can later compromise data pooling and analysis.
+
+With DICOMpare, each site implements the planned sequence, exports a small sample of DICOM files, and runs a comparison against the shared reference or template. Within minutes, the team receives an objective assessment of protocol alignment and parameter discrepancies, allowing corrections before full data collection begins.
+
+---
+
+## Impact
+
+DICOMpare supports multi-site academic neuroimaging studies, international data-sharing consortia, large population studies such as UK Biobank and ABCD, clinical trials requiring harmonized imaging, and industry or translational research.
+
+By automating protocol validation, DICOMpare reduces human error, increases confidence in cross-site comparability, and strengthens the scientific validity of pooled imaging datasets.
+
+---
 
 ## Desktop App
 
@@ -31,7 +111,8 @@ The desktop app includes:
 - PDF export for compliance reports
 - All Python dependencies bundled (Pyodide)
 
-## Development
+--- 
+## Contributing
 
 ### Prerequisites
 
@@ -69,12 +150,6 @@ npm run build:linux
 npm run build:mac
 npm run build:win
 ```
-
-## How It Works
-
-1. **Load Data or Schema** — Upload your DICOM files or select from community protocols
-2. **Compare & Validate** — Check compliance or edit schemas to match your study requirements
-3. **Export & Share** — Download JSON schemas or PDF compliance reports
 
 ## Tech Stack
 
