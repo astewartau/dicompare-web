@@ -413,7 +413,7 @@
     "Multiband diffusion brain images": {
       "description": "Multi-shell diffusion MRI with multi-band acceleration for white matter microstructure",
       "detailed_description": "## Diffusion-Weighted MRI\n\nThis acquisition provides multi-shell diffusion-weighted imaging for characterizing white matter microstructure using multi-band acceleration.\n\n### Purpose\n\nThe diffusion MRI scan enables investigation of white matter organization and connectivity:\n- White matter tract reconstruction (tractography)\n- Microstructural measures (FA, MD, diffusivities)\n- Advanced modeling (NODDI, DKI)\n- Structural connectivity analysis\n- Detection of white matter pathology\n\n### Acquisition Parameters\n\n- **Sequence**: Spin-echo EPI with multi-band acceleration\n- **Resolution**: 2.0 mm isotropic\n- **FOV**: 210 x 210 mm, transverse oblique (AC-PC aligned)\n- **TR/TE**: 3600 ms / 92 ms\n- **Flip Angle**: 78 degrees\n- **Multi-band Factor**: 3 (72 slices acquired in 24 groups)\n- **Slices**: 72 (whole brain coverage)\n\n### Diffusion Scheme\n\n- **b = 0 s/mm²**: ~8 volumes (non-diffusion weighted)\n- **b = 1000 s/mm²**: 50 directions\n- **b = 2000 s/mm²**: 50 directions\n- **Total volumes**: 108\n- **Scan Time**: ~7 minutes (including PA field map)\n\n### Field Map Acquisition\n\nA short reverse phase-encode (PA) acquisition with 3 b=0 volumes is acquired for susceptibility distortion correction using FSL's topup.\n\n### Key Features\n\n- Multi-shell design enables advanced diffusion models beyond DTI\n- Multi-band acceleration reduces scan time while maintaining angular resolution\n- Isotropic resolution for accurate tractography\n- Optimized gradient directions for uniform sampling\n\n### Derived Measures\n\nUK Biobank provides diffusion IDPs including:\n- Fractional anisotropy (FA) in major white matter tracts\n- Mean diffusivity (MD), axial and radial diffusivity\n- NODDI metrics (ICVF, ISOVF, OD)\n- Tract-averaged measures for 27 major pathways\n\n### Reference\n\nMiller, K.L., et al. (2016). Multimodal population brain imaging in the UK Biobank prospective epidemiological study. Nature Neuroscience, 19(11), 1523-1536.",
-      "tags": ["brain", "dMRI", "diffusion", "multiband"],
+      "tags": ["brain", "dMRI", "multiband"],
       "fields": [
         {
           "field": "SequenceVariant",
@@ -582,16 +582,16 @@
           "id": "custom_1758075459044",
           "name": "Diffusion Directions",
           "description": "Checks expected number of diffusion gradient directions",
-          "implementation": "n_expected = 100\ndirections = [\n  tuple(d) if isinstance(d, list) else \n  d for d in value[\"DiffusionGradientDirectionSequence\"]\n]\nn_actual = len(set(directions))\n\nif n_actual != n_expected:\n  raise ValidationError(f\"Expected {n_expected} distinct diffusion gradient directions, but found {n_actual}.\")\n",
+          "implementation": "n_expected = 100\ndirections = [\n  tuple(d) if isinstance(d, list) else \n  d for d in value[\"DiffusionGradientOrientation\"]\n]\nn_actual = len(set(directions))\n\nif n_actual != n_expected:\n  raise ValidationError(f\"Expected {n_expected} distinct diffusion gradient directions, but found {n_actual}.\")\n",
           "fields": [
-            "DiffusionGradientDirectionSequence"
+            "DiffusionGradientOrientation"
           ],
           "testCases": [
             {
               "id": "test_1759471463995",
               "name": "Expected number of gradients",
               "data": {
-                "DiffusionGradientDirectionSequence": [
+                "DiffusionGradientOrientation": [
                   [
                     0,
                     0
@@ -1001,7 +1001,7 @@
               "id": "test_1759471812791",
               "name": "New Test Case",
               "data": {
-                "DiffusionGradientDirectionSequence": [
+                "DiffusionGradientOrientation": [
                   [
                     0,
                     0

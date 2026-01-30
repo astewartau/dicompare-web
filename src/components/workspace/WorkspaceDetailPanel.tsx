@@ -18,7 +18,7 @@ import { getItemFlags } from '../../utils/workspaceHelpers';
 import { generatePrintReportHtml, openPrintWindow, isElectron, exportToPdf } from '../../utils/printReportGenerator';
 import { useDropZone } from '../../hooks/useDropZone';
 import DropZone from '../common/DropZone';
-import { SchemaLibraryPanel, AddFromDataPanel, SchemaInfoPanel } from './panels';
+import { SchemaLibraryPanel, AddFromDataPanel, SchemaInfoPanel, MatchingPanel } from './panels';
 import type { SchemaInfoTab } from './panels';
 
 export type { SchemaInfoTab };
@@ -28,6 +28,7 @@ interface WorkspaceDetailPanelProps {
   isAddNew: boolean;
   isAddFromData: boolean;
   isSchemaInfo: boolean;
+  isAssignData: boolean;
   schemaInfoTab: SchemaInfoTab;
   setSchemaInfoTab: (tab: SchemaInfoTab) => void;
   isProcessing: boolean;
@@ -41,6 +42,8 @@ interface WorkspaceDetailPanelProps {
   onSchemaToggle: (selection: AcquisitionSelection) => void;
   onConfirmSchemas: () => void;
   onFileUpload: (files: FileList | null, mode?: 'schema-template' | 'validation-subject') => void;
+  onLargeFolderBrowse?: (mode: 'schema-template' | 'validation-subject') => void;
+  isLargeFolderSupported?: boolean;
   onCreateSchema: () => void;  // Create schema for current empty item
   onDetachCreatedSchema: () => void;  // Detach created schema from current item
   onToggleEditing: () => void;
@@ -59,6 +62,13 @@ interface WorkspaceDetailPanelProps {
   // Staged "from data" handlers - create item first, then perform action
   onStagedCreateBlank: () => void;
   onStagedAttachSchema: () => void;
+  // Matching panel props
+  matchingData?: {
+    uploadedAcquisitions: Acquisition[];
+    availableSlots: Array<{ itemId: string; item: WorkspaceItem }>;
+    initialAssignments?: Array<{ uploadedIndex: number; itemId: string }>;
+  };
+  onConfirmMatching?: (matches: Array<{ uploadedIndex: number; itemId: string | null }>) => void;
 }
 
 const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
@@ -66,6 +76,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   isAddNew,
   isAddFromData,
   isSchemaInfo,
+  isAssignData,
   schemaInfoTab,
   setSchemaInfoTab,
   isProcessing,
@@ -79,6 +90,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   onSchemaToggle,
   onConfirmSchemas,
   onFileUpload,
+  onLargeFolderBrowse,
+  isLargeFolderSupported = false,
   onCreateSchema,
   onDetachCreatedSchema,
   onToggleEditing,
@@ -96,6 +109,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   onAcquisitionReadmeClick,
   onStagedCreateBlank,
   onStagedAttachSchema,
+  matchingData,
+  onConfirmMatching,
 }) => {
   const workspace = useWorkspace();
   const { processingTarget } = workspace;
@@ -253,6 +268,25 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     }
   }, [selectedItem, loadedSchemaAcquisition, schemaMetadata]);
 
+  // Render Matching Panel for assigning data to references
+  if (isAssignData && matchingData && onConfirmMatching) {
+    // Generate a key that changes when items change to force remount and fresh state
+    const matchingKey = [
+      ...matchingData.availableSlots.map(s => s.itemId),
+      ...matchingData.uploadedAcquisitions.map(a => a.id || a.protocolName)
+    ].join('|');
+
+    return (
+      <MatchingPanel
+        key={matchingKey}
+        uploadedAcquisitions={matchingData.uploadedAcquisitions}
+        availableSlots={matchingData.availableSlots}
+        initialAssignments={matchingData.initialAssignments}
+        onConfirm={onConfirmMatching}
+      />
+    );
+  }
+
   // Render Schema Info editing view
   if (isSchemaInfo) {
     return (
@@ -294,6 +328,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         schemaDropZone={schemaDropZone}
         testDropZone={testDropZone}
         onFileUpload={onFileUpload}
+        onLargeFolderBrowse={onLargeFolderBrowse}
+        isLargeFolderSupported={isLargeFolderSupported}
         onStagedAttachSchema={onStagedAttachSchema}
         onStagedCreateBlank={onStagedCreateBlank}
       />
@@ -342,6 +378,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                   onChange={(e) => onUpdateAcquisition({ protocolName: e.target.value })}
                   className="text-lg font-semibold text-content-primary bg-surface-primary border border-border-secondary rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Acquisition Name"
+                  data-tutorial="acquisition-name-input"
                 />
                 <input
                   type="text"
@@ -349,6 +386,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                   onChange={(e) => onUpdateAcquisition({ seriesDescription: e.target.value })}
                   className="text-sm text-content-secondary bg-surface-primary border border-border-secondary rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Short description"
+                  data-tutorial="acquisition-description-input"
                 />
               </div>
             ) : (
@@ -487,7 +525,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       }
       // Show data attachment prompt with drop zone
       return (
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0" data-tutorial="item-test-data-dropzone">
           <DropZone
             variant="data"
             isProcessing={isProcessing}
@@ -504,9 +542,10 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   };
 
   return (
-    <div className="bg-surface-primary rounded-lg border border-border shadow-sm relative">
+    <div className="bg-surface-primary rounded-lg border border-border shadow-sm relative flex flex-col h-[calc(100vh-130px)] max-h-[calc(100vh-130px)]">
       {/* Print/Export PDF button as floating tab extending upward */}
       <button
+        data-tutorial="print-button"
         onClick={handlePrintAcquisition}
         disabled={pdfExporting}
         className={`absolute -top-7 right-4 inline-flex items-center px-2.5 py-1.5 text-xs rounded-t border border-b-0 border-border bg-surface-primary z-10 ${
@@ -520,8 +559,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         {pdfExporting ? 'Exporting...' : isElectron() ? 'Export PDF' : 'Print'}
       </button>
 
-      {/* Header with split layout */}
-      <div className="px-6 py-4 border-b border-border">
+      {/* Header with split layout - fixed height */}
+      <div className="px-6 py-4 border-b border-border flex-shrink-0">
         {/* Split layout: Schema (left) | Data (right) */}
         <div className="grid grid-cols-2 gap-6">
           {/* Left side - Schema */}
@@ -537,6 +576,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                     onClick={() => setShowDetailedDescription(true)}
                     className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
                     title={selectedItem.acquisition.detailedDescription ? 'View/edit README' : 'Add README'}
+                    data-tutorial="readme-button"
                   >
                     <Book className="h-3.5 w-3.5 mr-1" />
                     README
@@ -555,6 +595,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                             : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
                       }`}
                       title={hasAttachedData ? "Detach data to edit" : undefined}
+                      data-tutorial="edit-button"
                     >
                       {selectedItem.isEditing ? (
                         <>
@@ -647,8 +688,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         </div>
       </div>
 
-      {/* Content - AcquisitionTable */}
-      <div className="px-6 py-4 space-y-4">
+      {/* Content - AcquisitionTable - scrollable area */}
+      <div className="px-6 py-4 space-y-4 flex-1 overflow-auto min-h-0">
         <AcquisitionTable
             acquisition={
               // For items with attached schema (empty or data-sourced), show the loaded schema acquisition

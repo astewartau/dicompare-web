@@ -11,6 +11,8 @@ interface AddFromDataPanelProps {
   schemaDropZone: UseDropZoneReturn;
   testDropZone: UseDropZoneReturn;
   onFileUpload: (files: FileList | null, mode?: 'schema-template' | 'validation-subject') => void;
+  onLargeFolderBrowse?: (mode: 'schema-template' | 'validation-subject') => void;
+  isLargeFolderSupported?: boolean;
   onStagedAttachSchema: () => void;
   onStagedCreateBlank: () => void;
 }
@@ -22,6 +24,8 @@ const AddFromDataPanel: React.FC<AddFromDataPanelProps> = ({
   schemaDropZone,
   testDropZone,
   onFileUpload,
+  onLargeFolderBrowse,
+  isLargeFolderSupported = false,
   onStagedAttachSchema,
   onStagedCreateBlank,
 }) => {
@@ -37,13 +41,15 @@ const AddFromDataPanel: React.FC<AddFromDataPanelProps> = ({
               <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Reference</div>
             </div>
             {/* Reference attachment zone */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0" data-tutorial="reference-dropzone">
               <DropZone
                 variant="schema"
                 isProcessing={isProcessing}
                 processingProgress={processingProgress}
                 processingTarget={processingTarget}
                 onBrowse={(files) => onFileUpload(files, 'schema-template')}
+                onLargeFolderBrowse={onLargeFolderBrowse ? () => onLargeFolderBrowse('schema-template') : undefined}
+                isLargeFolderSupported={isLargeFolderSupported}
                 dropZone={schemaDropZone}
                 onLibraryClick={onStagedAttachSchema}
                 onBlankClick={onStagedCreateBlank}
@@ -61,13 +67,15 @@ const AddFromDataPanel: React.FC<AddFromDataPanelProps> = ({
               <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Test data</div>
             </div>
             {/* Data attachment zone */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0" data-tutorial="test-data-dropzone">
               <DropZone
                 variant="data"
                 isProcessing={isProcessing}
                 processingProgress={processingProgress}
                 processingTarget={processingTarget}
                 onBrowse={(files) => onFileUpload(files, 'validation-subject')}
+                onLargeFolderBrowse={onLargeFolderBrowse ? () => onLargeFolderBrowse('validation-subject') : undefined}
+                isLargeFolderSupported={isLargeFolderSupported}
                 dropZone={testDropZone}
                 emptyLabel="No test data"
                 fileInputId="staged-load-data"

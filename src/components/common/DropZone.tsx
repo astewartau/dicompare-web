@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Loader, FolderOpen, Book, Plus } from 'lucide-react';
+import { Download, Loader, FolderOpen, Book, Plus, HardDrive } from 'lucide-react';
 import { ProcessingProgress } from '../../contexts/WorkspaceContext';
 import { UseDropZoneReturn } from '../../hooks/useDropZone';
 
@@ -14,6 +14,10 @@ export interface DropZoneProps {
   processingTarget?: 'schema' | 'data' | 'addNew' | null;
   /** Handler when files are selected via browse button */
   onBrowse: (files: FileList) => void;
+  /** Handler for FSAA large folder browse (for datasets >2GB) */
+  onLargeFolderBrowse?: () => void;
+  /** Whether FSAA large folder browse is supported */
+  isLargeFolderSupported?: boolean;
   /** Drop zone hook return value */
   dropZone: UseDropZoneReturn;
   /** Handler for Library button click */
@@ -40,6 +44,8 @@ const DropZone: React.FC<DropZoneProps> = ({
   processingProgress,
   processingTarget,
   onBrowse,
+  onLargeFolderBrowse,
+  isLargeFolderSupported = false,
   dropZone,
   onLibraryClick,
   onBlankClick,
@@ -124,8 +130,24 @@ const DropZone: React.FC<DropZoneProps> = ({
               <FolderOpen className="h-4 w-4 mr-1" />
               Browse
             </label>
+            {isLargeFolderSupported && onLargeFolderBrowse && (
+              <button
+                onClick={onLargeFolderBrowse}
+                disabled={isProcessing}
+                title="For datasets larger than 2GB. Uses streaming to avoid memory limits."
+                className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md border ${
+                  isProcessing
+                    ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                    : 'border-brand-600 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+                }`}
+              >
+                <HardDrive className="h-4 w-4 mr-1" />
+                Large Folder
+              </button>
+            )}
             {showLibraryButton && onLibraryClick && (
               <button
+                data-tutorial="library-button"
                 onClick={onLibraryClick}
                 disabled={isProcessing}
                 className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md border ${
@@ -140,6 +162,7 @@ const DropZone: React.FC<DropZoneProps> = ({
             )}
             {showBlankButton && onBlankClick && (
               <button
+                data-tutorial="blank-button"
                 onClick={onBlankClick}
                 disabled={isProcessing}
                 className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md border ${

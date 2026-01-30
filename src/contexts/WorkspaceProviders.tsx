@@ -4,6 +4,7 @@ import { SchemaMetadataProvider } from './SchemaMetadataContext';
 import { ItemManagementProvider } from './ItemManagementContext';
 import { SchemaEditingProvider } from './SchemaEditingContext';
 import { WorkspaceProvider } from './WorkspaceContext';
+import { TutorialProvider } from './TutorialContext';
 
 interface WorkspaceProvidersProps {
   children: ReactNode;
@@ -27,7 +28,9 @@ export const WorkspaceProviders: React.FC<WorkspaceProvidersProps> = ({ children
         <ItemManagementProvider>
           <SchemaEditingProvider>
             <WorkspaceProvider>
-              {children}
+              <TutorialProvider>
+                {children}
+              </TutorialProvider>
             </WorkspaceProvider>
           </SchemaEditingProvider>
         </ItemManagementProvider>

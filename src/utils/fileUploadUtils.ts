@@ -16,9 +16,13 @@ export interface FileSizeInfo {
   exceedsLimit: boolean;
 }
 
-// Memory limit for browser processing (WebAssembly constraint)
+// Memory limit for browser processing (WebAssembly constraint) - legacy upload path only
 // Testing showed crashes occur after converting ~6000 files at 339KB each (~2GB)
+// For larger datasets, use the File System Access API with batch processing
 export const MAX_TOTAL_SIZE_BYTES = 1.9 * 1024 * 1024 * 1024; // 1.9 GB
+
+// Warning threshold - suggest using FSAA for better performance
+export const SIZE_WARNING_THRESHOLD_BYTES = 500 * 1024 * 1024; // 500 MB
 
 /**
  * Get a unique name for a file, using webkitRelativePath if available.
@@ -142,8 +146,17 @@ export async function processUploadedFiles(
 
   if (!skipSizeCheck && totalSize > MAX_TOTAL_SIZE_BYTES) {
     throw new Error(
-      `Dataset too large for browser processing: ${totalSizeGB.toFixed(1)} GB (${actualFiles.length.toLocaleString()} files). ` +
-      `Maximum supported size is ~2 GB due to browser memory limits. Please use fewer files or the desktop Python package for larger datasets.`
+      `Dataset too large for standard upload: ${totalSizeGB.toFixed(1)} GB (${actualFiles.length.toLocaleString()} files). ` +
+      `Maximum size for standard upload is ~2 GB. Use the "Large Folder" button (Chrome/Edge) for datasets over 2 GB, ` +
+      `or use the desktop Python package.`
+    );
+  }
+
+  // Log a warning for large datasets that could benefit from FSAA
+  if (totalSize > SIZE_WARNING_THRESHOLD_BYTES) {
+    console.warn(
+      `[fileUploadUtils] Large dataset detected: ${totalSizeGB.toFixed(2)} GB. ` +
+      `Consider using the "Large Folder" button for better performance and memory efficiency.`
     );
   }
 

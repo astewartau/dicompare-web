@@ -7,19 +7,10 @@
 /// <reference lib="webworker" />
 
 import type { WorkerRequest, WorkerResponse, ProgressPayload } from './workerTypes';
+import { loadPyodide as loadPyodideModule, type PyodideInterface } from 'pyodide';
 
-// Pyodide interface
-interface PyodideInstance {
-  runPython: (code: string) => any;
-  runPythonAsync: (code: string) => Promise<any>;
-  globals: {
-    get: (name: string) => any;
-    set: (name: string, value: any) => void;
-  };
-  loadPackage: (packages: string | string[]) => Promise<void>;
-}
-
-declare function loadPyodide(options: { indexURL: string }): Promise<PyodideInstance>;
+// Use the official Pyodide types
+type PyodideInstance = PyodideInterface;
 
 let pyodide: PyodideInstance | null = null;
 
@@ -119,11 +110,10 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
     }
   };
 
-  // Load Pyodide
+  // Load Pyodide using the npm package (works with ES modules)
   reportProgress('Loading Python runtime...', 10);
-  importScripts(`${pyodideBaseUrl}pyodide.js`);
 
-  pyodide = await loadPyodide({
+  pyodide = await loadPyodideModule({
     indexURL: pyodideBaseUrl,
   });
 
@@ -290,6 +280,69 @@ for i, name in enumerate(names):
 
 print(f"[Worker] Converted {len(dicom_bytes)} files, analyzing...")
 acquisitions = await analyze_dicom_files_for_ui(dicom_bytes, progress_callback)
+json.dumps(acquisitions, default=str)
+  `);
+
+  sendSuccess(id, JSON.parse(result as string));
+}
+
+async function handleAnalyzeBatch(
+  id: string,
+  payload: { fileNames: string[]; fileContents: ArrayBuffer[]; batchIndex: number; totalBatches: number }
+): Promise<void> {
+  if (!pyodide) throw new Error('Pyodide not initialized');
+
+  const { fileNames, fileContents, batchIndex, totalBatches } = payload;
+  console.log(`[Worker] Analyzing batch ${batchIndex + 1}/${totalBatches} (${fileNames.length} files)...`);
+
+  // Set up progress callback scoped to this batch
+  pyodide.globals.set('progress_callback', (progress: any) => {
+    const p = progress.toJs ? progress.toJs() : progress;
+    sendProgress(id, {
+      percentage: p.percentage || 0,
+      currentOperation: `Batch ${batchIndex + 1}/${totalBatches}: ${p.currentOperation || 'Processing...'}`,
+      totalFiles: p.totalFiles || fileNames.length,
+      totalProcessed: p.totalProcessed || 0
+    });
+  });
+
+  // Convert ArrayBuffers to Uint8Arrays for Pyodide
+  const contents = fileContents.map(buf => new Uint8Array(buf));
+
+  pyodide.globals.set('dicom_file_names', fileNames);
+  pyodide.globals.set('dicom_file_contents', contents);
+  pyodide.globals.set('batch_index', batchIndex);
+  pyodide.globals.set('total_batches', totalBatches);
+
+  const result = await pyodide.runPythonAsync(`
+import json
+from dicompare.interface import analyze_dicom_files_for_ui
+
+names = list(dicom_file_names)
+batch_num = batch_index + 1
+num_batches = total_batches
+print(f"[Worker] Processing batch {batch_num}/{num_batches}: {len(names)} files...")
+
+dicom_bytes = {}
+for i, name in enumerate(names):
+    content = dicom_file_contents[i]
+    if hasattr(content, 'getBuffer'):
+        buf = content.getBuffer()
+        dicom_bytes[name] = bytes(buf.data)
+        buf.release()
+    elif hasattr(content, 'to_py'):
+        dicom_bytes[name] = bytes(content.to_py())
+    else:
+        dicom_bytes[name] = bytes(content)
+
+print(f"[Worker] Converted {len(dicom_bytes)} files, analyzing...")
+acquisitions = await analyze_dicom_files_for_ui(dicom_bytes, progress_callback)
+
+# Explicit cleanup to free memory before next batch
+del dicom_bytes
+del dicom_file_names
+del dicom_file_contents
+
 json.dumps(acquisitions, default=str)
   `);
 
@@ -589,6 +642,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       }
       case 'analyzeFiles':
         await handleAnalyzeFiles(id, request.payload);
+        break;
+      case 'analyzeBatch':
+        await handleAnalyzeBatch(id, request.payload);
         break;
       case 'validateAcquisition':
         await handleValidateAcquisition(id, request.payload);

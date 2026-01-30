@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader, X, Book, Edit2, Eye, Download, Code, Settings, Check, AlertTriangle, Layers, Save, Copy } from 'lucide-react';
+import { Loader, X, Book, Edit2, Eye, Download, Code, Check, AlertTriangle, Layers, Save, Copy } from 'lucide-react';
 import { SchemaMetadata } from '../../../contexts/WorkspaceContext';
 import { useWorkspace } from '../../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../../contexts/SchemaContext';
@@ -44,6 +44,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
   const [pendingSaveJson, setPendingSaveJson] = useState<string | null>(null);
   const [existingSchemaId, setExistingSchemaId] = useState<string | null>(null);
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
 
   // Sync editedReadme with schemaMetadata
   useEffect(() => {
@@ -240,8 +241,20 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
     }
   };
 
+  // Check if metadata is valid for saving
+  const isMetadataValid = schemaMetadata?.name?.trim() &&
+    schemaMetadata?.authors?.length > 0 &&
+    schemaMetadata?.version?.trim();
+
   // Save to library - checks for existing schema first
   const handleSaveToLibrary = async () => {
+    // If metadata is invalid, show errors and navigate to the Save schema tab
+    if (!isMetadataValid) {
+      setShowValidationErrors(true);
+      setSchemaInfoTab('metadata');
+      return;
+    }
+
     const jsonToSave = await generateJsonForSave();
     if (!jsonToSave) {
       setSaveMessage({ type: 'error', text: 'Failed to generate schema.' });
@@ -283,11 +296,6 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
     setExistingSchemaId(null);
   };
 
-  // Check if metadata is valid for saving
-  const isMetadataValid = schemaMetadata?.name?.trim() &&
-    schemaMetadata?.authors?.length > 0 &&
-    schemaMetadata?.version?.trim();
-
   return (
     <div className="border border-border rounded-lg bg-surface-primary shadow-sm flex flex-col h-full">
       {/* Tab bar */}
@@ -312,8 +320,8 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                 : 'text-content-tertiary hover:text-content-secondary'
             }`}
           >
-            <Settings className="h-4 w-4 inline mr-1.5" />
-            Metadata
+            <Save className="h-4 w-4 inline mr-1.5" />
+            Save schema
           </button>
           <button
             onClick={handlePreviewTabClick}
@@ -334,7 +342,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
         <div className="px-6 py-3 border-b border-border">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider">
-              {schemaInfoTab === 'metadata' ? 'Schema Metadata' : 'JSON Preview'}
+              {schemaInfoTab === 'metadata' ? 'Save Schema' : 'JSON Preview'}
             </h3>
             <div className="flex items-center gap-2">
               {schemaInfoTab === 'preview' && (
@@ -366,7 +374,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
               </button>
               <button
                 onClick={handleSaveToLibrary}
-                disabled={isGeneratingPreview || isSavingToLibrary || !isMetadataValid}
+                disabled={isGeneratingPreview || isSavingToLibrary}
                 className="flex items-center px-3 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSavingToLibrary ? (
@@ -453,6 +461,12 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
         <WelcomeTab />
       ) : schemaInfoTab === 'metadata' ? (
       <div className="flex-1 overflow-y-auto p-6">
+        {/* Explanatory info box */}
+        <div className="mb-6 p-3 bg-surface-secondary border border-border rounded-lg text-sm text-content-secondary">
+          Save your <strong className="text-content-primary">References</strong> as a reusable schema for validating future datasets.
+          Only reference definitions are included — test data attachments are not saved.
+        </div>
+
         {/* Basic Info Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           {/* Schema Name - Takes 2 columns */}
@@ -464,10 +478,20 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
               type="text"
               id="schema-name"
               value={schemaMetadata?.name || ''}
-              onChange={(e) => onUpdateSchemaMetadata({ name: e.target.value })}
-              className="w-full px-3 py-2 border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-lg"
+              onChange={(e) => {
+                onUpdateSchemaMetadata({ name: e.target.value });
+                if (e.target.value.trim()) setShowValidationErrors(false);
+              }}
+              className={`w-full px-3 py-2 border rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-lg ${
+                showValidationErrors && !schemaMetadata?.name?.trim()
+                  ? 'border-status-error'
+                  : 'border-border-secondary'
+              }`}
               placeholder="e.g., Brain MRI Protocol"
             />
+            {showValidationErrors && !schemaMetadata?.name?.trim() && (
+              <p className="mt-1 text-sm text-status-error">Schema name is required</p>
+            )}
           </div>
 
           {/* Version - Takes 1 column */}
@@ -479,10 +503,20 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
               type="text"
               id="schema-version"
               value={schemaMetadata?.version || ''}
-              onChange={(e) => onUpdateSchemaMetadata({ version: e.target.value })}
-              className="w-full px-3 py-2 border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-lg"
+              onChange={(e) => {
+                onUpdateSchemaMetadata({ version: e.target.value });
+                if (e.target.value.trim()) setShowValidationErrors(false);
+              }}
+              className={`w-full px-3 py-2 border rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-lg ${
+                showValidationErrors && !schemaMetadata?.version?.trim()
+                  ? 'border-status-error'
+                  : 'border-border-secondary'
+              }`}
               placeholder="1.0"
             />
+            {showValidationErrors && !schemaMetadata?.version?.trim() && (
+              <p className="mt-1 text-sm text-status-error">Version is required</p>
+            )}
           </div>
         </div>
 
@@ -492,7 +526,11 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
             Authors <span className="text-status-error">*</span>
           </label>
           <div
-            className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 border border-border-secondary rounded-lg bg-surface-primary focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 min-h-[42px] cursor-text"
+            className={`flex flex-wrap items-center gap-1.5 px-2 py-1.5 border rounded-lg bg-surface-primary focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 min-h-[42px] cursor-text ${
+              showValidationErrors && !schemaMetadata?.authors?.length
+                ? 'border-status-error'
+                : 'border-border-secondary'
+            }`}
             onClick={(e) => {
               const input = e.currentTarget.querySelector('input');
               input?.focus();
@@ -524,12 +562,16 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                 if (authorInput.trim()) {
                   addAuthor(authorInput);
                   setAuthorInput('');
+                  setShowValidationErrors(false);
                 }
               }}
               className="flex-1 min-w-[120px] px-1 py-1 bg-transparent text-content-primary focus:outline-none"
               placeholder={schemaMetadata?.authors?.length ? '' : 'Type name, then comma or Enter...'}
             />
           </div>
+          {showValidationErrors && !schemaMetadata?.authors?.length && (
+            <p className="mt-1 text-sm text-status-error">At least one author is required</p>
+          )}
         </div>
 
         {/* Divider */}

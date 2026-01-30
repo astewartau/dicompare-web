@@ -103,6 +103,7 @@ export function generatePrintReportHtml(options: PrintReportOptions): string {
   const fieldsHtml = buildFieldsHtml(fields, isComplianceMode, isDataOnly, complianceResults);
   const seriesHtml = buildSeriesHtml(series);
   const uncheckedFieldsHtml = buildUncheckedFieldsHtml(isComplianceMode, realAcquisition, fields, series);
+  const uncheckedSeriesFieldsHtml = buildUncheckedSeriesFieldsHtml(isComplianceMode, realAcquisition, fields, series);
   const readmeContent = schemaAcquisition.detailedDescription || schemaMetadata?.description || '';
   const readmeHtml = buildReadmeHtml(readmeContent, schemaSource, schemaVersion, schemaAuthors);
   const testNotesHtml = buildTestNotesHtml(isComplianceMode, selectedItem.testDataNotes);
@@ -129,6 +130,7 @@ export function generatePrintReportHtml(options: PrintReportOptions): string {
     fieldsHtml,
     seriesHtml,
     uncheckedFieldsHtml,
+    uncheckedSeriesFieldsHtml,
     readmeHtml
   );
 }
@@ -367,6 +369,108 @@ function buildUncheckedFieldsHtml(
   `;
 }
 
+function buildUncheckedSeriesFieldsHtml(
+  isComplianceMode: boolean,
+  realAcquisition: Acquisition | null | undefined,
+  fields: DicomField[],
+  series: any[]
+): string {
+  if (!isComplianceMode || !realAcquisition || !realAcquisition.series) return '';
+
+  // Build schema field identifiers
+  const schemaFieldIds = new Set<string>();
+  const schemaKeywords = new Set<string>();
+  const schemaNames = new Set<string>();
+
+  fields.forEach(f => {
+    const normalizedTag = normalizeTag(f.tag);
+    if (normalizedTag) schemaFieldIds.add(normalizedTag);
+    if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
+    if (f.name) schemaNames.add(f.name.toLowerCase());
+  });
+
+  series.forEach(s => {
+    const seriesFields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+    seriesFields.forEach((f: any) => {
+      const normalizedTag = normalizeTag(f.tag);
+      if (normalizedTag) schemaFieldIds.add(normalizedTag);
+      if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
+      if (f.name) schemaNames.add(f.name.toLowerCase());
+    });
+  });
+
+  if (schemaFieldIds.size === 0 && schemaKeywords.size === 0 && schemaNames.size === 0) {
+    return '';
+  }
+
+  // Helper to check if a field is in the schema
+  const isFieldInSchema = (f: any) => {
+    const normalizedTag = normalizeTag(f.tag);
+    const hasTag = normalizedTag && schemaFieldIds.has(normalizedTag);
+    const hasKeyword = f.keyword && schemaKeywords.has(f.keyword.toLowerCase());
+    const hasName = f.name && schemaNames.has(f.name.toLowerCase());
+    return hasTag || hasKeyword || hasName;
+  };
+
+  // Collect unique unchecked field names
+  const uncheckedFieldNames = new Set<string>();
+
+  // Filter series to only include unchecked fields
+  const filteredSeries = realAcquisition.series.map((s, idx) => {
+    const seriesFields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+    const uncheckedFields = seriesFields.filter((f: any) => {
+      if (!isFieldInSchema(f)) {
+        const key = f.keyword || f.name || f.tag;
+        uncheckedFieldNames.add(key);
+        return true;
+      }
+      return false;
+    });
+    return {
+      name: s.name || `Series ${String(idx + 1).padStart(2, '0')}`,
+      fields: uncheckedFields
+    };
+  }).filter(s => s.fields.length > 0);
+
+  if (filteredSeries.length === 0) return '';
+
+  const fieldNamesList = Array.from(uncheckedFieldNames);
+  const maxRows = 20;
+  const displaySeries = filteredSeries.slice(0, maxRows);
+  const hasMore = filteredSeries.length > maxRows;
+
+  // Build header cells for each unchecked field
+  const headerCells = fieldNamesList.map(name => `<th>${escapeHtml(name)}</th>`).join('');
+
+  // Build rows
+  const rows = displaySeries.map(s => {
+    const cells = fieldNamesList.map(fieldName => {
+      const field = s.fields.find((f: any) => (f.keyword || f.name || f.tag) === fieldName);
+      if (!field) return '<td>—</td>';
+      const value = Array.isArray(field.value)
+        ? field.value.slice(0, 3).join(', ') + (field.value.length > 3 ? '...' : '')
+        : String(field.value ?? '');
+      return `<td>${escapeHtml(value)}</td>`;
+    }).join('');
+    return `<tr><td class="series-name">${escapeHtml(s.name)}</td>${cells}</tr>`;
+  }).join('');
+
+  const moreMessage = hasMore
+    ? `<p class="more-series-note">... and ${filteredSeries.length - maxRows} more series</p>`
+    : '';
+
+  return `
+    <div class="unchecked-section">
+      <h2 class="unchecked-header">${filteredSeries.length} series not validated by schema</h2>
+      <table class="unchecked-table">
+        <thead><tr><th>Series</th>${headerCells}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${moreMessage}
+    </div>
+  `;
+}
+
 function buildReadmeHtml(
   content: string,
   schemaSource: string,
@@ -526,6 +630,7 @@ function buildFullHtml(
   fieldsHtml: string,
   seriesHtml: string,
   uncheckedFieldsHtml: string,
+  uncheckedSeriesFieldsHtml: string,
   readmeHtml: string
 ): string {
   const hasContent = fieldsHtml || seriesHtml || rulesHtml || readmeHtml || testNotesHtml;
@@ -545,6 +650,7 @@ function buildFullHtml(
         ${fieldsHtml}
         ${seriesHtml}
         ${uncheckedFieldsHtml}
+        ${uncheckedSeriesFieldsHtml}
         ${readmeHtml}
         ${emptyMessage}
         <div class="print-date">Printed on ${new Date().toLocaleDateString()}</div>
@@ -594,6 +700,7 @@ function getPrintStyles(): string {
     .unchecked-header { color: #333; margin-top: 0; }
     .unchecked-table th { background: #f9fafb; }
     .unchecked-table td { color: #1a1a1a; }
+    .more-series-note { font-size: 12px; color: #666; font-style: italic; margin-top: 8px; text-align: center; }
     .readme-section { margin-top: 32px; border-top: 2px solid #3b82f6; background: #eff6ff; border-radius: 8px; padding: 20px; }
     .readme-section > h2 { color: #1e40af; margin-top: 0; margin-bottom: 16px; border-bottom: none; padding-bottom: 0; }
     .readme-meta { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; }

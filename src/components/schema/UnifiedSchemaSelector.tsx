@@ -2,10 +2,18 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, Pencil } from 'lucide-react';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
-import { convertSchemaToAcquisitions } from '../../utils/schemaToAcquisition';
 import { Acquisition, AcquisitionSelection } from '../../types';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import { DraggableSchema, DraggableAcquisition } from './DraggableComponents';
+
+interface AcquisitionScore {
+  schemaId: string;
+  acquisitionIndex: number;
+  score: number;
+  passCount: number;
+  failCount: number;
+  totalCount: number;
+}
 
 interface UnifiedSchemaSelectorProps {
   // Data
@@ -42,6 +50,12 @@ interface UnifiedSchemaSelectorProps {
 
   // Edit support (load schema into workspace for editing)
   onSchemaEdit?: (schemaId: string) => void;
+
+  // Acquisition scores for sorting/display
+  acquisitionScores?: (schemaId: string, acquisitionIndex: number) => AcquisitionScore | undefined;
+
+  // Height constraint (for modal usage)
+  maxHeight?: string;
 }
 
 const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
@@ -61,9 +75,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   enableDragDrop = false,
   onSchemaReadmeClick,
   onAcquisitionReadmeClick,
-  onSchemaEdit
+  onSchemaEdit,
+  acquisitionScores,
+  maxHeight
 }) => {
-  const { deleteSchema } = useSchemaContext();
+  const { deleteSchema, fullAcquisitionsCache, loadFullAcquisitions, isAcquisitionsLoading } = useSchemaContext();
 
   // Filter state (replaces tab-based navigation)
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,7 +90,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   // UI state
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [dragActive, setDragActive] = useState(false);
-  const [schemaAcquisitions, setSchemaAcquisitions] = useState<Record<string, Acquisition[]>>({});
   const [loadingSchemas, setLoadingSchemas] = useState<Set<string>>(new Set());
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; schemaId: string; schemaName: string }>({
     isOpen: false,
@@ -84,9 +99,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const [showNonMatchingFor, setShowNonMatchingFor] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'nested' | 'flat'>('flat');
 
-  // Refs to track loading state (avoids stale closure issues)
-  const loadingInProgressRef = React.useRef<Set<string>>(new Set());
-  const loadedSchemasRef = React.useRef<Set<string>>(new Set());
+  // Use the context's cache for acquisitions
+  const schemaAcquisitions = fullAcquisitionsCache;
 
   // Combine all schemas with source indicator
   const allSchemas = useMemo(() => [
@@ -280,7 +294,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       (showCustom && s.source === 'uploaded')
     );
 
-    return schemasForFlat.flatMap(schema => {
+    const result = schemasForFlat.flatMap(schema => {
       const acquisitions = schemaAcquisitions[schema.id] || [];
       return acquisitions
         .map((acquisition, index) => {
@@ -297,7 +311,25 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         })
         .filter(item => item.matchesTag && item.matchesKeywords);
     });
-  }, [viewMode, allSchemas, showLibrary, showCustom, schemaAcquisitions, selectedTags, searchQuery]);
+
+    // Sort by score if acquisitionScores is provided
+    // Primary: score descending, Secondary: passCount descending (more constraints = better match)
+    if (acquisitionScores) {
+      result.sort((a, b) => {
+        const scoreObjA = acquisitionScores(a.schema.id, a.index);
+        const scoreObjB = acquisitionScores(b.schema.id, b.index);
+        const scoreA = scoreObjA?.score ?? -1;
+        const scoreB = scoreObjB?.score ?? -1;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        // Tiebreak by passCount
+        const passCountA = scoreObjA?.passCount ?? 0;
+        const passCountB = scoreObjB?.passCount ?? 0;
+        return passCountB - passCountA;
+      });
+    }
+
+    return result;
+  }, [viewMode, allSchemas, showLibrary, showCustom, schemaAcquisitions, selectedTags, searchQuery, acquisitionScores]);
 
   // Check if flat view is still loading acquisitions
   const isFlatViewLoading = viewMode === 'flat' && loadingSchemas.size > 0;
@@ -377,26 +409,24 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   };
 
   const loadSchemaAcquisitions = async (schemaId: string) => {
-    // Use refs to check loading state (avoids stale closure issues)
-    if (loadedSchemasRef.current.has(schemaId) || loadingInProgressRef.current.has(schemaId)) {
+    // Already cached in context
+    if (fullAcquisitionsCache[schemaId]) {
       return;
     }
 
-    loadingInProgressRef.current.add(schemaId);
+    // Already loading
+    if (loadingSchemas.has(schemaId)) {
+      return;
+    }
+
     setLoadingSchemas(prev => new Set(prev).add(schemaId));
 
     try {
-      const schema = [...librarySchemas, ...uploadedSchemas].find(s => s.id === schemaId);
-
-      if (schema) {
-        const acquisitions = await convertSchemaToAcquisitions(schema, getSchemaContent);
-        loadedSchemasRef.current.add(schemaId);
-        setSchemaAcquisitions(prev => ({ ...prev, [schemaId]: acquisitions }));
-      }
+      // Use the context's loadFullAcquisitions which handles caching
+      await loadFullAcquisitions(schemaId);
     } catch (error) {
       console.error(`Failed to load acquisitions for schema ${schemaId}:`, error);
     } finally {
-      loadingInProgressRef.current.delete(schemaId);
       setLoadingSchemas(prev => {
         const newSet = new Set(prev);
         newSet.delete(schemaId);
@@ -741,8 +771,24 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                           {isAcqSelected && <Check className="h-3 w-3 text-white" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm text-content-primary">
-                            {acquisition.protocolName}
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-content-primary">
+                              {acquisition.protocolName}
+                            </span>
+                            {acquisitionScores && (() => {
+                              const scoreData = acquisitionScores(schema.id, index);
+                              if (!scoreData) return null;
+                              const { score } = scoreData;
+                              const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                              return (
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
+                                  {score}%
+                                </span>
+                              );
+                            })()}
                           </div>
                           {acquisition.seriesDescription && (
                             <div className="text-xs text-content-secondary mt-1">
@@ -811,8 +857,24 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                       <div className="flex items-start space-x-3">
                         <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm text-content-primary">
-                            {acquisition.protocolName}
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-content-primary">
+                              {acquisition.protocolName}
+                            </span>
+                            {acquisitionScores && (() => {
+                              const scoreData = acquisitionScores(schema.id, index);
+                              if (!scoreData) return null;
+                              const { score } = scoreData;
+                              const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                              return (
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
+                                  {score}%
+                                </span>
+                              );
+                            })()}
                           </div>
                           {acquisition.seriesDescription && (
                             <div className="text-xs text-content-secondary mt-1">
@@ -922,7 +984,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
   return (
     <>
-      <div className="bg-surface-primary rounded-lg shadow-md border border-border h-[800px] flex">
+      <div
+        className="bg-surface-primary rounded-lg shadow-md border border-border flex"
+        style={{ height: maxHeight || 'calc(100vh - 300px)' }}
+      >
         {/* Left Sidebar - Tags */}
         <div className="w-48 border-r border-border p-4 flex-shrink-0 flex flex-col">
           <h3 className="font-medium text-sm text-content-primary mb-3 flex items-center flex-shrink-0">
@@ -986,6 +1051,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                   {showLibrary && <Check className="h-3 w-3 ml-1.5" />}
                 </button>
                 <button
+                  data-tutorial="uploaded-schemas"
                   onClick={() => setShowCustom(!showCustom)}
                   className={`flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
                     showCustom
@@ -1042,7 +1108,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
           <div className="flex-1 overflow-y-auto p-4">
             {/* Upload Area - always show when onSchemaUpload is provided */}
             {onSchemaUpload && (
-              <div className="mb-4">
+              <div className="mb-4" data-tutorial="schema-upload">
                 <div
                   className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
                     dragActive
@@ -1160,6 +1226,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
                                   {schema.name}
                                 </span>
+                                {acquisitionScores && (() => {
+                                  const scoreData = acquisitionScores(schema.id, index);
+                                  if (!scoreData) return null;
+                                  const { score } = scoreData;
+                                  const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                    score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                    score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                                  return (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
+                                      {score}%
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               {acquisition.seriesDescription && (
                                 <div className="text-xs text-content-secondary mt-1">
@@ -1231,6 +1311,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
                                   {schema.name}
                                 </span>
+                                {acquisitionScores && (() => {
+                                  const scoreData = acquisitionScores(schema.id, index);
+                                  if (!scoreData) return null;
+                                  const { score } = scoreData;
+                                  const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                    score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                    score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                                  return (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
+                                      {score}%
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               {acquisition.seriesDescription && (
                                 <div className="text-xs text-content-secondary mt-1">

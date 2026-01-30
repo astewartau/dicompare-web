@@ -60,6 +60,19 @@ export interface PendingAttachmentSelection {
   acquisitions: Acquisition[];
 }
 
+// Pending matching operation (when multiple test data acquisitions need matching to references)
+export interface PendingMatchingOperation {
+  uploadedAcquisitions: Acquisition[];
+  availableSlots: Array<{
+    itemId: string;
+    item: WorkspaceItem;
+  }>;
+  // For manual matching: track source item IDs so we can remove them after matching
+  sourceItemIds?: string[];
+  // Pre-existing assignments: maps uploadedIndex to itemId
+  initialAssignments?: Array<{ uploadedIndex: number; itemId: string }>;
+}
+
 // Default schema metadata
 export const DEFAULT_SCHEMA_METADATA: SchemaMetadata = {
   name: '',

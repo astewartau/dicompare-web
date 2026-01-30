@@ -61,9 +61,8 @@ class PyodideManager {
     await pyodide.loadPackage(['micropip', 'sqlite3']);
 
     // Auto-detect environment: use local package in development, PyPI in production
-    const isDevelopment = window.location.hostname === 'localhost' ||
-                          window.location.hostname === '127.0.0.1' ||
-                          import.meta.env.DEV;
+    // Note: Only use Vite's DEV flag, not hostname detection (localhost is used in production containers too)
+    const isDevelopment = import.meta.env.DEV;
 
     const packageSource = isDevelopment
       ? 'http://localhost:8000/dist/dicompare-0.1.44-py3-none-any.whl'

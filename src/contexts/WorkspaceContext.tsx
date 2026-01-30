@@ -9,6 +9,7 @@ import { processUploadedFiles } from '../utils/fileUploadUtils';
 
 // Import from new contexts
 import { useProcessing } from './ProcessingContext';
+import { FileHandleManager } from '../utils/fileHandleManager';
 import { useSchemaMetadata } from './SchemaMetadataContext';
 import { useItemManagement } from './ItemManagementContext';
 import { useSchemaEditing } from './SchemaEditingContext';
@@ -19,6 +20,7 @@ export type {
   SchemaMetadata,
   ProcessingProgress,
   PendingAttachmentSelection,
+  PendingMatchingOperation,
 } from './workspace/types';
 
 import {
@@ -26,8 +28,11 @@ import {
   SchemaMetadata,
   ProcessingProgress,
   PendingAttachmentSelection,
+  PendingMatchingOperation,
   DEFAULT_SCHEMA_METADATA,
 } from './workspace/types';
+
+import { getItemFlags } from '../utils/workspaceHelpers';
 
 interface WorkspaceContextType {
   // State
@@ -39,10 +44,12 @@ interface WorkspaceContextType {
   processingProgress: ProcessingProgress | null;
   processingError: string | null;
   pendingAttachmentSelection: PendingAttachmentSelection | null;
+  pendingMatchingOperation: PendingMatchingOperation | null;
 
   // Add items
   addFromSchema: (selections: AcquisitionSelection[], getSchemaContent: (id: string) => Promise<string | null>, getUnifiedSchema: (id: string) => UnifiedSchema | null) => Promise<void>;
   addFromData: (files: FileList, mode?: 'schema-template' | 'validation-subject') => Promise<void>;
+  addFromDataWithHandles: (manager: FileHandleManager, mode?: 'schema-template' | 'validation-subject') => Promise<void>;
   addFromScratch: () => string;
   addEmpty: () => string;
 
@@ -68,6 +75,8 @@ interface WorkspaceContextType {
   attachSchema: (id: string, binding: SchemaBinding) => void;
   uploadSchemaForItem: (id: string, files: FileList) => Promise<void>;
   detachData: (id: string) => void;
+  detachDataToNew: (id: string) => void;
+  swapData: (fromId: string, toId: string) => void;
   detachSchema: (id: string) => void;
   detachValidationData: (id: string) => void;
   generateTestData: (id: string, getSchemaContent: (id: string) => Promise<string | null>) => Promise<void>;
@@ -75,6 +84,11 @@ interface WorkspaceContextType {
   // Attachment selection (when multiple acquisitions found)
   confirmAttachmentSelection: (acquisitionIndex: number) => void;
   cancelAttachmentSelection: () => void;
+
+  // Matching operation (when multiple test data acquisitions need matching to references)
+  triggerManualMatching: () => void;
+  confirmMatching: (matches: Array<{ uploadedIndex: number; itemId: string | null }>, operation?: PendingMatchingOperation) => void;
+  cancelMatching: () => void;
 
   // Acquisition editing (when isEditing=true)
   updateAcquisition: (id: string, updates: Partial<Acquisition>) => void;
@@ -114,13 +128,16 @@ interface WorkspaceProviderProps {
 
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
   // Consume the new contexts
-  const { isProcessing, processingTarget, processingProgress, processingError, processFiles } = useProcessing();
+  const { isProcessing, processingTarget, processingProgress, processingError, processFiles, processFileHandles } = useProcessing();
   const { schemaMetadata, setSchemaMetadata, resetMetadata } = useSchemaMetadata();
   const { items, selectedId, setItems, selectItem, removeItem, reorderItems, clearItems } = useItemManagement();
   const editing = useSchemaEditing();
 
   // Local state for attachment selection modal
   const [pendingAttachmentSelection, setPendingAttachmentSelection] = useState<PendingAttachmentSelection | null>(null);
+
+  // Local state for multi-acquisition matching modal
+  const [pendingMatchingOperation, setPendingMatchingOperation] = useState<PendingMatchingOperation | null>(null);
 
   // Cache for schema acquisitions
   const schemaAcquisitionsRef = useRef<Map<string, Acquisition>>(new Map());
@@ -224,6 +241,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     const target = mode === 'validation-subject' ? 'data' : 'schema';
     const newAcquisitions = await processFiles(files, target);
 
+    // Create new items for all uploaded acquisitions
+    // User can use "Assign data to references" panel to match them to existing references
     const newItems: WorkspaceItem[] = newAcquisitions.map((acq, idx) => ({
       id: `ws_${Date.now()}_${acq.id || idx}`,
       acquisition: acq,
@@ -235,9 +254,64 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     setItems(prev => [...prev, ...newItems]);
 
     if (newItems.length > 0) {
+      // If uploading multiple validation-subject items, check if there are reference slots without data
+      if (newItems.length > 1 && mode === 'validation-subject') {
+        // Check current items for references without attached data
+        const hasUnfilledReferenceSlots = items.some(item => {
+          const flags = getItemFlags(item);
+          return flags.hasSchema && !flags.hasData;
+        });
+
+        if (hasUnfilledReferenceSlots) {
+          // Navigate to matching panel
+          selectItem('__assign_data__');
+          return;
+        }
+      }
+
+      // Default: select the first new item
       selectItem(newItems[0].id);
     }
-  }, [processFiles, setItems, selectItem]);
+  }, [processFiles, setItems, selectItem, items]);
+
+  // Add items from DICOM files using File System Access API (for large datasets >2GB)
+  const addFromDataWithHandles = useCallback(async (
+    manager: FileHandleManager,
+    mode: 'schema-template' | 'validation-subject' = 'schema-template'
+  ) => {
+    const target = mode === 'validation-subject' ? 'data' : 'schema';
+    const newAcquisitions = await processFileHandles(manager, target);
+
+    const newItems: WorkspaceItem[] = newAcquisitions.map((acq, idx) => ({
+      id: `ws_${Date.now()}_${acq.id || idx}`,
+      acquisition: acq,
+      source: 'data' as const,
+      isEditing: false,
+      dataUsageMode: mode
+    }));
+
+    setItems(prev => [...prev, ...newItems]);
+
+    if (newItems.length > 0) {
+      // If uploading multiple validation-subject items, check if there are reference slots without data
+      if (newItems.length > 1 && mode === 'validation-subject') {
+        // Check current items for references without attached data
+        const hasUnfilledReferenceSlots = items.some(item => {
+          const flags = getItemFlags(item);
+          return flags.hasSchema && !flags.hasData;
+        });
+
+        if (hasUnfilledReferenceSlots) {
+          // Navigate to matching panel
+          selectItem('__assign_data__');
+          return;
+        }
+      }
+
+      // Default: select the first new item
+      selectItem(newItems[0].id);
+    }
+  }, [processFileHandles, setItems, selectItem, items]);
 
   // Add a new empty acquisition from scratch
   const addFromScratch = useCallback((): string => {
@@ -348,16 +422,26 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     const allAcquisitions = await processFiles(files, 'data');
 
     if (allAcquisitions.length === 1) {
+      // Single acquisition: attach directly to the item
       setItems(prev => prev.map(item =>
         item.id === id ? { ...item, attachedData: allAcquisitions[0] } : item
       ));
     } else if (allAcquisitions.length > 1) {
-      setPendingAttachmentSelection({
-        targetItemId: id,
-        acquisitions: allAcquisitions
-      });
+      // Multiple acquisitions: create items for all and navigate to matching panel
+      const newItems: WorkspaceItem[] = allAcquisitions.map((acq, idx) => ({
+        id: `ws_${Date.now()}_${acq.id || idx}`,
+        acquisition: acq,
+        source: 'data' as const,
+        isEditing: false,
+        dataUsageMode: 'validation-subject' as const
+      }));
+
+      setItems(prev => [...prev, ...newItems]);
+
+      // Navigate to the matching panel so user can assign data to references
+      selectItem('__assign_data__');
     }
-  }, [processFiles, setItems]);
+  }, [processFiles, setItems, selectItem]);
 
   // Attach schema to an item
   const attachSchema = useCallback((id: string, binding: SchemaBinding) => {
@@ -417,6 +501,113 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   const detachData = useCallback((id: string) => {
     updateItemWithCleanup(id, item => ({ ...item, attachedData: undefined }));
   }, [updateItemWithCleanup]);
+
+  // Detach data and create a new acquisition with it
+  const detachDataToNew = useCallback((id: string) => {
+    setItems(prev => {
+      const sourceItem = prev.find(item => item.id === id);
+      if (!sourceItem) return prev;
+
+      // Get the data to move (could be attachedData or the main acquisition data if source is 'data')
+      const dataToMove = sourceItem.attachedData || (sourceItem.source === 'data' ? sourceItem.acquisition : null);
+      if (!dataToMove) return prev;
+
+      // Create new item with the data
+      const newId = `data_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newItem: WorkspaceItem = {
+        id: newId,
+        source: 'data',
+        dataUsageMode: 'validation-subject',
+        acquisition: dataToMove,
+        isEditing: false,
+      };
+
+      // Update source item to remove its data
+      const updatedItems = prev.map(item => {
+        if (item.id !== id) return item;
+
+        if (item.source === 'data' && !item.attachedData) {
+          // Source was data-sourced, convert to empty with just schema if it has one
+          if (item.attachedSchema) {
+            return {
+              ...item,
+              source: 'schema' as const,
+              dataUsageMode: undefined,
+              acquisition: createEmptyAcquisition(item.id, item.acquisition.protocolName),
+            };
+          }
+          // No schema, item should be removed
+          return null;
+        }
+
+        // Just remove attachedData
+        return { ...item, attachedData: undefined };
+      }).filter((item): item is WorkspaceItem => item !== null);
+
+      return [...updatedItems, newItem];
+    });
+  }, [setItems]);
+
+  // Swap data between two items
+  const swapData = useCallback((fromId: string, toId: string) => {
+    setItems(prev => {
+      const fromItem = prev.find(item => item.id === fromId);
+      const toItem = prev.find(item => item.id === toId);
+
+      if (!fromItem || !toItem) return prev;
+
+      // Get data from source (attachedData or acquisition if source is 'data')
+      const fromData = fromItem.attachedData || (fromItem.source === 'data' ? fromItem.acquisition : null);
+      const toData = toItem.attachedData || (toItem.source === 'data' ? toItem.acquisition : null);
+
+      if (!fromData) return prev; // Nothing to swap from source
+
+      return prev.map(item => {
+        if (item.id === fromId) {
+          // Put toData into fromItem (or remove data if toData is null)
+          if (fromItem.source === 'data' && !fromItem.attachedData) {
+            // fromItem's main acquisition is the data, replace it
+            if (toData) {
+              return { ...item, acquisition: toData };
+            } else {
+              // No data to put back, convert to empty or schema-only
+              if (item.attachedSchema) {
+                return {
+                  ...item,
+                  source: 'schema' as const,
+                  dataUsageMode: undefined,
+                  acquisition: createEmptyAcquisition(item.id, item.acquisition.protocolName),
+                };
+              }
+              return { ...item, source: 'empty' as const, dataUsageMode: undefined, acquisition: createEmptyAcquisition(item.id) };
+            }
+          } else {
+            // fromItem has attachedData - remove it or replace with toData
+            // Explicitly remove attachedData by destructuring it out
+            const { attachedData: _, ...rest } = item;
+            if (toData) {
+              return { ...rest, attachedData: toData };
+            } else {
+              return rest; // No attachedData property at all
+            }
+          }
+        }
+
+        if (item.id === toId) {
+          // Put fromData into toItem
+          if (toItem.source === 'data' && !toItem.attachedData) {
+            // toItem's main acquisition is the data, replace it
+            return { ...item, acquisition: fromData };
+          } else {
+            // toItem has attachedData or is not data-sourced - add fromData
+            return { ...item, attachedData: fromData };
+          }
+        }
+
+        return item;
+      });
+    });
+  }, [setItems]);
 
   // Detach validation data
   const detachValidationData = useCallback((id: string) => {
@@ -504,6 +695,224 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   const cancelAttachmentSelection = useCallback(() => {
     setPendingAttachmentSelection(null);
   }, []);
+
+  // Confirm matching operation - apply matches and handle reassignments
+  const confirmMatching = useCallback((
+    matches: Array<{ uploadedIndex: number; itemId: string | null }>,
+    operation?: PendingMatchingOperation
+  ) => {
+    // Use passed operation or fall back to pendingMatchingOperation state
+    const op = operation || pendingMatchingOperation;
+    if (!op) return;
+
+    const { uploadedAcquisitions, sourceItemIds, initialAssignments } = op;
+
+    // Build maps for efficient lookup
+    // newAssignments: targetItemId -> acquisition to attach
+    const newAssignments = new Map<string, Acquisition>();
+    // sourceItemsToRemove: source item IDs that should be removed (data moved elsewhere)
+    const sourceItemsToRemove = new Set<string>();
+    // targetsWithData: items that will have data after this operation
+    const targetsWithData = new Set<string>();
+    // unmatchedAcquisitions: data that was explicitly left unmatched (should become standalone items)
+    const unmatchedAcquisitions: Acquisition[] = [];
+
+    // Build initial assignment map for comparison
+    const initialAssignmentMap = new Map<number, string>();
+    initialAssignments?.forEach(a => initialAssignmentMap.set(a.uploadedIndex, a.itemId));
+
+    // Process each match
+    matches.forEach(({ uploadedIndex, itemId }) => {
+      const acq = uploadedAcquisitions[uploadedIndex];
+      if (!acq) return;
+
+      const sourceItemId = sourceItemIds?.[uploadedIndex];
+      const previousTargetId = initialAssignmentMap.get(uploadedIndex);
+
+      if (itemId) {
+        // Data is assigned to a target
+        newAssignments.set(itemId, acq);
+        targetsWithData.add(itemId);
+
+        // If data came from a standalone item (not attached to a schema item),
+        // and it's now being assigned to a different item, remove the standalone
+        if (sourceItemId && sourceItemId !== itemId && sourceItemId !== previousTargetId) {
+          // Check if source was a standalone data item (validation-subject without schema)
+          // We'll check this during the setItems call
+          sourceItemsToRemove.add(sourceItemId);
+        }
+      } else {
+        // itemId is null - data is unmatched
+        // Determine if we need to create a standalone item for this data
+
+        // Data was assigned somewhere (attached to a reference or validation-subject with schema)
+        const wasAssigned = previousTargetId !== undefined;
+
+        // Data's source item is being removed (assigned to a different reference)
+        const isSourceBeingRemoved = sourceItemId && sourceItemsToRemove.has(sourceItemId);
+
+        // Check if this is already a standalone item that will remain in place
+        // Standalone data items (validation-subject without attached schema) have sourceItemId
+        // but are NOT in initialAssignments, so previousTargetId is undefined
+        const isExistingStandalone = sourceItemId && !previousTargetId;
+
+        // Create standalone if:
+        // 1. Data was assigned and is being detached (and not already a standalone)
+        // 2. OR data's source is being removed
+        if ((wasAssigned && !isExistingStandalone) || isSourceBeingRemoved) {
+          unmatchedAcquisitions.push(acq);
+        }
+      }
+    });
+
+    // Apply all changes in one atomic update
+    setItems(prev => {
+      let updated = prev.map(item => {
+        // Check if this item should get new data attached
+        if (newAssignments.has(item.id)) {
+          return { ...item, attachedData: newAssignments.get(item.id) };
+        }
+
+        // Check if this item had data but it's been moved elsewhere
+        // (item was a target before, but not in the new assignments)
+        if (item.attachedData) {
+          // Find if this item's attached data was in the uploaded list
+          const wasSource = uploadedAcquisitions.some((acq, idx) => {
+            const prevTarget = initialAssignmentMap.get(idx);
+            return prevTarget === item.id && !targetsWithData.has(item.id);
+          });
+          if (wasSource) {
+            // Remove attached data from this item
+            const { attachedData: _, ...rest } = item;
+            return rest as WorkspaceItem;
+          }
+        }
+
+        return item;
+      });
+
+      // Remove standalone data items that were assigned elsewhere
+      if (sourceItemsToRemove.size > 0) {
+        updated = updated.filter(item => {
+          if (!sourceItemsToRemove.has(item.id)) return true;
+          // Only remove if it's a standalone data item (validation-subject without schema attached)
+          const flags = getItemFlags(item);
+          return !(item.source === 'data' && item.dataUsageMode === 'validation-subject' && !flags.hasSchema);
+        });
+      }
+
+      // Create new standalone items for data that was moved to "Unmatched"
+      if (unmatchedAcquisitions.length > 0) {
+        const newItems: WorkspaceItem[] = unmatchedAcquisitions.map((acq, idx) => ({
+          id: `ws_${Date.now()}_unmatched_${idx}`,
+          acquisition: acq,
+          source: 'data' as const,
+          isEditing: false,
+          dataUsageMode: 'validation-subject' as const
+        }));
+        updated = [...updated, ...newItems];
+      }
+
+      return updated;
+    });
+
+    // Only clear pendingMatchingOperation if we were using it (not a passed operation)
+    if (!operation && pendingMatchingOperation) {
+      setPendingMatchingOperation(null);
+    }
+  }, [pendingMatchingOperation, setItems]);
+
+  // Cancel matching operation
+  const cancelMatching = useCallback(() => {
+    if (!pendingMatchingOperation) return;
+
+    const { uploadedAcquisitions, sourceItemIds } = pendingMatchingOperation;
+
+    // For manual matching (has sourceItemIds), just close the modal - data already exists
+    if (sourceItemIds) {
+      setPendingMatchingOperation(null);
+      return;
+    }
+
+    // For new data upload, create items for the uploaded acquisitions
+    const newItems: WorkspaceItem[] = uploadedAcquisitions.map((acq, idx) => ({
+      id: `ws_${Date.now()}_${acq.id || idx}`,
+      acquisition: acq,
+      source: 'data' as const,
+      isEditing: false,
+      dataUsageMode: 'validation-subject' as const
+    }));
+
+    setItems(prev => [...prev, ...newItems]);
+
+    if (newItems.length > 0) {
+      selectItem(newItems[0].id);
+    }
+
+    setPendingMatchingOperation(null);
+  }, [pendingMatchingOperation, setItems, selectItem]);
+
+  // Trigger manual matching - shows all data and all references with current assignments
+  const triggerManualMatching = useCallback(() => {
+    // Collect all data from items (attachedData or data-sourced items)
+    const dataEntries: Array<{ acquisition: Acquisition; sourceItemId: string; assignedToItemId?: string }> = [];
+
+    // First, collect data attached to schema items (these have assignments)
+    items.forEach(item => {
+      const flags = getItemFlags(item);
+      if (item.attachedData) {
+        // This data is attached to this item (assigned)
+        dataEntries.push({
+          acquisition: item.attachedData,
+          sourceItemId: item.id, // The item itself is the "source" for attached data
+          assignedToItemId: flags.hasSchema ? item.id : undefined
+        });
+      }
+    });
+
+    // Then, collect standalone data items (data-sourced without being attached elsewhere)
+    items.forEach(item => {
+      if (item.source === 'data') {
+        const flags = getItemFlags(item);
+        // If it's a validation-subject with attached schema, it's assigned to itself
+        // If it's a schema-template, it's its own schema (don't include as moveable data)
+        if (item.dataUsageMode === 'validation-subject') {
+          dataEntries.push({
+            acquisition: item.acquisition,
+            sourceItemId: item.id,
+            assignedToItemId: flags.hasSchema ? item.id : undefined
+          });
+        }
+      }
+    });
+
+    // Collect all items with schema as available slots
+    const schemaItems = items.filter(item => {
+      const flags = getItemFlags(item);
+      return flags.hasSchema;
+    });
+
+    if (dataEntries.length === 0 || schemaItems.length === 0) return;
+
+    // Build the operation data
+    const uploadedAcquisitions = dataEntries.map(e => e.acquisition);
+    const sourceItemIds = dataEntries.map(e => e.sourceItemId);
+    const initialAssignments = dataEntries
+      .map((e, idx) => e.assignedToItemId ? { uploadedIndex: idx, itemId: e.assignedToItemId } : null)
+      .filter((a): a is { uploadedIndex: number; itemId: string } => a !== null);
+
+    const availableSlots = schemaItems.map(item => ({
+      itemId: item.id,
+      item
+    }));
+
+    setPendingMatchingOperation({
+      uploadedAcquisitions,
+      availableSlots,
+      sourceItemIds,
+      initialAssignments
+    });
+  }, [items]);
 
   // Generate test data for a schema-sourced item
   const generateTestData = useCallback(async (
@@ -633,8 +1042,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     processingProgress,
     processingError,
     pendingAttachmentSelection,
+    pendingMatchingOperation,
     addFromSchema,
     addFromData,
+    addFromDataWithHandles,
     addFromScratch,
     addEmpty,
     createSchemaForItem,
@@ -650,10 +1061,15 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     attachSchema,
     uploadSchemaForItem,
     detachData,
+    detachDataToNew,
+    swapData,
     detachSchema,
     detachValidationData,
     confirmAttachmentSelection,
     cancelAttachmentSelection,
+    triggerManualMatching,
+    confirmMatching,
+    cancelMatching,
     generateTestData,
     // From SchemaEditingContext
     updateAcquisition: editing.updateAcquisition,

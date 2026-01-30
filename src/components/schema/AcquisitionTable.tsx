@@ -105,6 +105,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
   const [showRuleStatusMessages, setShowRuleStatusMessages] = useState(false);
   const [showUncheckedFields, setShowUncheckedFields] = useState(false);
+  const [showUncheckedSeriesFields, setShowUncheckedSeriesFields] = useState(false);
   const { allTags } = useTagSuggestions();
 
   const isComplianceMode = mode === 'compliance';
@@ -122,30 +123,21 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
   const validationFunctions = acquisition.validationFunctions || [];
 
-  // Calculate fields in realAcquisition that aren't checked by the schema
-  const uncheckedFields = useMemo((): DicomField[] => {
-    if (!isComplianceMode) return [];
-    if (!realAcquisition) return [];
-
-    const realFields = realAcquisition.acquisitionFields || [];
-    const schemaFields = acquisition?.acquisitionFields || [];
-
-    // If no real fields, nothing to show
-    if (realFields.length === 0) return [];
-
-    // Get all field identifiers from the schema (normalized)
+  // Build set of all schema field identifiers (used for both acquisition and series unchecked fields)
+  const schemaFieldIdentifiers = useMemo(() => {
     const schemaFieldIds = new Set<string>();
     const schemaKeywords = new Set<string>();
     const schemaNames = new Set<string>();
 
-    schemaFields.forEach(f => {
+    // Add acquisition-level fields from schema
+    (acquisition?.acquisitionFields || []).forEach(f => {
       const normalizedTag = normalizeTag(f.tag);
       if (normalizedTag) schemaFieldIds.add(normalizedTag);
       if (f.keyword) schemaKeywords.add(f.keyword.toLowerCase());
       if (f.name) schemaNames.add(f.name.toLowerCase());
     });
 
-    // Also include series fields from schema
+    // Add series fields from schema
     (acquisition?.series || []).forEach(s => {
       const fields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
       fields.forEach((f: any) => {
@@ -156,21 +148,75 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       });
     });
 
-    // If schema has no fields defined, all real fields are "unchecked"
-    // but this is likely a loading state, so return empty
+    return { schemaFieldIds, schemaKeywords, schemaNames };
+  }, [acquisition?.acquisitionFields, acquisition?.series]);
+
+  // Helper to check if a field is in the schema
+  const isFieldInSchema = (f: DicomField) => {
+    const { schemaFieldIds, schemaKeywords, schemaNames } = schemaFieldIdentifiers;
+    const normalizedTag = normalizeTag(f.tag);
+    const hasTag = normalizedTag && schemaFieldIds.has(normalizedTag);
+    const hasKeyword = f.keyword && schemaKeywords.has(f.keyword.toLowerCase());
+    const hasName = f.name && schemaNames.has(f.name.toLowerCase());
+    return hasTag || hasKeyword || hasName;
+  };
+
+  // Calculate acquisition-level fields in realAcquisition that aren't checked by the schema
+  const uncheckedFields = useMemo((): DicomField[] => {
+    if (!isComplianceMode) return [];
+    if (!realAcquisition) return [];
+
+    const realFields = realAcquisition.acquisitionFields || [];
+    if (realFields.length === 0) return [];
+
+    const { schemaFieldIds, schemaKeywords, schemaNames } = schemaFieldIdentifiers;
+
+    // If schema has no fields defined, likely a loading state
     if (schemaFieldIds.size === 0 && schemaKeywords.size === 0 && schemaNames.size === 0) {
       return [];
     }
 
-    // Find fields in realAcquisition that aren't in the schema
-    return realFields.filter(f => {
-      const normalizedTag = normalizeTag(f.tag);
-      const hasTag = normalizedTag && schemaFieldIds.has(normalizedTag);
-      const hasKeyword = f.keyword && schemaKeywords.has(f.keyword.toLowerCase());
-      const hasName = f.name && schemaNames.has(f.name.toLowerCase());
-      return !hasTag && !hasKeyword && !hasName;
-    });
-  }, [isComplianceMode, realAcquisition, acquisition?.acquisitionFields, acquisition?.series]);
+    return realFields.filter(f => !isFieldInSchema(f));
+  }, [isComplianceMode, realAcquisition, schemaFieldIdentifiers]);
+
+  // Calculate series-level fields in realAcquisition that aren't checked by the schema
+  // Returns: { fieldNames: unique unchecked field names, series: filtered series data }
+  const uncheckedSeriesData = useMemo(() => {
+    if (!isComplianceMode) return { fieldNames: [] as string[], series: [] as Array<{ name: string; fields: DicomField[] }> };
+    if (!realAcquisition?.series) return { fieldNames: [] as string[], series: [] as Array<{ name: string; fields: DicomField[] }> };
+
+    const { schemaFieldIds, schemaKeywords, schemaNames } = schemaFieldIdentifiers;
+
+    // If schema has no fields defined, likely a loading state
+    if (schemaFieldIds.size === 0 && schemaKeywords.size === 0 && schemaNames.size === 0) {
+      return { fieldNames: [] as string[], series: [] as Array<{ name: string; fields: DicomField[] }> };
+    }
+
+    // Collect unique unchecked field names (for column headers)
+    const uncheckedFieldNames = new Set<string>();
+
+    // Filter series to only include unchecked fields
+    const filteredSeries = realAcquisition.series.map((s, idx) => {
+      const fields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+      const uncheckedFields = fields.filter((f: any) => {
+        if (!isFieldInSchema(f)) {
+          const key = f.keyword || f.name || f.tag;
+          uncheckedFieldNames.add(key);
+          return true;
+        }
+        return false;
+      });
+      return {
+        name: s.name || `Series ${String(idx + 1).padStart(2, '0')}`,
+        fields: uncheckedFields as DicomField[]
+      };
+    }).filter(s => s.fields.length > 0);
+
+    return {
+      fieldNames: Array.from(uncheckedFieldNames),
+      series: filteredSeries
+    };
+  }, [isComplianceMode, realAcquisition?.series, schemaFieldIdentifiers]);
 
   // Update expanded state when isCollapsed prop changes
   useEffect(() => {
@@ -394,6 +440,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                   onChange={(e) => onUpdate('protocolName', e.target.value)}
                   className="text-sm font-semibold text-content-primary bg-surface-primary border border-border-secondary rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Acquisition Name"
+                  data-tutorial="acquisition-name-input"
                 />
                 <div className="flex items-center space-x-2">
                   <input
@@ -402,6 +449,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                     onChange={(e) => onUpdate('seriesDescription', e.target.value)}
                     className="text-xs text-content-secondary bg-surface-primary border border-border-secondary rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-brand-500"
                     placeholder="Short description"
+                    data-tutorial="acquisition-description-input"
                   />
                   <button
                     onClick={() => setShowDetailedDescription(true)}
@@ -411,6 +459,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                         : 'text-content-tertiary border-border-secondary hover:bg-surface-secondary'
                     }`}
                     title={acquisition.detailedDescription ? 'View/Edit detailed description' : 'Add detailed description'}
+                    data-tutorial="readme-button"
                   >
                     <FileText className="h-3 w-3 mr-1" />
                     README
@@ -511,16 +560,19 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
           {((isEditMode && !isComplianceMode) || validationFunctions.length > 0) && (
             <div>
               {isEditMode && !isComplianceMode && (
-                <div className="flex items-center space-x-2 mb-2">
-                  <DicomFieldSelector
-                    selectedFields={[]}
-                    onFieldsChange={(fields) => onFieldAdd(fields)}
-                    placeholder="Add DICOM fields..."
-                    className="flex-1 text-sm"
-                  />
+                <div className="flex items-center space-x-2 mb-2" data-tutorial="edit-controls">
+                  <div data-tutorial="add-dicom-fields" className="flex-1">
+                    <DicomFieldSelector
+                      selectedFields={[]}
+                      onFieldsChange={(fields) => onFieldAdd(fields)}
+                      placeholder="Add DICOM fields..."
+                      className="text-sm"
+                    />
+                  </div>
                   <button
                     onClick={() => setShowValidationLibrary(true)}
                     className="flex items-center px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 flex-shrink-0"
+                    data-tutorial="add-validator-button"
                   >
                     <Code className="h-4 w-4 mr-1" />
                     Add Validator Function
@@ -700,7 +752,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
             </div>
           )}
 
-          {/* Unchecked Fields (fields in data but not in schema) */}
+          {/* Unchecked Fields (acquisition-level fields in data but not in schema) */}
           {isComplianceMode && uncheckedFields.length > 0 && (
             <div className="border border-border-secondary rounded-md overflow-hidden">
               <button
@@ -751,6 +803,67 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                 : String(field.value ?? '')}
                             </p>
                           </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Unchecked Series Fields (series-level fields in data but not in schema) */}
+          {isComplianceMode && uncheckedSeriesData.series.length > 0 && (
+            <div className="border border-border-secondary rounded-md overflow-hidden">
+              <button
+                onClick={() => setShowUncheckedSeriesFields(!showUncheckedSeriesFields)}
+                className="w-full px-3 py-2 bg-surface-secondary hover:bg-surface-tertiary transition-colors flex items-center justify-between text-left"
+              >
+                <span className="text-xs text-content-tertiary">
+                  <span className="font-medium">{uncheckedSeriesData.series.length} series</span> not validated by schema
+                </span>
+                <ChevronDown className={`h-4 w-4 text-content-tertiary transition-transform ${showUncheckedSeriesFields ? 'rotate-180' : ''}`} />
+              </button>
+              {showUncheckedSeriesFields && (
+                <div className="border-t border-border overflow-x-auto">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-surface-tertiary">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider sticky left-0 bg-surface-tertiary">
+                          Series
+                        </th>
+                        {uncheckedSeriesData.fieldNames.map(fieldName => (
+                          <th key={fieldName} className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider min-w-[120px]">
+                            {fieldName}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-surface-primary divide-y divide-border">
+                      {uncheckedSeriesData.series.map((series, seriesIndex) => (
+                        <tr
+                          key={series.name || seriesIndex}
+                          className={seriesIndex % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'}
+                        >
+                          <td className="px-2 py-1.5 sticky left-0 bg-inherit">
+                            <span className="text-xs font-medium text-content-secondary whitespace-nowrap">
+                              {series.name}
+                            </span>
+                          </td>
+                          {uncheckedSeriesData.fieldNames.map(fieldName => {
+                            const field = series.fields.find(f => (f.keyword || f.name || f.tag) === fieldName);
+                            return (
+                              <td key={fieldName} className="px-2 py-1.5">
+                                <p className="text-xs text-content-secondary break-words max-w-[200px]">
+                                  {field ? (
+                                    Array.isArray(field.value)
+                                      ? field.value.slice(0, 3).join(', ') + (field.value.length > 3 ? '...' : '')
+                                      : String(field.value ?? '')
+                                  ) : '—'}
+                                </p>
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>

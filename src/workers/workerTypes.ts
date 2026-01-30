@@ -17,6 +17,7 @@ export interface ProgressPayload {
 export type WorkerRequest =
   | { id: RequestId; type: 'initialize' }
   | { id: RequestId; type: 'analyzeFiles'; payload: { fileNames: string[]; fileContents: ArrayBuffer[] } }
+  | { id: RequestId; type: 'analyzeBatch'; payload: { fileNames: string[]; fileContents: ArrayBuffer[]; batchIndex: number; totalBatches: number } }
   | { id: RequestId; type: 'validateAcquisition'; payload: { acquisition: any; schemaContent: string; acquisitionIndex?: number } }
   | { id: RequestId; type: 'loadProtocolFile'; payload: { fileContent: ArrayBuffer; fileName: string; fileType: string } }
   | { id: RequestId; type: 'searchFields'; payload: { query: string; limit: number } }

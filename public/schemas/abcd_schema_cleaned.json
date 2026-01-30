@@ -162,7 +162,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -347,7 +347,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -521,7 +521,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -730,7 +730,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -956,7 +956,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -1127,7 +1127,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -1343,7 +1343,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -1534,7 +1534,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -1719,7 +1719,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -1902,7 +1902,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -2087,7 +2087,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {
@@ -2272,7 +2272,7 @@
         },
         {
           "field": "CoilType",
-          "tag": "unknown_CoilType",
+          "tag": "derived",
           "value": "Combined"
         },
         {

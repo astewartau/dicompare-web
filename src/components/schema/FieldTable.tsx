@@ -106,7 +106,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
 
   return (
     <>
-      <div className="border border-border rounded-md overflow-hidden">
+      <div className="border border-border rounded-md overflow-hidden" data-tutorial="field-table">
         <table className="min-w-full divide-y divide-border">
           <thead className="bg-surface-secondary">
             <tr>
@@ -184,6 +184,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                   <div
                     className={`${isEditMode ? 'cursor-pointer hover:bg-brand-500/20 rounded px-1 -mx-1' : ''}`}
                     onClick={() => isEditMode && setEditingField(field)}
+                    data-tutorial={index === 0 && isEditMode ? 'field-value-cell' : undefined}
                   >
                     <p className="text-xs text-content-primary break-words">{formatFieldValue(field)}</p>
                     <p className="text-xs text-content-tertiary mt-0.5">{fieldTypeDisplay}</p>
@@ -232,6 +233,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                         onClick={() => onFieldConvert(fieldIdentifier)}
                         className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
                         title="Convert to series field"
+                        data-tutorial={index === 0 ? 'convert-to-series-button' : undefined}
                       >
                         <ArrowRightLeft className="h-3 w-3" />
                       </button>

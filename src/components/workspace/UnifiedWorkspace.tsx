@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { AlertTriangle, FileText, Image, GripVertical, List, Check, X } from 'lucide-react';
 import {
   DndContext,
@@ -20,12 +20,13 @@ import {
 import { useWorkspace, WorkspaceItem, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { useSchemaService, SchemaBinding } from '../../hooks/useSchemaService';
 import { AcquisitionSelection } from '../../types';
-import WorkspaceSidebar, { SCHEMA_INFO_ID, ADD_FROM_DATA_ID, ADD_NEW_ID } from './WorkspaceSidebar';
+import WorkspaceSidebar, { SCHEMA_INFO_ID, ADD_FROM_DATA_ID, ADD_NEW_ID, ASSIGN_DATA_ID } from './WorkspaceSidebar';
 import WorkspaceDetailPanel, { SchemaInfoTab } from './WorkspaceDetailPanel';
 import { getItemFlags } from '../../utils/workspaceHelpers';
 import AttachSchemaModal from './AttachSchemaModal';
 import SchemaReadmeModal from '../schema/SchemaReadmeModal';
 import { useReadmeModal } from '../../hooks/useReadmeModal';
+import { useFileSystemAccess } from '../../hooks/useFileSystemAccess';
 
 const UnifiedWorkspace: React.FC = () => {
   const {
@@ -36,9 +37,9 @@ const UnifiedWorkspace: React.FC = () => {
     processingError,
     schemaMetadata,
     setSchemaMetadata,
-    pendingAttachmentSelection,
     addFromSchema,
     addFromData,
+    addFromDataWithHandles,
     addEmpty,
     createSchemaForItem,
     detachCreatedSchema,
@@ -52,8 +53,7 @@ const UnifiedWorkspace: React.FC = () => {
     detachData,
     detachSchema,
     detachValidationData,
-    confirmAttachmentSelection,
-    cancelAttachmentSelection,
+    confirmMatching,
     generateTestData,
     updateAcquisition,
     clearAll,
@@ -75,6 +75,12 @@ const UnifiedWorkspace: React.FC = () => {
     handleAcquisitionReadmeClick,
     closeReadmeModal
   } = useReadmeModal(getSchemaContent);
+
+  // File System Access API hook for large file support
+  const {
+    isDirectoryPickerSupported,
+    pickAndScanDirectory,
+  } = useFileSystemAccess();
 
   // Local UI state
   const [schemaInfoTab, setSchemaInfoTab] = useState<SchemaInfoTab>('welcome');
@@ -139,6 +145,14 @@ const UnifiedWorkspace: React.FC = () => {
     if (!files) return;
     await addFromData(files, mode);
   }, [addFromData]);
+
+  // Large folder upload handler (File System Access API for >2GB datasets)
+  const handleLargeFolderBrowse = useCallback(async (mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
+    const manager = await pickAndScanDirectory();
+    if (manager && manager.fileCount > 0) {
+      await addFromDataWithHandles(manager, mode);
+    }
+  }, [pickAndScanDirectory, addFromDataWithHandles]);
 
   // Create schema for current empty item
   const handleCreateSchema = useCallback(() => {
@@ -255,13 +269,13 @@ const UnifiedWorkspace: React.FC = () => {
 
     const activeId = active.id as string;
     const overId = over.id as string;
+    const dragData = active.data.current;
 
     const isFromSchemaBrowser = activeId.startsWith('schema-drag-') || activeId.startsWith('acq-drag-');
     const isValidTarget = overId === 'sidebar-drop-zone' || items.some(item => item.id === overId);
 
     // Handle drop from schema browser
     if (isFromSchemaBrowser && isValidTarget) {
-      const dragData = active.data.current;
       if (dragData?.type === 'acquisition') {
         const selection: AcquisitionSelection = dragData.selection;
         await addFromSchema([selection], getSchemaContent, getUnifiedSchema);
@@ -296,22 +310,81 @@ const UnifiedWorkspace: React.FC = () => {
   // Get selected item
   const selectedItem = items.find(item => item.id === selectedId);
 
+  // Build matching data when ASSIGN_DATA_ID is selected
+  const matchingData = useMemo(() => {
+    if (selectedId !== ASSIGN_DATA_ID) return undefined;
+
+    // Collect all data acquisitions
+    const dataItems: { acquisition: any; itemId: string }[] = [];
+    // Collect all reference items (items with schema)
+    const refItems: { itemId: string; item: any }[] = [];
+    // Track current assignments
+    const currentAssignments: Array<{ uploadedIndex: number; itemId: string }> = [];
+
+    items.forEach(item => {
+      // Use getItemFlags for consistent logic
+      const flags = getItemFlags(item);
+
+      // Item has a reference - it's an available slot
+      if (flags.hasSchema) {
+        refItems.push({ itemId: item.id, item });
+      }
+
+      // Item has data - collect it
+      if (flags.hasData) {
+        const dataAcq = item.attachedData || item.acquisition;
+        const dataIndex = dataItems.length;
+        dataItems.push({ acquisition: dataAcq, itemId: item.id });
+
+        // If this data is already attached to a reference item, record the assignment
+        if (item.attachedData && flags.hasSchema) {
+          // Data is attached to this reference item
+          currentAssignments.push({ uploadedIndex: dataIndex, itemId: item.id });
+        } else if (item.source === 'data' && item.dataUsageMode === 'validation-subject' && flags.hasAttachedSchema) {
+          // Validation-subject item with attached schema - assigned to itself
+          currentAssignments.push({ uploadedIndex: dataIndex, itemId: item.id });
+        }
+      }
+    });
+
+    return {
+      uploadedAcquisitions: dataItems.map(d => d.acquisition),
+      availableSlots: refItems,
+      initialAssignments: currentAssignments,
+      dataItemIds: dataItems.map(d => d.itemId) // Track which item each data came from
+    };
+  }, [selectedId, items]);
+
+  // Handle matching confirmation
+  const handleConfirmMatching = useCallback((matches: Array<{ uploadedIndex: number; itemId: string | null }>) => {
+    if (!matchingData) return;
+
+    // Build the operation data to pass to confirmMatching
+    const operation = {
+      uploadedAcquisitions: matchingData.uploadedAcquisitions,
+      availableSlots: matchingData.availableSlots,
+      sourceItemIds: matchingData.dataItemIds,
+      initialAssignments: matchingData.initialAssignments
+    };
+
+    // Call confirmMatching with the matches and operation data
+    confirmMatching(matches, operation);
+
+    // Stay on the matching panel - user can navigate away manually
+  }, [matchingData, confirmMatching]);
+
   return (
     <div className="max-w-7xl mx-auto">
-      {/* Title and actions */}
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-content-primary">Workspace</h2>
-        {/* Processing error */}
-        {processingError && (
-          <div className="mt-4 p-3 bg-status-error-bg border border-status-error/30 text-status-error rounded flex items-start">
-            <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">Error</p>
-              <p className="text-sm mt-1">{processingError}</p>
-            </div>
+      {/* Processing error */}
+      {processingError && (
+        <div className="mb-4 p-3 bg-status-error-bg border border-status-error/30 text-status-error rounded flex items-start">
+          <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Error</p>
+            <p className="text-sm mt-1">{processingError}</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <DndContext
@@ -321,7 +394,7 @@ const UnifiedWorkspace: React.FC = () => {
         onDragOver={handleDndDragOver}
         onDragEnd={handleDndDragEnd}
       >
-        <div className="grid grid-cols-12 gap-6 min-h-[800px]">
+        <div className="grid grid-cols-12 gap-6">
           {/* Left Sidebar */}
           <div className="col-span-12 md:col-span-3">
             <WorkspaceSidebar
@@ -347,6 +420,7 @@ const UnifiedWorkspace: React.FC = () => {
               isAddNew={selectedId === ADD_NEW_ID}
               isAddFromData={selectedId === ADD_FROM_DATA_ID}
               isSchemaInfo={selectedId === SCHEMA_INFO_ID || (!selectedId && !selectedItem)}
+              isAssignData={selectedId === ASSIGN_DATA_ID}
               schemaInfoTab={schemaInfoTab}
               setSchemaInfoTab={setSchemaInfoTab}
               isProcessing={isProcessing}
@@ -360,6 +434,8 @@ const UnifiedWorkspace: React.FC = () => {
               onSchemaToggle={handleSchemaFirstToggle}
               onConfirmSchemas={confirmSchemaSelections}
               onFileUpload={handleFileUpload}
+              onLargeFolderBrowse={handleLargeFolderBrowse}
+              isLargeFolderSupported={isDirectoryPickerSupported}
               onCreateSchema={handleCreateSchema}
               onDetachCreatedSchema={handleDetachCreatedSchema}
               onToggleEditing={() => selectedId && toggleEditing(selectedId)}
@@ -383,6 +459,8 @@ const UnifiedWorkspace: React.FC = () => {
               onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
               onStagedCreateBlank={handleStagedCreateBlank}
               onStagedAttachSchema={handleStagedAttachSchema}
+              matchingData={matchingData}
+              onConfirmMatching={handleConfirmMatching}
             />
           </div>
         </div>
@@ -512,6 +590,15 @@ const UnifiedWorkspace: React.FC = () => {
         librarySchemas={librarySchemas}
         uploadedSchemas={uploadedSchemas}
         getSchemaContent={getSchemaContent}
+        testDataAcquisition={
+          // Data from validation-subject mode
+          (selectedItem?.source === 'data' && selectedItem?.dataUsageMode === 'validation-subject')
+            ? selectedItem.acquisition
+            // Data attached to an empty item (e.g., after detaching schema)
+            : (selectedItem?.source === 'empty' && selectedItem?.attachedData)
+              ? selectedItem.attachedData
+              : undefined
+        }
         onSchemaReadmeClick={handleSchemaReadmeClick}
         onAcquisitionReadmeClick={handleAcquisitionReadmeClick}
       />
@@ -525,68 +612,6 @@ const UnifiedWorkspace: React.FC = () => {
         initialSelection={readmeModalData?.initialSelection || 'schema'}
       />
 
-      {/* Acquisition Selection Modal (when multiple acquisitions found in data) */}
-      {pendingAttachmentSelection && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-primary rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-content-primary">Select Acquisition</h2>
-                <p className="text-sm text-content-secondary mt-1">
-                  Multiple acquisitions found. Select one to use for validation.
-                </p>
-              </div>
-              <button
-                onClick={cancelAttachmentSelection}
-                className="text-content-muted hover:text-content-secondary"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Acquisition List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {pendingAttachmentSelection.acquisitions.map((acq, index) => (
-                <button
-                  key={acq.id || index}
-                  onClick={() => confirmAttachmentSelection(index)}
-                  className="w-full text-left p-4 border border-border rounded-lg hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
-                >
-                  <div className="flex items-start gap-3">
-                    <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-content-primary">
-                        {acq.protocolName || `Acquisition ${index + 1}`}
-                      </div>
-                      {acq.seriesDescription && (
-                        <div className="text-sm text-content-secondary mt-1 line-clamp-2">
-                          {acq.seriesDescription}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-4 mt-2 text-xs text-content-tertiary">
-                        <span>{acq.acquisitionFields?.length || 0} fields</span>
-                        <span>{acq.series?.length || 0} series</span>
-                        {acq.totalFiles && <span>{acq.totalFiles} files</span>}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-border">
-              <button
-                onClick={cancelAttachmentSelection}
-                className="w-full px-4 py-2 border border-border-secondary text-content-secondary rounded-lg hover:bg-surface-secondary"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

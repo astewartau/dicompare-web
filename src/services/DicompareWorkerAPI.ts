@@ -24,7 +24,7 @@ class DicompareWorkerAPI {
     // Create worker using Vite's worker import syntax
     this.worker = new Worker(
       new URL('../workers/pyodide.worker.ts', import.meta.url),
-      { type: 'classic' } // Use classic for importScripts support
+      { type: 'module' } // Use ES module worker with pyodide npm package
     );
 
     this.worker.onmessage = this.handleMessage.bind(this);
@@ -188,6 +188,93 @@ class DicompareWorkerAPI {
       progressHandler,
       fileContents // Transfer ownership for zero-copy
     );
+  }
+
+  /**
+   * Analyze a single batch of DICOM files (for use with batch processor).
+   * Does not include initialization progress - assumes already initialized.
+   */
+  async analyzeBatchForUI(
+    files: FileObject[],
+    batchIndex: number,
+    totalBatches: number,
+    onProgress?: (progress: ProgressPayload) => void
+  ): Promise<UIAcquisition[]> {
+    await this.ensureInitialized();
+
+    console.log(`[DicompareWorkerAPI] Analyzing batch ${batchIndex + 1}/${totalBatches} (${files.length} files)...`);
+
+    const fileNames = files.map(f => f.name);
+    // Create transferable copies of the ArrayBuffers
+    const fileContents = files.map(f => f.content.buffer.slice(0));
+
+    return this.sendRequest<UIAcquisition[]>(
+      { type: 'analyzeBatch', payload: { fileNames, fileContents, batchIndex, totalBatches } },
+      onProgress,
+      fileContents // Transfer ownership for zero-copy
+    );
+  }
+
+  /**
+   * Aggregate acquisitions from multiple batches.
+   * Merges acquisitions with the same protocolName.
+   */
+  aggregateAcquisitions(batchResults: UIAcquisition[][]): UIAcquisition[] {
+    const acquisitionMap = new Map<string, UIAcquisition>();
+
+    for (const batch of batchResults) {
+      for (const acq of batch) {
+        const key = acq.protocolName;
+        const existing = acquisitionMap.get(key);
+
+        if (existing) {
+          // Merge: combine file counts, merge series
+          existing.totalFiles = (existing.totalFiles || 0) + (acq.totalFiles || 0);
+          existing.sliceCount = (existing.sliceCount || 0) + (acq.sliceCount || 0);
+
+          // Merge series data (unique by name)
+          if (acq.series) {
+            const seriesMap = new Map(existing.series?.map(s => [s.name, s]) || []);
+            for (const series of acq.series) {
+              if (!seriesMap.has(series.name)) {
+                existing.series = existing.series || [];
+                existing.series.push(series);
+              } else {
+                // Merge series fields if same name exists
+                const existingSeries = seriesMap.get(series.name)!;
+                if (series.fields) {
+                  const existingFieldKeys = new Set(existingSeries.fields?.map(f => f.keyword || f.tag) || []);
+                  for (const field of series.fields) {
+                    const fieldKey = field.keyword || field.tag;
+                    if (!existingFieldKeys.has(fieldKey)) {
+                      existingSeries.fields = existingSeries.fields || [];
+                      existingSeries.fields.push(field);
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Merge acquisition-level fields
+          if (acq.acquisitionFields) {
+            const existingFieldKeys = new Set(existing.acquisitionFields?.map(f => f.keyword || f.tag) || []);
+            for (const field of acq.acquisitionFields) {
+              const fieldKey = field.keyword || field.tag;
+              if (!existingFieldKeys.has(fieldKey)) {
+                existing.acquisitionFields = existing.acquisitionFields || [];
+                existing.acquisitionFields.push(field);
+              }
+            }
+          }
+        } else {
+          // Clone the acquisition to avoid mutating original
+          acquisitionMap.set(key, { ...acq });
+        }
+      }
+    }
+
+    return Array.from(acquisitionMap.values());
   }
 
   // ==========================================================================
