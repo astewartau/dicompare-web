@@ -146,7 +146,7 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
   const wheelBase = getWheelBaseUrl();
   if (inElectronProd) {
     // In Electron production, install from bundled wheel with absolute path
-    packageSource = wheelBase + 'dicompare-0.1.44-py3-none-any.whl';
+    packageSource = wheelBase + 'dicompare-0.1.45-py3-none-any.whl';
     console.log('[Worker] Installing dicompare from bundled wheel...');
     console.log('[Worker] Wheel base URL:', wheelBase);
   } else {
@@ -154,8 +154,8 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
     // Note: Don't use hostname detection as localhost is used in production containers too
     const isDevelopment = import.meta.env?.MODE === 'development';
     packageSource = isDevelopment
-      ? 'http://localhost:8000/dist/dicompare-0.1.44-py3-none-any.whl'
-      : 'dicompare==0.1.44';
+      ? 'http://localhost:8000/dist/dicompare-0.1.45-py3-none-any.whl'
+      : 'dicompare==0.1.45';
     console.log(`[Worker] Installing dicompare from ${isDevelopment ? 'local dev server' : 'PyPI'}...`);
   }
 
@@ -217,7 +217,7 @@ import sys
 import dicompare
 json.dumps({
     'pyodide': '.'.join(map(str, sys.version_info[:3])),
-    'dicompare': getattr(dicompare, '__version__', '0.1.44')
+    'dicompare': getattr(dicompare, '__version__', '0.1.45')
 })
   `);
 
