@@ -32,7 +32,7 @@ const WelcomeTab: React.FC = () => {
                 <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
               </h4>
               <p className="text-sm text-content-secondary">
-                Load DICOM files or protocol files to automatically extract and compare acquisitions
+                Load DICOMs or exam cards to automatically extract and compare acquisitions
               </p>
             </div>
           </button>
@@ -51,7 +51,7 @@ const WelcomeTab: React.FC = () => {
                 <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
               </h4>
               <p className="text-sm text-content-secondary">
-                Browse the schema library and add existing acquisitions to your workspace
+                Browse the schema library to select and add existing acquisition schema to your workspace
               </p>
             </div>
           </button>
@@ -82,12 +82,12 @@ const WelcomeTab: React.FC = () => {
             icon={<CheckCircle className="h-5 w-5" />}
             iconColor="text-green-600"
             iconBg="bg-green-100 dark:bg-green-900/30"
-            title="Validate against a public schema"
+            title="Validate against a schema"
             description="Check compliance with UK Biobank, ABCD, etc."
             tutorialId="validate"
             onStartTutorial={startTutorial}
             steps={[
-              'Go to "From data" and upload your DICOMs to Test data (right)',
+              'Go to "From data" and upload files to Test data (right)',
               'Click "Library" on each acquisition to search and attach a reference',
               'Alternatively: go to "From schema", drag references into the acquisitions list, then click "Assign data to references" to auto-match',
               'Review and print compliance reports'
