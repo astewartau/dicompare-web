@@ -4,7 +4,7 @@
 set -e
 
 PYODIDE_VERSION="0.27.0"
-DICOMPARE_VERSION="0.1.44"
+DICOMPARE_VERSION="0.1.45"
 DEST_DIR="public/pyodide"
 
 echo "📦 Setting up offline Pyodide for Electron..."

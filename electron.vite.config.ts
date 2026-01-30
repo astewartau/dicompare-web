@@ -66,6 +66,10 @@ export default defineConfig({
       alias: {
         '@': resolve(__dirname, 'src')
       }
+    },
+    // Use ES module format for workers (required for code-splitting compatibility)
+    worker: {
+      format: 'es'
     }
   }
 })
