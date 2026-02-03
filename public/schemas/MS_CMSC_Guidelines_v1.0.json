@@ -25,7 +25,7 @@
     "MS Brain 3D T1 Pre-contrast": {
       "description": "3D T1-weighted anatomic imaging for MS brain protocol (pre-contrast)",
       "detailed_description": "## 3D T1-Weighted Pre-Contrast (Anatomic)\n\nThis is the anatomic 3D T1-weighted sequence acquired BEFORE gadolinium contrast administration.\n\n### Technical Parameters\n\n| Parameter | Value |\n|-----------|-------|\n| Sequence type | 3D IR-prepared T1 gradient echo (e.g., MPRAGE, BRAVO, 3D TFE) |\n| Acquisition thickness | 1.0-1.5 mm isotropic |\n| Reconstruction | 3 mm for clinical review |\n| In-plane resolution | ≤1 x 1 mm |\n| Coverage | Whole brain |\n| Orientation | Subcallosal plane |\n\n### Clinical Purpose\n\n- Volumetric analysis (brain atrophy)\n- Confirmation of juxtacortical and infratentorial lesions\n- Anatomical reference\n- Must be acquired BEFORE contrast for accurate volumetrics\n\n### Important Notes\n\n- **Acquire before gadolinium administration**\n- T1 \"black holes\" are best assessed on 2D spin-echo sequences, not 3D IR-prepared images\n- 3D acquisition enables multiplanar reformatting\n\n### Reference\n\nCMSC Task Force. AJNR Am J Neuroradiol 2016;37:394-401.",
-      "tags": ["MS", "brain", "T1-weighted", "3D", "structural", "pre-contrast", "volumetric"],
+      "tags": ["analysis:freesurfer", "MS", "brain", "T1-weighted", "3D", "structural", "pre-contrast", "volumetric"],
       "fields": [
         {
           "field": "MRAcquisitionType",
@@ -405,7 +405,7 @@
     "MS Brain DWI": {
       "description": "Diffusion-weighted imaging for MS brain protocol",
       "detailed_description": "## Diffusion-Weighted Imaging (DWI)\n\nDWI is included in the MS protocol primarily to detect non-MS pathology and for early PML detection.\n\n### Technical Parameters\n\n| Parameter | Value |\n|-----------|-------|\n| Sequence type | 2D axial DWI |\n| Slice thickness | ≤5 mm |\n| Gap | No gap |\n| Coverage | Whole brain |\n| b-values | 0 and 1000 s/mm² typical |\n\n### Clinical Purpose\n\n1. **Acute ischemia/infarction detection** - important differential diagnosis\n2. **Early PML detection** - high DWI signal in ~60% of presymptomatic PML\n3. **Acute MS lesion characterization** - some acute lesions show restricted diffusion\n\n### PML Detection on DWI\n\n- Subcortical lesions with high DWI signal\n- 48% occur in frontal lobes\n- Sharp borders toward gray matter, ill-defined toward white matter\n- May be absent in ~40% of presymptomatic PML\n\n### Reference\n\nCMSC Task Force. AJNR Am J Neuroradiol 2016;37:394-401.",
-      "tags": ["MS", "brain", "DWI", "diffusion"],
+      "tags": ["analysis:diffusion", "MS", "brain", "DWI", "diffusion"],
       "fields": [
         {
           "field": "MRAcquisitionType",
@@ -677,7 +677,7 @@
     "MS PML Surveillance DWI": {
       "description": "DWI sequence for abbreviated PML surveillance protocol",
       "detailed_description": "## PML Surveillance - DWI\n\nDWI is essential for early PML detection alongside FLAIR.\n\n### Technical Parameters\n\n| Parameter | Value |\n|-----------|-------|\n| Sequence type | 2D axial DWI |\n| Slice thickness | ≤5 mm, no gap |\n| Coverage | Whole brain |\n\n### PML Detection on DWI\n\n- High signal intensity on DWI in ~60% of presymptomatic PML\n- Absent in ~40% of patients with presymptomatic PML\n- Subcortical distribution\n- Frontal lobe predominance\n\n### Surveillance Schedule\n\nHigh-risk patients (JC virus antibody positive, ≥18 months natalizumab):\n- PML surveillance MRI every 3-6 months\n- FLAIR + DWI sequences only\n- No contrast required\n\n### Reference\n\nCMSC Task Force. AJNR Am J Neuroradiol 2016;37:394-401.",
-      "tags": ["MS", "brain", "DWI", "diffusion", "PML", "surveillance"],
+      "tags": ["analysis:diffusion", "MS", "brain", "DWI", "diffusion", "PML", "surveillance"],
       "fields": [
         {
           "field": "MRAcquisitionType",

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, Pencil } from 'lucide-react';
+import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, Pencil, FlaskConical } from 'lucide-react';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { Acquisition, AcquisitionSelection } from '../../types';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import { DraggableSchema, DraggableAcquisition } from './DraggableComponents';
+import { isAnalysisTag, getAnalysisTagDisplayName, splitTagsWithCounts } from '../../utils/tagUtils';
 
 interface AcquisitionScore {
   schemaId: string;
@@ -86,6 +87,8 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showLibrary, setShowLibrary] = useState(true);
   const [showCustom, setShowCustom] = useState(true);
+  const [regularTagSearch, setRegularTagSearch] = useState('');
+  const [analysisTagSearch, setAnalysisTagSearch] = useState('');
 
   // UI state
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
@@ -207,8 +210,28 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
     return Array.from(tagCounts.entries())
       .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+      .sort((a, b) => a.tag.toLowerCase().localeCompare(b.tag.toLowerCase()));
   }, [allSchemas, showLibrary, showCustom, searchQuery]);
+
+  // Split tags into regular and analysis categories
+  const { regularTagsWithCounts, analysisTagsWithCounts } = useMemo(() => {
+    return splitTagsWithCounts(tagsWithCounts);
+  }, [tagsWithCounts]);
+
+  // Filter tags by search
+  const filteredRegularTags = useMemo(() => {
+    if (!regularTagSearch.trim()) return regularTagsWithCounts;
+    const search = regularTagSearch.toLowerCase();
+    return regularTagsWithCounts.filter(({ tag }) => tag.toLowerCase().includes(search));
+  }, [regularTagsWithCounts, regularTagSearch]);
+
+  const filteredAnalysisTags = useMemo(() => {
+    if (!analysisTagSearch.trim()) return analysisTagsWithCounts;
+    const search = analysisTagSearch.toLowerCase();
+    return analysisTagsWithCounts.filter(({ tag }) =>
+      getAnalysisTagDisplayName(tag).toLowerCase().includes(search)
+    );
+  }, [analysisTagsWithCounts, analysisTagSearch]);
 
   // Toggle a tag in the selected tags list
   const toggleTag = (tag: string) => {
@@ -263,6 +286,48 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const acquisitionHasTag = (acq: { tags?: string[] }, tag: string): boolean => {
     const acqTags = acq.tags || [];
     return acqTags.includes(tag);
+  };
+
+  // Helper to render tags with proper styling (analysis tags first, in purple)
+  const renderAcquisitionTags = (tags: string[]) => {
+    if (!tags || tags.length === 0) return null;
+
+    // Sort: analysis tags first, then regular tags (both alphabetically)
+    const sortedTags = [...tags].sort((a, b) => {
+      const aIsAnalysis = isAnalysisTag(a);
+      const bIsAnalysis = isAnalysisTag(b);
+      if (aIsAnalysis && !bIsAnalysis) return -1;
+      if (!aIsAnalysis && bIsAnalysis) return 1;
+      return a.toLowerCase().localeCompare(b.toLowerCase());
+    });
+
+    return (
+      <div className="flex flex-wrap gap-1 mt-2">
+        {sortedTags.map(tag => {
+          const isAnalysis = isAnalysisTag(tag);
+          const isSelected = selectedTags.includes(tag);
+          const displayName = isAnalysis ? getAnalysisTagDisplayName(tag) : tag;
+
+          return (
+            <span
+              key={tag}
+              className={`px-1.5 py-0.5 text-xs rounded inline-flex items-center ${
+                isAnalysis
+                  ? isSelected
+                    ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300'
+                    : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                  : isSelected
+                    ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
+                    : 'bg-surface-tertiary text-content-tertiary'
+              }`}
+            >
+              {isAnalysis && <FlaskConical className="h-2.5 w-2.5 mr-0.5" />}
+              {displayName}
+            </span>
+          );
+        })}
+      </div>
+    );
   };
 
   // Get indices of acquisitions that match the current tag filter (AND logic)
@@ -796,22 +861,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             </div>
                           )}
                           {/* Show acquisition tags */}
-                          {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {schema.acquisitions[index].tags.map(tag => (
-                                <span
-                                  key={tag}
-                                  className={`px-1.5 py-0.5 text-xs rounded ${
-                                    selectedTags.includes(tag)
-                                      ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
-                                      : 'bg-surface-tertiary text-content-tertiary'
-                                  }`}
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                          {renderAcquisitionTags(schema.acquisitions?.[index]?.tags || [])}
                           <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
                             {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
                               <span className="flex items-center">
@@ -882,22 +932,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             </div>
                           )}
                           {/* Show acquisition tags */}
-                          {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {schema.acquisitions[index].tags.map(tag => (
-                                <span
-                                  key={tag}
-                                  className={`px-1.5 py-0.5 text-xs rounded ${
-                                    selectedTags.includes(tag)
-                                      ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
-                                      : 'bg-surface-tertiary text-content-tertiary'
-                                  }`}
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                          {renderAcquisitionTags(schema.acquisitions?.[index]?.tags || [])}
                           <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
                             {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
                               <span className="flex items-center">
@@ -989,33 +1024,96 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         style={{ height: maxHeight || 'calc(100vh - 300px)' }}
       >
         {/* Left Sidebar - Tags */}
-        <div className="w-48 border-r border-border p-4 flex-shrink-0 flex flex-col">
-          <h3 className="font-medium text-sm text-content-primary mb-3 flex items-center flex-shrink-0">
-            <Tag className="h-4 w-4 mr-2" />
-            Filter by Tag
-          </h3>
-          {tagsWithCounts.length > 0 ? (
-            <div className="space-y-1 flex-1 overflow-y-auto min-h-0">
-              {tagsWithCounts.map(({ tag, count }) => (
-                <button
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className={`flex items-center justify-between w-full px-2 py-1.5 rounded text-sm transition-colors ${
-                    selectedTags.includes(tag)
-                      ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
-                      : 'hover:bg-surface-secondary text-content-secondary'
-                  }`}
-                >
-                  <span className="truncate">{tag}</span>
-                  <span className={`text-xs ml-2 ${selectedTags.includes(tag) ? 'text-brand-600 dark:text-brand-400' : 'text-content-tertiary'}`}>
-                    {count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-content-tertiary">No tags available</p>
-          )}
+        <div className="w-52 border-r border-border p-4 flex-shrink-0 flex flex-col">
+          {/* Regular Tags Section */}
+          <div className="flex-1 flex flex-col min-h-0 mb-4">
+            <h3 className="font-medium text-sm text-content-primary mb-2 flex items-center flex-shrink-0">
+              <Tag className="h-4 w-4 mr-2" />
+              Tags
+            </h3>
+            {regularTagsWithCounts.length > 0 ? (
+              <>
+                <div className="relative mb-2 flex-shrink-0">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-content-tertiary" />
+                  <input
+                    type="text"
+                    placeholder="Search tags..."
+                    value={regularTagSearch}
+                    onChange={(e) => setRegularTagSearch(e.target.value)}
+                    className="w-full pl-7 pr-2 py-1 text-xs border border-border-secondary rounded bg-surface-primary text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  />
+                </div>
+                <div className="space-y-0.5 flex-1 overflow-y-auto min-h-0">
+                  {filteredRegularTags.map(({ tag, count }) => (
+                    <button
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      className={`flex items-center justify-between w-full px-2 py-1 rounded text-xs transition-colors ${
+                        selectedTags.includes(tag)
+                          ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
+                          : 'hover:bg-surface-secondary text-content-secondary'
+                      }`}
+                    >
+                      <span className="truncate">{tag}</span>
+                      <span className={`text-xs ml-2 ${selectedTags.includes(tag) ? 'text-brand-600 dark:text-brand-400' : 'text-content-tertiary'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  ))}
+                  {filteredRegularTags.length === 0 && regularTagSearch && (
+                    <p className="text-xs text-content-tertiary px-2 py-1">No matching tags</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-content-tertiary">No tags available</p>
+            )}
+          </div>
+
+          {/* Analysis Tags Section */}
+          <div className="flex-1 flex flex-col min-h-0 border-t border-border pt-4">
+            <h3 className="font-medium text-sm text-content-primary mb-2 flex items-center flex-shrink-0">
+              <FlaskConical className="h-4 w-4 mr-2 text-purple-600 dark:text-purple-400" />
+              Analysis
+            </h3>
+            {analysisTagsWithCounts.length > 0 ? (
+              <>
+                <div className="relative mb-2 flex-shrink-0">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-content-tertiary" />
+                  <input
+                    type="text"
+                    placeholder="Search analysis..."
+                    value={analysisTagSearch}
+                    onChange={(e) => setAnalysisTagSearch(e.target.value)}
+                    className="w-full pl-7 pr-2 py-1 text-xs border border-border-secondary rounded bg-surface-primary text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+                <div className="space-y-0.5 flex-1 overflow-y-auto min-h-0">
+                  {filteredAnalysisTags.map(({ tag, count }) => (
+                    <button
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      className={`flex items-center justify-between w-full px-2 py-1 rounded text-xs transition-colors ${
+                        selectedTags.includes(tag)
+                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                          : 'hover:bg-surface-secondary text-content-secondary'
+                      }`}
+                    >
+                      <span className="truncate">{getAnalysisTagDisplayName(tag)}</span>
+                      <span className={`text-xs ml-2 ${selectedTags.includes(tag) ? 'text-purple-600 dark:text-purple-400' : 'text-content-tertiary'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  ))}
+                  {filteredAnalysisTags.length === 0 && analysisTagSearch && (
+                    <p className="text-xs text-content-tertiary px-2 py-1">No matching tags</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-content-tertiary">No analysis tags available</p>
+            )}
+          </div>
         </div>
 
         {/* Main Content */}
@@ -1246,22 +1344,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                   {acquisition.seriesDescription}
                                 </div>
                               )}
-                              {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                  {schema.acquisitions[index].tags.map(tag => (
-                                    <span
-                                      key={tag}
-                                      className={`px-1.5 py-0.5 text-xs rounded ${
-                                        selectedTags.includes(tag)
-                                          ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
-                                          : 'bg-surface-tertiary text-content-tertiary'
-                                      }`}
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                              {renderAcquisitionTags(schema.acquisitions?.[index]?.tags || [])}
                               <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
                                 {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
                                   <span className="flex items-center">
@@ -1331,22 +1414,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                   {acquisition.seriesDescription}
                                 </div>
                               )}
-                              {schema.acquisitions?.[index]?.tags && schema.acquisitions[index].tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                  {schema.acquisitions[index].tags.map(tag => (
-                                    <span
-                                      key={tag}
-                                      className={`px-1.5 py-0.5 text-xs rounded ${
-                                        selectedTags.includes(tag)
-                                          ? 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
-                                          : 'bg-surface-tertiary text-content-tertiary'
-                                      }`}
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                              {renderAcquisitionTags(schema.acquisitions?.[index]?.tags || [])}
                               <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
                                 {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
                                   <span className="flex items-center">

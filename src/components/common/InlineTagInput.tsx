@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, FlaskConical } from 'lucide-react';
+import { isAnalysisTag, getAnalysisTagDisplayName } from '../../utils/tagUtils';
 
 interface InlineTagInputProps {
   tags: string[];
@@ -99,26 +100,49 @@ const InlineTagInput: React.FC<InlineTagInputProps> = ({
     }
   }, [isAdding, inputValue]);
 
+  // Sort tags: analysis tags first, then regular tags (both alphabetically)
+  const sortedTags = [...tags].sort((a, b) => {
+    const aIsAnalysis = isAnalysisTag(a);
+    const bIsAnalysis = isAnalysisTag(b);
+    if (aIsAnalysis && !bIsAnalysis) return -1;
+    if (!aIsAnalysis && bIsAnalysis) return 1;
+    return a.toLowerCase().localeCompare(b.toLowerCase());
+  });
+
   return (
     <div ref={containerRef} className="flex flex-wrap items-center gap-1.5">
       {/* Existing tags as compact chips */}
-      {tags.map((tag, index) => (
-        <span
-          key={index}
-          className="inline-flex items-center pl-2 pr-1 py-0.5 rounded text-xs bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300"
-        >
-          {tag}
-          {!disabled && (
-            <button
-              type="button"
-              onClick={() => removeTag(tag)}
-              className="ml-1 p-0.5 rounded hover:bg-brand-200 dark:hover:bg-brand-800/50 text-brand-600 dark:text-brand-400"
-            >
-              <X className="h-2.5 w-2.5" />
-            </button>
-          )}
-        </span>
-      ))}
+      {sortedTags.map((tag, index) => {
+        const isAnalysis = isAnalysisTag(tag);
+        const displayName = isAnalysis ? getAnalysisTagDisplayName(tag) : tag;
+
+        return (
+          <span
+            key={index}
+            className={`inline-flex items-center pl-2 pr-1 py-0.5 rounded text-xs ${
+              isAnalysis
+                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                : 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
+            }`}
+          >
+            {isAnalysis && <FlaskConical className="h-2.5 w-2.5 mr-0.5" />}
+            {displayName}
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => removeTag(tag)}
+                className={`ml-1 p-0.5 rounded ${
+                  isAnalysis
+                    ? 'hover:bg-purple-200 dark:hover:bg-purple-800/50 text-purple-600 dark:text-purple-400'
+                    : 'hover:bg-brand-200 dark:hover:bg-brand-800/50 text-brand-600 dark:text-brand-400'
+                }`}
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            )}
+          </span>
+        );
+      })}
 
       {/* Add button / Input */}
       {!disabled && (
