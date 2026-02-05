@@ -66,8 +66,8 @@ const WelcomeTab: React.FC = () => {
             icon={<FileSearch className="h-5 w-5" />}
             iconColor="text-amber-600"
             iconBg="bg-amber-100 dark:bg-amber-900/30"
-            title="Compare two acquisitions"
-            description="Quick diff between two datasets"
+            title="Compare acquisitions"
+            description="Quick diff between acquisition pairs or imaging sessions"
             tutorialId="compare"
             onStartTutorial={startTutorial}
             steps={[

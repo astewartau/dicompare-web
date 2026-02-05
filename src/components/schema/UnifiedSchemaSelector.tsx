@@ -840,20 +840,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             <span className="font-medium text-sm text-content-primary">
                               {acquisition.protocolName}
                             </span>
-                            {acquisitionScores && (() => {
-                              const scoreData = acquisitionScores(schema.id, index);
-                              if (!scoreData) return null;
-                              const { score } = scoreData;
-                              const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-                              return (
-                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
-                                  {score}%
-                                </span>
-                              );
-                            })()}
                           </div>
                           {acquisition.seriesDescription && (
                             <div className="text-xs text-content-secondary mt-1">
@@ -881,6 +867,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             )}
                           </div>
                         </div>
+                        {acquisitionScores && (() => {
+                          const scoreData = acquisitionScores(schema.id, index);
+                          if (!scoreData) return null;
+                          const { score } = scoreData;
+                          const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                            score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                            score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                          return (
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 self-start mt-0.5 ${colorClass}`}>
+                              {score}%
+                            </span>
+                          );
+                        })()}
                         {/* README button for acquisition */}
                         {onAcquisitionReadmeClick && (
                           <button
@@ -911,20 +911,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             <span className="font-medium text-sm text-content-primary">
                               {acquisition.protocolName}
                             </span>
-                            {acquisitionScores && (() => {
-                              const scoreData = acquisitionScores(schema.id, index);
-                              if (!scoreData) return null;
-                              const { score } = scoreData;
-                              const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-                              return (
-                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
-                                  {score}%
-                                </span>
-                              );
-                            })()}
                           </div>
                           {acquisition.seriesDescription && (
                             <div className="text-xs text-content-secondary mt-1">
@@ -952,6 +938,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             )}
                           </div>
                         </div>
+                        {acquisitionScores && (() => {
+                          const scoreData = acquisitionScores(schema.id, index);
+                          if (!scoreData) return null;
+                          const { score } = scoreData;
+                          const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                            score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                            score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                          return (
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 self-start mt-0.5 ${colorClass}`}>
+                              {score}%
+                            </span>
+                          );
+                        })()}
                         {/* README button for acquisition */}
                         {onAcquisitionReadmeClick && (
                           <div
@@ -1324,20 +1324,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
                                   {schema.name}
                                 </span>
-                                {acquisitionScores && (() => {
-                                  const scoreData = acquisitionScores(schema.id, index);
-                                  if (!scoreData) return null;
-                                  const { score } = scoreData;
-                                  const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                    score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                    score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-                                  return (
-                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
-                                      {score}%
-                                    </span>
-                                  );
-                                })()}
                               </div>
                               {acquisition.seriesDescription && (
                                 <div className="text-xs text-content-secondary mt-1">
@@ -1362,6 +1348,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 )}
                               </div>
                             </div>
+                            {acquisitionScores && (() => {
+                              const scoreData = acquisitionScores(schema.id, index);
+                              if (!scoreData) return null;
+                              const { score } = scoreData;
+                              const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                              return (
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 self-start mt-0.5 ${colorClass}`}>
+                                  {score}%
+                                </span>
+                              );
+                            })()}
                             {onAcquisitionReadmeClick && (
                               <button
                                 onClick={(e) => {
@@ -1394,20 +1394,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
                                   {schema.name}
                                 </span>
-                                {acquisitionScores && (() => {
-                                  const scoreData = acquisitionScores(schema.id, index);
-                                  if (!scoreData) return null;
-                                  const { score } = scoreData;
-                                  const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                    score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                    score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-                                  return (
-                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
-                                      {score}%
-                                    </span>
-                                  );
-                                })()}
                               </div>
                               {acquisition.seriesDescription && (
                                 <div className="text-xs text-content-secondary mt-1">
@@ -1432,6 +1418,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 )}
                               </div>
                             </div>
+                            {acquisitionScores && (() => {
+                              const scoreData = acquisitionScores(schema.id, index);
+                              if (!scoreData) return null;
+                              const { score } = scoreData;
+                              const colorClass = score >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                score >= 60 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                score >= 40 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                              return (
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 self-start mt-0.5 ${colorClass}`}>
+                                  {score}%
+                                </span>
+                              );
+                            })()}
                             {onAcquisitionReadmeClick && (
                               <div
                                 onClick={(e) => {
