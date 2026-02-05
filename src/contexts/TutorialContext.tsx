@@ -396,7 +396,7 @@ const TutorialTooltip: React.FC<{
       const tooltipWidth = 320;
       const tooltipHeight = tooltipRef.current?.offsetHeight || 150;
       const padding = 12;
-      const arrowSize = 8;
+      const arrowSize = 10;
 
       let top = 0;
       let left = 0;
@@ -454,10 +454,10 @@ const TutorialTooltip: React.FC<{
   if (!position) return null;
 
   const arrowStyles: Record<Placement, React.CSSProperties> = {
-    right: { left: -6, top: '50%', transform: 'translateY(-50%) rotate(45deg)' },
-    left: { right: -6, top: '50%', transform: 'translateY(-50%) rotate(45deg)' },
-    bottom: { top: -6, left: '50%', transform: 'translateX(-50%) rotate(45deg)' },
-    top: { bottom: -6, left: '50%', transform: 'translateX(-50%) rotate(45deg)' },
+    right: { left: -10, top: '50%', transform: 'translateY(-50%)', width: 10, height: 18, clipPath: 'polygon(0 50%, 100% 0, 100% 100%)' },
+    left: { right: -10, top: '50%', transform: 'translateY(-50%)', width: 10, height: 18, clipPath: 'polygon(0 0, 100% 50%, 0 100%)' },
+    bottom: { top: -10, left: '50%', transform: 'translateX(-50%)', width: 18, height: 10, clipPath: 'polygon(50% 0, 100% 100%, 0 100%)' },
+    top: { bottom: -10, left: '50%', transform: 'translateX(-50%)', width: 18, height: 10, clipPath: 'polygon(0 0, 100% 0, 50% 100%)' },
   };
 
   return createPortal(
@@ -468,7 +468,7 @@ const TutorialTooltip: React.FC<{
     >
       {/* Arrow */}
       <div
-        className="absolute w-3 h-3 bg-brand-500 dark:bg-brand-400 shadow-md"
+        className="absolute bg-brand-500 dark:bg-brand-400"
         style={arrowStyles[arrowPosition.side]}
       />
 
