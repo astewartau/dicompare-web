@@ -25,7 +25,7 @@
     "MS Brain 3D T1 Pre-contrast": {
       "description": "3D T1-weighted anatomic imaging for MS brain protocol (pre-contrast)",
       "detailed_description": "## 3D T1-Weighted Pre-Contrast (Anatomic)\n\nThis is the anatomic 3D T1-weighted sequence acquired BEFORE gadolinium contrast administration.\n\n### Technical Parameters\n\n| Parameter | Value |\n|-----------|-------|\n| Sequence type | 3D IR-prepared T1 gradient echo (e.g., MPRAGE, BRAVO, 3D TFE) |\n| Acquisition thickness | 1.0-1.5 mm isotropic |\n| Reconstruction | 3 mm for clinical review |\n| In-plane resolution | ≤1 x 1 mm |\n| Coverage | Whole brain |\n| Orientation | Subcallosal plane |\n\n### Clinical Purpose\n\n- Volumetric analysis (brain atrophy)\n- Confirmation of juxtacortical and infratentorial lesions\n- Anatomical reference\n- Must be acquired BEFORE contrast for accurate volumetrics\n\n### Important Notes\n\n- **Acquire before gadolinium administration**\n- T1 \"black holes\" are best assessed on 2D spin-echo sequences, not 3D IR-prepared images\n- 3D acquisition enables multiplanar reformatting\n\n### Reference\n\nCMSC Task Force. AJNR Am J Neuroradiol 2016;37:394-401.",
-      "tags": ["analysis:freesurfer", "MS", "brain", "T1-weighted", "3D", "structural", "pre-contrast", "volumetric"],
+      "tags": ["analysis:volumetry", "analysis:segmentation", "MS", "brain", "T1-weighted", "3D", "structural", "pre-contrast", "volumetric"],
       "fields": [
         {
           "field": "MRAcquisitionType",

@@ -255,7 +255,7 @@
     "T2-weighted 2D TSE": {
       "description": "T2-weighted turbo spin echo structural image",
       "detailed_description": "2D T2-weighted turbo spin echo (TSE) scan for detection and quantification of white matter lesions and CSF segmentation. Key parameters: TR=3000ms, TE=80ms, flip angle=90°, 0.45mm in-plane resolution, 3mm slice thickness, 560×560 matrix (reconstructed), ETL=15. Acquired with PROMO prospective motion correction to minimize motion artifacts in pediatric subjects.",
-      "tags": ["analysis:freesurfer", "brain", "structural", "T2-weighted"],
+      "tags": ["analysis:segmentation", "analysis:lesion-detection", "brain", "structural", "T2-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -501,7 +501,7 @@
     "T1-weighted 3D MPRAGE": {
       "description": "T1-weighted MPRAGE structural image",
       "detailed_description": "3D T1-weighted inversion-prepared RF-spoiled gradient echo (MPRAGE) scan acquired with PROMO prospective motion correction for cortical and subcortical segmentation. Key parameters: TR=6.77ms, TE=3.13ms, flip angle=8°, 1mm in-plane resolution, 1.2mm slice thickness, 256×256 matrix, SENSE parallel imaging. This acquisition provides the primary anatomical reference for FreeSurfer-based morphometric analysis in the PING processing pipeline.",
-      "tags": ["analysis:freesurfer", "brain", "structural", "T1-weighted"],
+      "tags": ["analysis:segmentation", "analysis:volumetry", "analysis:cortical-thickness", "brain", "structural", "T1-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",

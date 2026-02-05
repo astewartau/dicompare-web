@@ -6,10 +6,10 @@
     "Ashley Stewart"
   ],
   "acquisitions": {
-    "T1 structural brain images": {
+    "T1-weighted 3D MPRAGE": {
       "description": "3D T1-weighted MPRAGE acquisition for high-resolution brain anatomy",
       "detailed_description": "## T1-Weighted Structural MRI\n\nThis acquisition provides high-resolution T1-weighted anatomical images of the brain using a 3D Magnetization-Prepared Rapid Gradient Echo (MPRAGE) sequence.\n\n### Purpose\n\nThe T1-weighted structural scan serves as the primary anatomical reference for UK Biobank brain imaging and is used for:\n- Brain tissue segmentation (grey matter, white matter, CSF)\n- Cortical surface reconstruction and thickness measurements\n- Subcortical structure volumetrics\n- Spatial normalization and registration template\n- Identification of gross anatomical abnormalities\n\n### Acquisition Parameters\n\n- **Sequence**: 3D MPRAGE (tfl3d1_16ns)\n- **Resolution**: 1.0 mm isotropic\n- **FOV**: 256 x 256 mm, sagittal orientation\n- **TR/TE/TI**: 2000 ms / 2.01 ms / 880 ms\n- **Flip Angle**: 8 degrees\n- **Acceleration**: GRAPPA factor 2\n- **Scan Time**: ~5 minutes\n\n### Key Features\n\n- Isotropic resolution enables high-quality reformatting in any plane\n- Inversion recovery preparation provides excellent grey/white matter contrast\n- Whole-brain coverage from vertex to below cerebellum\n- Consistent positioning using AutoAlign to AC-PC orientation\n\n### Derived Measures\n\nUK Biobank provides numerous imaging-derived phenotypes (IDPs) from this scan including:\n- Total brain volume, grey matter volume, white matter volume\n- Regional volumes (hippocampus, amygdala, thalamus, etc.)\n- Cortical thickness and surface area measures\n- Subcortical structure volumes\n\n### Reference\n\nMiller, K.L., et al. (2016). Multimodal population brain imaging in the UK Biobank prospective epidemiological study. Nature Neuroscience, 19(11), 1523-1536.",
-      "tags": ["analysis:freesurfer", "brain", "structural", "T1-weighted"],
+      "tags": ["analysis:segmentation", "analysis:volumetry", "analysis:cortical-thickness", "brain", "structural", "T1-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",

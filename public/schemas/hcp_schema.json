@@ -9,7 +9,7 @@
   "acquisitions": {
     "T1-weighted 3D MPRAGE": {
       "description": "3D T1-weighted MPRAGE structural imaging",
-      "tags": ["analysis:freesurfer", "brain", "structural", "T1-weighted"],
+      "tags": ["analysis:segmentation", "analysis:volumetry", "analysis:cortical-thickness", "brain", "structural", "T1-weighted"],
       "detailed_description": "## 3D T1-Weighted Structural Imaging (MPRAGE)\n\nHigh-resolution T1-weighted magnetization-prepared rapid acquisition gradient echo for cortical surface reconstruction and subcortical segmentation. Two T1w scans are acquired and averaged for improved SNR.\n\n### Documented Parameters (from HCP Appendix I)\n| Parameter | Value |\n|-----------|-------|\n| Sequence | tfl (MPRAGE) |\n| Acquisition Time | 7:40 |\n| Voxel Size | 0.7 \u00d7 0.7 \u00d7 0.7 mm |\n| TR | 2400 ms |\n| TE | 2.14 ms |\n| TI | 1000 ms |\n| Flip Angle | 8\u00b0 |\n| FOV Read | 224 mm |\n| FOV Phase | 100% |\n| Base Resolution | 320 |\n| Phase Resolution | 100% |\n| Slices per Slab | 256 |\n| Orientation | Sagittal |\n| Phase Encoding | A >> P |\n| PAT Mode | GRAPPA |\n| Acceleration Factor | 2 |\n| Reference Lines | 32 |\n| Fat Suppression | Water excitation fast |\n| Magnetization Prep | Non-selective IR |\n\n### Source\nHCP S1200 Release Reference Manual - Appendix I, Page 24-25",
       "fields": [
         {
@@ -123,7 +123,7 @@
     },
     "T2-weighted 3D SPACE": {
       "description": "3D T2-weighted SPACE structural imaging",
-      "tags": ["analysis:freesurfer", "brain", "structural", "T2-weighted"],
+      "tags": ["analysis:segmentation", "analysis:lesion-detection", "brain", "structural", "T2-weighted"],
       "detailed_description": "## 3D T2-Weighted Structural Imaging (SPACE)\n\nHigh-resolution T2-weighted 3D fast spin echo with variable flip angle for white matter lesion detection and CSF quantification. Two T2w scans are acquired and averaged for improved SNR.\n\n### Documented Parameters (from HCP Appendix I)\n| Parameter | Value |\n|-----------|-------|\n| Sequence | spc (SPACE) |\n| Acquisition Time | 8:24 |\n| Voxel Size | 0.7 \u00d7 0.7 \u00d7 0.7 mm |\n| TR | 3200 ms |\n| TE | 565 ms |\n| FOV Read | 224 mm |\n| FOV Phase | 100% |\n| Base Resolution | 320 |\n| Phase Resolution | 100% |\n| Slices per Slab | 256 |\n| Orientation | Sagittal |\n| Phase Encoding | A >> P |\n| PAT Mode | GRAPPA |\n| Acceleration Factor | 2 |\n| Reference Lines | 32 |\n\n### Source\nHCP S1200 Release Reference Manual - Appendix I, Page 26-28",
       "fields": [
         {

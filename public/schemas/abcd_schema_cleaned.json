@@ -583,7 +583,7 @@
     },
     "T2-weighted 3D SPACE": {
       "description": "3D T2-weighted SPACE/CUBE with vNav motion correction for white matter lesion detection and CSF quantification",
-      "tags": ["analysis:freesurfer", "brain", "structural", "T2-weighted"],
+      "tags": ["analysis:segmentation", "analysis:lesion-detection", "brain", "structural", "T2-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -799,7 +799,7 @@
     },
     "T1-weighted 3D MPRAGE": {
       "description": "3D T1-weighted MPRAGE with vNav motion correction for cortical and subcortical segmentation",
-      "tags": ["analysis:freesurfer", "brain", "structural", "T1-weighted"],
+      "tags": ["analysis:segmentation", "analysis:volumetry", "analysis:cortical-thickness", "brain", "structural", "T1-weighted"],
       "fields": [
         {
           "field": "SeriesDescription",
