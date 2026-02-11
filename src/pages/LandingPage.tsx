@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Github, ShieldCheck, Layers, Upload, FileCheck, Printer, Lock, ArrowRight } from 'lucide-react';
+import { Github, ShieldCheck, Layers, Upload, FileCheck, Printer, Lock, ArrowRight, Quote, Shield } from 'lucide-react';
 import ThemeToggle from '../components/common/ThemeToggle';
+import CitationModal from '../components/common/CitationModal';
+import PrivacyModal from '../components/common/PrivacyModal';
 
 const LandingPage: React.FC = () => {
+  const [showCitation, setShowCitation] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-brand-50 to-surface-primary dark:from-surface dark:to-surface">
       {/* Header */}
@@ -13,19 +18,38 @@ const LandingPage: React.FC = () => {
             <ShieldCheck className="h-8 w-8 text-brand-600 mr-3" />
             <h1 className="text-2xl font-bold text-content-primary">dicompare</h1>
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <ThemeToggle />
+            <button
+              onClick={() => setShowPrivacy(true)}
+              className="inline-flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+              title="Privacy"
+            >
+              <Shield className="h-5 w-5" />
+              <span>Privacy</span>
+            </button>
+            <button
+              onClick={() => setShowCitation(true)}
+              className="inline-flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+              title="Cite dicompare"
+            >
+              <Quote className="h-5 w-5" />
+              <span>Cite</span>
+            </button>
             <a
               href="https://github.com/astewartau/dicompare"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-content-secondary hover:text-content-primary transition-colors"
+              className="inline-flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
             >
-              <Github className="h-6 w-6" />
+              <Github className="h-5 w-5" />
+              <span>GitHub</span>
             </a>
           </div>
         </div>
       </header>
+      <CitationModal isOpen={showCitation} onClose={() => setShowCitation(false)} />
+      <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
 
       {/* Main Content */}
       <main className="flex-1">
