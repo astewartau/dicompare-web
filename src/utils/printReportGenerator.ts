@@ -192,7 +192,7 @@ function findFieldCompliance(
   keyword?: string
 ): ComplianceFieldResult | undefined {
   return complianceResults.find(r => {
-    if (r.validationType === 'validation_rule') return false;
+    if (r.validationType === 'rule') return false;
     if (tag && r.fieldPath === tag) return true;
     if (keyword && r.fieldName === keyword) return true;
     if (fieldName && r.fieldName === fieldName) return true;
@@ -461,7 +461,7 @@ function buildUncheckedSeriesFieldsHtml(
   // Build rows
   const rows = displaySeries.map(s => {
     const cells = fieldNamesList.map(fieldName => {
-      const field = s.fields.find((f: any) => (f.keyword || f.name || f.tag) === fieldName);
+      const field: any = s.fields.find((f: any) => (f.keyword || f.name || f.tag) === fieldName);
       if (!field) return '<td>—</td>';
       const value = Array.isArray(field.value)
         ? field.value.slice(0, 3).join(', ') + (field.value.length > 3 ? '...' : '')

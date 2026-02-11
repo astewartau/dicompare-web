@@ -80,7 +80,7 @@ export function useValidationRuleCompliance({
 
       // Filter to get validation rule results only
       const ruleResults = validationResults.filter(result =>
-        result.validationType === 'validation_rule' ||
+        result.validationType === 'rule' ||
         validationFunctions.some(func =>
           result.rule_name === (func.customName || func.name) ||
           result.fieldName === (func.customName || func.name)
@@ -123,7 +123,7 @@ export function useValidationRuleCompliance({
       message: 'No validation result available',
       actualValue: '',
       expectedValue: '',
-      validationType: 'validation_rule',
+      validationType: 'rule',
       seriesName: undefined,
       rule_name: func.customName || func.name
     };

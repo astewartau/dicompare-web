@@ -17,7 +17,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleMouseEnter = (e: React.MouseEvent) => {

@@ -1,5 +1,13 @@
+import 'react';
+
 declare module 'react' {
-  interface InputHTMLAttributes<T> extends AriaAttributes, DOMAttributes<T> {
+  interface InputHTMLAttributes<T> {
     webkitdirectory?: string | undefined;
+  }
+}
+
+declare global {
+  interface FileSystemDirectoryHandle {
+    values(): AsyncIterableIterator<FileSystemHandle>;
   }
 }

@@ -276,7 +276,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
       // Filter to get validation rule results only
       const ruleResults = validationResults.filter(result =>
-        result.validationType === 'validation_rule' ||
+        result.validationType === 'rule' ||
         validationFunctions.some(func =>
           result.rule_name === (func.customName || func.name) ||
           result.fieldName === (func.customName || func.name)
@@ -305,7 +305,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       message: 'No validation result available',
       actualValue: '',
       expectedValue: '',
-      validationType: 'validation_rule',
+      validationType: 'rule',
       seriesName: undefined,
       rule_name: func.customName || func.name
     };
@@ -722,7 +722,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 getSchemaContent={getSchemaContent}
                 isDataProcessing={isDataProcessing}
                 complianceResultsProp={allComplianceResults.filter(r =>
-                  r.validationType !== 'validation_rule' &&
+                  r.validationType !== 'rule' &&
                   r.validationType !== 'series' &&
                   acquisition.acquisitionFields.some(f => r.fieldPath === f.tag || r.fieldName === (f.keyword || f.name))
                 )}

@@ -8,6 +8,7 @@ declare global {
       lockFileURL?: string;
     }) => Promise<{
       runPython: (code: string) => any;
+      runPythonAsync: (code: string) => Promise<any>;
       globals: {
         get: (name: string) => any;
         set: (name: string, value: any) => void;

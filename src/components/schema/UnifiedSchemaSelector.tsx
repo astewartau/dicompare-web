@@ -680,10 +680,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                   {schema.name}
                 </h3>
                 {schema.source === 'library' && (
-                  <Library className="h-3 w-3 text-content-tertiary ml-2 flex-shrink-0" title="Library schema" />
+                  <Library className="h-3 w-3 text-content-tertiary ml-2 flex-shrink-0" />
                 )}
                 {schema.source === 'uploaded' && (
-                  <FolderOpen className="h-3 w-3 text-content-tertiary ml-2 flex-shrink-0" title="Custom schema" />
+                  <FolderOpen className="h-3 w-3 text-content-tertiary ml-2 flex-shrink-0" />
                 )}
               </div>
               <p className="text-xs text-content-secondary truncate mt-1">
@@ -849,10 +849,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                           {/* Show acquisition tags */}
                           {renderAcquisitionTags(schema.acquisitions?.[index]?.tags || [])}
                           <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
-                            {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                            {(acquisition.acquisitionFields.length + (acquisition.series?.flatMap(s => s.fields).length || 0)) > 0 && (
                               <span className="flex items-center">
                                 <List className="h-3 w-3 mr-1" />
-                                {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                {acquisition.acquisitionFields.length + (acquisition.series?.flatMap(s => s.fields).length || 0)} fields
                               </span>
                             )}
                             {acquisition.series && acquisition.series.length > 0 && (
@@ -920,10 +920,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                           {/* Show acquisition tags */}
                           {renderAcquisitionTags(schema.acquisitions?.[index]?.tags || [])}
                           <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
-                            {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                            {(acquisition.acquisitionFields.length + (acquisition.series?.flatMap(s => s.fields).length || 0)) > 0 && (
                               <span className="flex items-center">
                                 <List className="h-3 w-3 mr-1" />
-                                {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                {acquisition.acquisitionFields.length + (acquisition.series?.flatMap(s => s.fields).length || 0)} fields
                               </span>
                             )}
                             {acquisition.series && acquisition.series.length > 0 && (
@@ -1332,10 +1332,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                               )}
                               {renderAcquisitionTags(schema.acquisitions?.[index]?.tags || [])}
                               <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
-                                {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                                {(acquisition.acquisitionFields.length + (acquisition.series?.flatMap(s => s.fields).length || 0)) > 0 && (
                                   <span className="flex items-center">
                                     <List className="h-3 w-3 mr-1" />
-                                    {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                    {acquisition.acquisitionFields.length + (acquisition.series?.flatMap(s => s.fields).length || 0)} fields
                                   </span>
                                 )}
                                 {acquisition.series && acquisition.series.length > 0 && (
@@ -1402,10 +1402,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                               )}
                               {renderAcquisitionTags(schema.acquisitions?.[index]?.tags || [])}
                               <div className="flex items-center space-x-4 mt-2 text-xs text-content-tertiary">
-                                {(acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)) > 0 && (
+                                {(acquisition.acquisitionFields.length + (acquisition.series?.flatMap(s => s.fields).length || 0)) > 0 && (
                                   <span className="flex items-center">
                                     <List className="h-3 w-3 mr-1" />
-                                    {acquisition.acquisitionFields.length + (acquisition.seriesFields?.length || 0)} fields
+                                    {acquisition.acquisitionFields.length + (acquisition.series?.flatMap(s => s.fields).length || 0)} fields
                                   </span>
                                 )}
                                 {acquisition.series && acquisition.series.length > 0 && (

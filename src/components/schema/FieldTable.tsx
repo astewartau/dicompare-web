@@ -152,7 +152,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
               const isIncomplete = incompleteFields.has(fieldKey);
 
               // Pre-calculate data type display (will be used if needed in render)
-              const explicitDataType = field.dataType;
+              const explicitDataType = (field as any).dataType;
               const inferredDataType = inferDataTypeFromValue(field.value);
               const finalDataType = explicitDataType || inferredDataType;
               const fieldTypeDisplay = formatFieldTypeInfo(finalDataType, field.validationRule);

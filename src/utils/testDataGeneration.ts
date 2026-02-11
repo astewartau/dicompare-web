@@ -389,7 +389,7 @@ export function generateTestDataFromSchema(
               });
             } else if (seriesField.contains_any) {
               // Handle top-level contains_any constraint (from JSON schema format)
-              const dataType = field.dataType || inferDataTypeFromValue(field.value);
+              const dataType = inferDataTypeFromValue(field.value);
               if (dataType === 'list_string' || dataType === 'list_number') {
                 row[field.name] = [seriesField.contains_any[0]];
               } else {
@@ -397,7 +397,7 @@ export function generateTestDataFromSchema(
               }
             } else if (seriesField.contains_all) {
               // Handle top-level contains_all constraint (from JSON schema format)
-              const dataType = field.dataType || inferDataTypeFromValue(field.value);
+              const dataType = inferDataTypeFromValue(field.value);
               if (dataType === 'list_string' || dataType === 'list_number') {
                 row[field.name] = [...seriesField.contains_all];
               } else {

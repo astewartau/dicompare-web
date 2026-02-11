@@ -1228,7 +1228,7 @@ json.dumps({
 
                           {codeExecutionResults[testCase.id]?.data && (
                             <div className="p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-600 dark:text-green-400">
-                              <strong>Success:</strong> Generated data with {Object.keys(codeExecutionResults[testCase.id].data).length} fields and {Object.values(codeExecutionResults[testCase.id].data)[0]?.length || 0} rows
+                              <strong>Success:</strong> Generated data with {Object.keys(codeExecutionResults[testCase.id].data).length} fields and {(Object.values(codeExecutionResults[testCase.id].data)[0] as any[])?.length || 0} rows
                             </div>
                           )}
                         </div>

@@ -186,12 +186,11 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
             .replace(/^_+|_+$/g, '');
 
           fieldsForGeneration = [...generatableFields, {
-            name: protocolNameFieldDef.keyword,
+            name: protocolNameFieldDef.keyword || 'ProtocolName',
             tag: protocolNameFieldDef.tag,
             vr: protocolNameFieldDef.vr,
             level: 'acquisition' as const,
             value: cleanedName,
-            dataType: 'String' as const
           }];
         }
       }
@@ -263,8 +262,8 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
     const fieldNames = [...new Set(testData.flatMap(row => Object.keys(row)))];
 
     // Separate fields into constants (same across all DICOMs) and varying (different values)
-    const constants: Record<string, any> = {};
-    const varying: Record<string, any[]> = {};
+    const constants: Record<string, { value: any; comment: string }> = {};
+    const varying: Record<string, { values: any[]; comment: string }> = {};
 
     fieldNames.forEach(fieldName => {
       const field = fields.find(f => f.name === fieldName);
@@ -457,7 +456,7 @@ output
 
       if (parsed.success) {
         // Convert the data to the format expected by testData
-        const numRows = Object.values(parsed.data)[0]?.length || 0;
+        const numRows = (Object.values(parsed.data as Record<string, any[]>)[0])?.length || 0;
         const newTestData: TestDataRow[] = [];
 
         for (let i = 0; i < numRows; i++) {
@@ -531,7 +530,7 @@ output
         sampleRow: testData[0],
         allTestData: testData,
         generatableFields: analysisResult.generatableFields.map(f => ({ name: f.name, tag: f.tag, level: f.level, vr: f.vr })),
-        fieldsForGeneration: fieldsForGeneration.map(f => ({ name: f.name, tag: f.tag, level: f.level, vr: f.vr, dataType: f.dataType }))
+        fieldsForGeneration: fieldsForGeneration.map(f => ({ name: f.name, tag: f.tag, level: f.level, vr: f.vr }))
       });
 
       // Call the DicompareAPI to generate DICOMs

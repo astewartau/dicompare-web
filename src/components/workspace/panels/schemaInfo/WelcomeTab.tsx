@@ -13,7 +13,7 @@ const WelcomeTab: React.FC = () => {
   const { startTutorial } = useTutorial();
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-6 min-h-0">
       {/* Quick Start */}
       <div className="mb-8">
         <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider mb-4">Get Started</h3>

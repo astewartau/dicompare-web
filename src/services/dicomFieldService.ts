@@ -8,11 +8,11 @@ import { roundDicomValue } from '../utils/valueRounding';
 export interface DicomFieldDefinition {
   tag: string;
   name: string;
-  keyword: string;
-  valueRepresentation: string;
-  valueMultiplicity: string;
-  retired: string;
-  id: string;
+  keyword?: string;
+  valueRepresentation?: string;
+  valueMultiplicity?: string;
+  retired?: string;
+  id?: string;
   // Legacy compatibility
   vr: string;
   description?: string;

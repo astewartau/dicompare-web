@@ -299,7 +299,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
   return (
     <div className="border border-border rounded-lg bg-surface-primary shadow-sm flex flex-col h-full">
       {/* Tab bar */}
-      <div className="px-6 pt-4 border-b border-border">
+      <div className="px-6 pt-4 border-b border-border flex-shrink-0">
         <div className="flex gap-1">
           <button
             onClick={() => setSchemaInfoTab('welcome')}
@@ -339,7 +339,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
 
       {/* Action bar with buttons - only for Metadata and Preview tabs */}
       {schemaInfoTab !== 'welcome' && (
-        <div className="px-6 py-3 border-b border-border">
+        <div className="px-6 py-3 border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider">
               {schemaInfoTab === 'metadata' ? 'Save Schema' : 'JSON Preview'}
@@ -460,7 +460,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
       {schemaInfoTab === 'welcome' ? (
         <WelcomeTab />
       ) : schemaInfoTab === 'metadata' ? (
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 min-h-0">
         {/* Explanatory info box */}
         <div className="mb-6 p-3 bg-surface-secondary border border-border rounded-lg text-sm text-content-secondary">
           Save your <strong className="text-content-primary">References</strong> as a reusable schema for validating future datasets.
@@ -689,7 +689,7 @@ Any additional technical details or vendor-specific information."
       </div>
       ) : (
       /* Preview JSON Tab */
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 min-h-0">
         {isGeneratingPreview || !previewJson ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">

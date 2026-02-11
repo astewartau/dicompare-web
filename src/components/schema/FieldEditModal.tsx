@@ -53,7 +53,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
       name: field.name,
       dataType: isSeriesValue ?
         inferDataTypeFromValue(typeof value === 'object' && value?.value !== undefined ? value.value : value) :
-        (field.dataType || inferDataTypeFromValue(field.value)) as FieldDataType,
+        ((field as any).dataType || inferDataTypeFromValue(field.value)) as FieldDataType,
       value: initialValue,
       validationRule: field.validationRule,
     };

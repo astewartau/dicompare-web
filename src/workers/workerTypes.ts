@@ -15,7 +15,7 @@ export interface ProgressPayload {
 
 // Request types (main → worker)
 export type WorkerRequest =
-  | { id: RequestId; type: 'initialize' }
+  | { id: RequestId; type: 'initialize'; payload?: undefined }
   | { id: RequestId; type: 'analyzeFiles'; payload: { fileNames: string[]; fileContents: ArrayBuffer[] } }
   | { id: RequestId; type: 'analyzeBatch'; payload: { fileNames: string[]; fileContents: ArrayBuffer[]; batchIndex: number; totalBatches: number } }
   | { id: RequestId; type: 'validateAcquisition'; payload: { acquisition: any; schemaContent: string; acquisitionIndex?: number } }
@@ -26,7 +26,7 @@ export type WorkerRequest =
   | { id: RequestId; type: 'generateTestDicoms'; payload: { acquisition: any; testData: any[]; fields: any[] } }
   | { id: RequestId; type: 'categorizeFields'; payload: { fields: any[]; testData: any[] } }
   | { id: RequestId; type: 'runPython'; payload: { code: string } }
-  | { id: RequestId; type: 'clearCache' };
+  | { id: RequestId; type: 'clearCache'; payload?: undefined };
 
 // Response types (worker → main)
 export type WorkerResponse =
