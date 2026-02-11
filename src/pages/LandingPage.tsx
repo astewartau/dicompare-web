@@ -4,6 +4,7 @@ import { Github, ShieldCheck, Layers, Upload, FileCheck, Printer, Lock, ArrowRig
 import ThemeToggle from '../components/common/ThemeToggle';
 import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
+import { VERSION } from '../version';
 
 const LandingPage: React.FC = () => {
   const [showCitation, setShowCitation] = useState(false);
@@ -37,7 +38,7 @@ const LandingPage: React.FC = () => {
               <span>Cite</span>
             </button>
             <a
-              href="https://github.com/astewartau/dicompare"
+              href="https://github.com/astewartau/dicompare-web"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
@@ -45,6 +46,7 @@ const LandingPage: React.FC = () => {
               <Github className="h-5 w-5" />
               <span>GitHub</span>
             </a>
+            <span className="text-xs font-medium text-content-tertiary opacity-60 ml-1">v{VERSION}</span>
           </div>
         </div>
       </header>
@@ -146,7 +148,7 @@ const LandingPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-6 text-sm">
               <a
-                href="https://github.com/astewartau/dicompare"
+                href="https://github.com/astewartau/dicompare-web"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-content-secondary hover:text-content-primary transition-colors"
@@ -154,7 +156,7 @@ const LandingPage: React.FC = () => {
                 GitHub
               </a>
               <a
-                href="https://github.com/astewartau/dicompare/issues"
+                href="https://github.com/astewartau/dicompare-web/issues"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-content-secondary hover:text-content-primary transition-colors"

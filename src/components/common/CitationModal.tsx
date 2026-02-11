@@ -1,12 +1,13 @@
 import React from 'react';
 import { X, Copy, Check } from 'lucide-react';
+import { VERSION } from '../../version';
 
 interface CitationModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const CITATION_TEXT = `Ashley Wilton Stewart, Gabriele Amorosino, Jelle Veraart, Anibal S. Heinsfeld, Steffen Bollmann, Franco Pestilli. dicompare [Computer software]. https://github.com/astewartau/dicompare`;
+const CITATION_TEXT = `Ashley Wilton Stewart, Gabriele Amorosino, Jelle Veraart, Anibal S. Heinsfeld, Steffen Bollmann, Franco Pestilli. dicompare v${VERSION} [Computer software]. https://github.com/astewartau/dicompare`;
 
 const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose }) => {
   const [copied, setCopied] = React.useState(false);
@@ -103,19 +104,33 @@ const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose }) => {
             </p>
           </div>
 
-          {/* Source code link */}
+          {/* Source code links */}
           <div className="border-t border-border pt-4">
             <span className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Source Code</span>
-            <p className="mt-2 text-sm text-content-secondary">
-              <a
-                href="https://github.com/astewartau/dicompare"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-brand-600 hover:text-brand-700 underline"
-              >
-                github.com/astewartau/dicompare
-              </a>
-            </p>
+            <div className="mt-2 text-sm text-content-secondary space-y-1">
+              <p>
+                <a
+                  href="https://github.com/astewartau/dicompare-web"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-600 hover:text-brand-700 underline"
+                >
+                  github.com/astewartau/dicompare-web
+                </a>
+                <span className="text-content-tertiary"> — web application</span>
+              </p>
+              <p>
+                <a
+                  href="https://github.com/astewartau/dicompare"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-600 hover:text-brand-700 underline"
+                >
+                  github.com/astewartau/dicompare
+                </a>
+                <span className="text-content-tertiary"> — Python package</span>
+              </p>
+            </div>
           </div>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import { DICOMPARE_VERSION } from '../version';
+
 // Load Pyodide from CDN instead of bundling
 
 export interface PyodideInstance {
@@ -65,8 +67,8 @@ class PyodideManager {
     const isDevelopment = import.meta.env.DEV;
 
     const packageSource = isDevelopment
-      ? 'http://localhost:8000/dist/dicompare-0.1.45-py3-none-any.whl'
-      : 'dicompare==0.1.45';
+      ? `http://localhost:8000/dist/dicompare-${DICOMPARE_VERSION}-py3-none-any.whl`
+      : `dicompare==${DICOMPARE_VERSION}`;
 
     console.log(`📦 Installing dicompare from ${isDevelopment ? 'local development server' : 'PyPI'}...`);
 
