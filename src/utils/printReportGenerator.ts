@@ -101,7 +101,7 @@ export function generatePrintReportHtml(options: PrintReportOptions): string {
 
   // Build HTML sections
   const fieldsHtml = buildFieldsHtml(fields, isComplianceMode, isDataOnly, complianceResults);
-  const seriesHtml = buildSeriesHtml(series);
+  const seriesHtml = buildSeriesHtml(series, isComplianceMode, complianceResults);
   const uncheckedFieldsHtml = buildUncheckedFieldsHtml(isComplianceMode, realAcquisition, fields, series);
   const uncheckedSeriesFieldsHtml = buildUncheckedSeriesFieldsHtml(isComplianceMode, realAcquisition, fields, series);
   const readmeContent = schemaAcquisition.detailedDescription || schemaMetadata?.description || '';
@@ -260,7 +260,11 @@ function buildFieldsHtml(
   `;
 }
 
-function buildSeriesHtml(series: any[]): string {
+function buildSeriesHtml(
+  series: any[],
+  isComplianceMode: boolean,
+  complianceResults: ComplianceFieldResult[]
+): string {
   if (series.length === 0) return '';
 
   const allSeriesFields: Array<{ tag: string; name: string; keyword?: string }> = [];
@@ -291,13 +295,25 @@ function buildSeriesHtml(series: any[]): string {
       return `<td>${value}</td>`;
     }).join('');
 
-    return `<tr><td><span class="field-name">${escapeHtml(s.name || `Series ${i + 1}`)}</span></td>${cells}</tr>`;
+    let statusCell = '';
+    if (isComplianceMode) {
+      const seriesResult = complianceResults.find(r =>
+        r.validationType === 'series' && r.seriesName === s.name
+      );
+      const status = seriesResult?.message || (seriesResult?.status === 'pass' ? 'Passed' : seriesResult?.status === 'fail' ? 'Failed' : 'No result');
+      const statusClass = seriesResult?.status === 'pass' ? 'pass' :
+                          seriesResult?.status === 'fail' ? 'fail' :
+                          seriesResult?.status === 'warning' ? 'warning' : 'unknown';
+      statusCell = `<td class="${statusClass}">${escapeHtml(status)}</td>`;
+    }
+
+    return `<tr><td><span class="field-name">${escapeHtml(s.name || `Series ${i + 1}`)}</span></td>${cells}${statusCell}</tr>`;
   }).join('');
 
   return `
     <h2>Series</h2>
     <table>
-      <thead><tr><th>Series</th>${headerCells}</tr></thead>
+      <thead><tr><th>Series</th>${headerCells}${isComplianceMode ? '<th>Status</th>' : ''}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
