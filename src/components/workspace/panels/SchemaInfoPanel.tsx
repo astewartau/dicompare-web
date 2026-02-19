@@ -482,10 +482,10 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                 onUpdateSchemaMetadata({ name: e.target.value });
                 if (e.target.value.trim()) setShowValidationErrors(false);
               }}
-              className={`w-full px-3 py-2 border rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-lg ${
+              className={`w-full px-3 py-2 border rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm ${
                 showValidationErrors && !schemaMetadata?.name?.trim()
                   ? 'border-status-error'
-                  : 'border-border-secondary'
+                  : 'border-border'
               }`}
               placeholder="e.g., Brain MRI Protocol"
             />
@@ -507,10 +507,10 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                 onUpdateSchemaMetadata({ version: e.target.value });
                 if (e.target.value.trim()) setShowValidationErrors(false);
               }}
-              className={`w-full px-3 py-2 border rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-lg ${
+              className={`w-full px-3 py-2 border rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm ${
                 showValidationErrors && !schemaMetadata?.version?.trim()
                   ? 'border-status-error'
-                  : 'border-border-secondary'
+                  : 'border-border'
               }`}
               placeholder="1.0"
             />
@@ -529,7 +529,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
             className={`flex flex-wrap items-center gap-1.5 px-2 py-1.5 border rounded-lg bg-surface-primary focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 min-h-[42px] cursor-text ${
               showValidationErrors && !schemaMetadata?.authors?.length
                 ? 'border-status-error'
-                : 'border-border-secondary'
+                : 'border-border'
             }`}
             onClick={(e) => {
               const input = e.currentTarget.querySelector('input');
@@ -615,7 +615,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
             <textarea
               value={editedReadme}
               onChange={(e) => setEditedReadme(e.target.value)}
-              className="flex-1 w-full min-h-[350px] p-4 border border-t-0 border-border-secondary rounded-b-lg font-mono text-sm bg-surface-secondary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              className="flex-1 w-full min-h-[350px] p-4 border border-t-0 border-border rounded-b-lg font-mono text-sm bg-surface-secondary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
               placeholder="# My Schema
 
 Describe the purpose of this schema...
@@ -634,7 +634,7 @@ Explain the clinical use case.
 Any additional technical details or vendor-specific information."
             />
           ) : (
-            <div className="flex-1 border border-t-0 border-border-secondary rounded-b-lg bg-surface-secondary min-h-[200px] overflow-auto">
+            <div className="flex-1 border border-t-0 border-border rounded-b-lg bg-surface-secondary min-h-[200px] overflow-auto">
               {schemaMetadata?.description ? (
                 <div className="prose prose-sm max-w-none dark:prose-invert p-4">
                   <ReactMarkdown
@@ -698,7 +698,7 @@ Any additional technical details or vendor-specific information."
             </div>
           </div>
         ) : (
-          <div className="border border-border-secondary rounded-lg overflow-hidden max-h-[calc(100vh-350px)]">
+          <div className="border border-border rounded-lg overflow-hidden max-h-[calc(100vh-350px)]">
             <CodeMirror
               value={previewJson}
               extensions={[json()]}

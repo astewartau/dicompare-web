@@ -7,7 +7,7 @@ interface CitationModalProps {
   onClose: () => void;
 }
 
-const CITATION_TEXT = `Ashley Wilton Stewart, Gabriele Amorosino, Jelle Veraart, Anibal S. Heinsfeld, Steffen Bollmann, Franco Pestilli. dicompare v${VERSION} [Computer software]. https://github.com/astewartau/dicompare`;
+const CITATION_TEXT = `Ashley Wilton Stewart, Gabriele Amorosino, Jelle Veraart, Anibal S. Heinsfeld, Steffen Bollmann, Franco Pestilli. dicompare v${VERSION} [Computer software]. https://github.com/astewartau/dicompare-web`;
 
 const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose }) => {
   const [copied, setCopied] = React.useState(false);
@@ -35,7 +35,7 @@ const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
-        className="bg-surface-primary rounded-lg shadow-xl max-w-lg w-full overflow-hidden"
+        className="bg-surface-primary rounded-lg shadow-xl max-w-lg w-full max-h-[70vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -50,7 +50,7 @@ const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-5">
+        <div className="px-6 py-5 space-y-5 overflow-y-auto">
           {/* Citation block */}
           <div>
             <div className="flex items-center justify-between mb-2">

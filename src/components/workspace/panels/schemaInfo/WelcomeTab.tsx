@@ -1,66 +1,22 @@
 import React, { useState } from 'react';
-import { Upload, FileText, ArrowRight, ChevronDown, CheckCircle, PlusCircle, FileSearch, Download, Play } from 'lucide-react';
-import { useWorkspace } from '../../../../contexts/WorkspaceContext';
+import { ChevronDown, CheckCircle, PlusCircle, FileSearch, Download, Play } from 'lucide-react';
 import { useTutorial, TutorialId } from '../../../../contexts/TutorialContext';
-import { ADD_NEW_ID, ADD_FROM_DATA_ID } from '../../WorkspaceSidebar';
 
 /**
  * Welcome tab content for SchemaInfoPanel.
  * Shows quick start options and expandable use case guides.
  */
 const WelcomeTab: React.FC = () => {
-  const workspace = useWorkspace();
   const { startTutorial } = useTutorial();
 
   return (
     <div className="flex-1 overflow-y-auto p-6 min-h-0">
-      {/* Quick Start */}
-      <div className="mb-8">
-        <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider mb-4">Get Started</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* From Data */}
-          <button
-            onClick={() => workspace.selectItem(ADD_FROM_DATA_ID)}
-            className="flex items-start gap-4 p-5 rounded-xl border-2 border-border hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-all text-left group"
-          >
-            <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg group-hover:scale-105 transition-transform">
-              <Upload className="h-6 w-6 text-amber-600" />
-            </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-content-primary mb-1 flex items-center">
-                From Data
-                <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </h4>
-              <p className="text-sm text-content-secondary">
-                Load DICOMs or exam cards to automatically extract and compare acquisitions
-              </p>
-            </div>
-          </button>
-
-          {/* From Schema */}
-          <button
-            onClick={() => workspace.selectItem(ADD_NEW_ID)}
-            className="flex items-start gap-4 p-5 rounded-xl border-2 border-border hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/10 transition-all text-left group"
-          >
-            <div className="p-3 bg-brand-100 dark:bg-brand-900/30 rounded-lg group-hover:scale-105 transition-transform">
-              <FileText className="h-6 w-6 text-brand-600" />
-            </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-content-primary mb-1 flex items-center">
-                From Schema
-                <ArrowRight className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </h4>
-              <p className="text-sm text-content-secondary">
-                Browse the schema library to select and add existing acquisition schema to your workspace
-              </p>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Use Cases */}
+      {/* Getting Started */}
       <div>
-        <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider mb-4">Use Cases</h3>
+        <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider mb-2">Getting Started</h3>
+        <p className="text-sm text-content-secondary mb-4">
+          Choose a workflow below and click <strong>Start</strong> to be guided through each step interactively. You can also expand any card to see the steps at a glance.
+        </p>
         <div className="space-y-3">
           <UseCaseCard
             icon={<FileSearch className="h-5 w-5" />}
