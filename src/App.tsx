@@ -9,12 +9,13 @@ import UnifiedWorkspacePage from './pages/UnifiedWorkspacePage';
 const isElectron = typeof window !== 'undefined' &&
   (window.location.protocol === 'file:' || navigator.userAgent.includes('Electron'));
 const Router = isElectron ? HashRouter : BrowserRouter;
+const basename = isElectron ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '');
 
 function App() {
   return (
     <ThemeProvider>
       <SchemaProvider>
-        <Router>
+        <Router basename={basename}>
           <div className="min-h-screen bg-surface text-content-primary">
             <Routes>
               <Route path="/" element={<LandingPage />} />
