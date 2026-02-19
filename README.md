@@ -4,7 +4,7 @@
 
 It enables researchers to determine whether imaging protocols implemented at different sites are truly equivalent, similar, or meaningfully different — a task that is currently manual, error-prone, and often infeasible in large, multi-site studies.
 
-**Live service:** [https://brainlife.io/dicompare  ](https://dicompare-web.vercel.app/)
+**Live service:** https://astewartau.github.io/dicompare-web/
 
 <img width="1386" height="844" alt="image" src="https://github.com/user-attachments/assets/1fc347ab-4daa-43a8-ab16-6a6013f33dd3" />
 
