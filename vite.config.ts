@@ -1,9 +1,9 @@
-import { defineConfig, type UserConfig } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/dicompare-web/' : '/',
+export default defineConfig({
+  base: '/',
   plugins: [react()],
   server: {
     port: 3001,
@@ -26,4 +26,4 @@ export default defineConfig(({ command }) => ({
     environment: 'jsdom',
     setupFiles: './src/setupTests.ts',
   },
-}))
+})
