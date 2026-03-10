@@ -27,6 +27,7 @@ import AttachSchemaModal from './AttachSchemaModal';
 import SchemaReadmeModal from '../schema/SchemaReadmeModal';
 import { useReadmeModal } from '../../hooks/useReadmeModal';
 import { useFileSystemAccess } from '../../hooks/useFileSystemAccess';
+import { useSchemaImportFromViewer } from '../../hooks/useSchemaImportFromViewer';
 
 const UnifiedWorkspace: React.FC = () => {
   const {
@@ -81,6 +82,9 @@ const UnifiedWorkspace: React.FC = () => {
     isDirectoryPickerSupported,
     pickAndScanDirectory,
   } = useFileSystemAccess();
+
+  // Import schema from Schema Viewer page (if navigated via "Open in Workspace")
+  useSchemaImportFromViewer();
 
   // Local UI state
   const [schemaInfoTab, setSchemaInfoTab] = useState<SchemaInfoTab>('welcome');

@@ -191,7 +191,7 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
 
     // Try library schemas (use relative path for file:// protocol compatibility)
     try {
-      const response = await fetch(`./schemas/${schemaId}.json`);
+      const response = await fetch(`${import.meta.env.BASE_URL}schemas/${schemaId}.json`);
       if (response.ok) {
         return await response.text();
       }
@@ -432,7 +432,7 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
           } catch {}
           // Try library schemas
           try {
-            const response = await fetch(`./schemas/${schemaId}.json`);
+            const response = await fetch(`${import.meta.env.BASE_URL}schemas/${schemaId}.json`);
             if (response.ok) return await response.text();
           } catch {}
           return null;

@@ -135,6 +135,115 @@ export function generatePrintReportHtml(options: PrintReportOptions): string {
   );
 }
 
+export interface SchemaViewerPrintOptions {
+  schemaName: string;
+  schemaVersion?: string;
+  schemaAuthors?: string[];
+  schemaDescription?: string;
+  acquisitions: Acquisition[];
+}
+
+/**
+ * Generate HTML for printing from the Schema Viewer page.
+ * Prints all provided acquisitions with their fields, series, and validation rules.
+ */
+export function generateSchemaViewerPrintHtml(options: SchemaViewerPrintOptions): string {
+  const { schemaName, schemaVersion, schemaAuthors, schemaDescription, acquisitions } = options;
+
+  // Schema header
+  const sourceInfo = [
+    schemaVersion ? `v${escapeHtml(schemaVersion)}` : '',
+    schemaAuthors && schemaAuthors.length > 0 ? schemaAuthors.map(a => escapeHtml(a)).join(', ') : '',
+  ].filter(Boolean).join(' &middot; ');
+
+  // Parse description as markdown
+  let descriptionHtml = '';
+  if (schemaDescription) {
+    const demotedRenderer = createDemotedHeaderRenderer(2);
+    descriptionHtml = marked.parse(schemaDescription, { renderer: demotedRenderer }) as string;
+  }
+
+  // Build acquisition sections
+  const acquisitionSections = acquisitions.map((acq, idx) => {
+    const fields = acq.acquisitionFields || [];
+    const series = acq.series || [];
+    const validationFunctions = acq.validationFunctions || [];
+
+    const fieldsHtml = buildFieldsHtml(fields, false, false, []);
+    const seriesHtml = buildSeriesHtml(series, false, []);
+    const rulesHtml = buildRulesHtml(validationFunctions, false, []);
+
+    // Acquisition-level description
+    let acqDescHtml = '';
+    if (acq.detailedDescription) {
+      const demotedRenderer = createDemotedHeaderRenderer(2);
+      acqDescHtml = `<div class="acq-description">${marked.parse(acq.detailedDescription, { renderer: demotedRenderer }) as string}</div>`;
+    }
+
+    const tagsHtml = acq.tags && acq.tags.length > 0
+      ? `<div class="schema-tags">${acq.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>`
+      : '';
+
+    const hasContent = fieldsHtml || seriesHtml || rulesHtml || acqDescHtml;
+    const emptyMsg = hasContent ? '' : '<p style="color: #666; font-style: italic;">No fields, series, or validation rules defined.</p>';
+
+    return `
+      <div class="acquisition-section">
+        <div class="acquisition-header">
+          <h2 class="acquisition-title">${escapeHtml(acq.protocolName || `Acquisition ${idx + 1}`)}</h2>
+          ${acq.seriesDescription ? `<div class="acquisition-subtitle">${escapeHtml(acq.seriesDescription)}</div>` : ''}
+          ${tagsHtml}
+        </div>
+        ${acqDescHtml}
+        ${rulesHtml}
+        ${fieldsHtml}
+        ${seriesHtml}
+        ${emptyMsg}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>${escapeHtml(schemaName)} - Schema Report</title>
+        <style>${getPrintStyles()}
+          .schema-header { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 2px solid #e5e5e5; }
+          .schema-title { font-size: 24px; font-weight: 700; margin: 0 0 6px 0; }
+          .schema-meta { font-size: 13px; color: #666; margin-bottom: 12px; }
+          .schema-desc { font-size: 13px; line-height: 1.6; color: #333; margin-bottom: 0; }
+          .schema-desc p { margin: 8px 0; }
+          .schema-desc ul, .schema-desc ol { margin: 8px 0; padding-left: 24px; }
+          .schema-desc li { margin: 3px 0; }
+          .schema-desc a { color: #2563eb; text-decoration: underline; }
+          .schema-desc code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+          .acquisition-section { margin-top: 32px; border-top: 1px solid #e5e5e5; padding-top: 20px; }
+          .acquisition-section:first-of-type { margin-top: 24px; }
+          .acquisition-header { margin-bottom: 12px; }
+          .acquisition-title { font-size: 18px; font-weight: 600; margin: 0 0 4px 0; border-bottom: none; padding-bottom: 0; color: #1a1a1a; }
+          .acquisition-subtitle { font-size: 13px; color: #666; margin-bottom: 6px; }
+          .acq-description { font-size: 12px; line-height: 1.5; color: #444; margin-bottom: 12px; padding: 10px 14px; background: #f9fafb; border-radius: 6px; border-left: 3px solid #2563eb; }
+          .acq-description p { margin: 6px 0; }
+          @media print {
+            .acquisition-section { page-break-inside: avoid; }
+            .acquisition-section { break-inside: avoid; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="schema-header">
+          <div class="schema-title">${escapeHtml(schemaName)}</div>
+          ${sourceInfo ? `<div class="schema-meta">${sourceInfo}</div>` : ''}
+          ${descriptionHtml ? `<div class="schema-desc">${descriptionHtml}</div>` : ''}
+        </div>
+        ${acquisitionSections}
+        <div class="print-date">Printed on ${new Date().toLocaleDateString()}</div>
+      </body>
+    </html>
+  `;
+}
+
 /**
  * Check if we're running in Electron
  */

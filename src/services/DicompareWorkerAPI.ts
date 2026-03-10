@@ -301,7 +301,7 @@ class DicompareWorkerAPI {
       }
       schemaContent = content;
     } else {
-      const response = await fetch(`./schemas/${schemaId}.json`);
+      const response = await fetch(`${import.meta.env.BASE_URL}schemas/${schemaId}.json`);
       if (!response.ok) {
         throw new Error(`Failed to fetch schema ${schemaId}: ${response.statusText}`);
       }
@@ -499,7 +499,7 @@ class DicompareWorkerAPI {
    */
   async getExampleSchemas(): Promise<SchemaTemplate[]> {
     try {
-      const response = await fetch('./schemas/index.json');
+      const response = await fetch(`${import.meta.env.BASE_URL}schemas/index.json`);
       if (!response.ok) {
         console.warn('Could not fetch schema index');
         return [];
@@ -510,11 +510,12 @@ class DicompareWorkerAPI {
       const schemas = await Promise.all(
         paths.map(async (path) => {
           try {
-            // Convert absolute paths to relative for file:// protocol compatibility
-            const relativePath = path.startsWith('/') ? '.' + path : path;
+            // Use base URL for correct resolution regardless of current route
+            const basePath = import.meta.env.BASE_URL || '/';
+            const absolutePath = path.startsWith('/') ? `${basePath}${path.slice(1)}` : path;
             const id = path.replace('/schemas/', '').replace('.json', '');
 
-            const schemaResponse = await fetch(relativePath);
+            const schemaResponse = await fetch(absolutePath);
             if (!schemaResponse.ok) {
               console.warn(`Could not fetch schema at ${path}: ${schemaResponse.status}`);
               return null;
@@ -567,7 +568,7 @@ class DicompareWorkerAPI {
     if (schemaContent) {
       content = schemaContent;
     } else {
-      const response = await fetch(`./schemas/${schemaId}.json`);
+      const response = await fetch(`${import.meta.env.BASE_URL}schemas/${schemaId}.json`);
       if (!response.ok) {
         throw new Error(`Failed to fetch schema ${schemaId}`);
       }

@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, Pencil, FlaskConical } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, FlaskConical, Link2 } from 'lucide-react';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { Acquisition, AcquisitionSelection } from '../../types';
@@ -101,6 +101,17 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   });
   const [showNonMatchingFor, setShowNonMatchingFor] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'nested' | 'flat'>('flat');
+  const [copiedSchemaId, setCopiedSchemaId] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const copySchemaLink = (schemaId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}${import.meta.env.BASE_URL}schema/${schemaId}`;
+    navigator.clipboard.writeText(url);
+    setCopiedSchemaId(schemaId);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setCopiedSchemaId(null), 2000);
+  };
 
   // Use the context's cache for acquisitions
   const schemaAcquisitions = fullAcquisitionsCache;
@@ -702,20 +713,6 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
               </div>
             </div>
             <div className="flex items-center space-x-2 ml-4">
-              {/* Edit button - load schema into workspace */}
-              {onSchemaEdit && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSchemaEdit(schema.id);
-                  }}
-                  className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
-                  title="Edit schema"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              )}
-
               {/* README button */}
               {onSchemaReadmeClick && (
                 <button
@@ -729,6 +726,15 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                   <BookOpen className="h-4 w-4" />
                 </button>
               )}
+
+              {/* Copy schema link */}
+              <button
+                onClick={(e) => copySchemaLink(schema.id, e)}
+                className={`p-1 transition-colors ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+              >
+                {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+              </button>
 
               {/* Download button */}
               <button
@@ -894,6 +900,14 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             <BookOpen className="h-4 w-4" />
                           </button>
                         )}
+                        {/* Copy schema link */}
+                        <button
+                          onClick={(e) => copySchemaLink(schema.id, e)}
+                          className={`p-1.5 transition-colors flex-shrink-0 self-start ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                          title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                        >
+                          {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                        </button>
                       </div>
                       </div>
                       )}
@@ -965,6 +979,14 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             <BookOpen className="h-4 w-4" />
                           </div>
                         )}
+                        {/* Copy schema link */}
+                        <div
+                          onClick={(e) => copySchemaLink(schema.id, e)}
+                          className={`p-1.5 transition-colors flex-shrink-0 self-start cursor-pointer ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                          title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                        >
+                          {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                        </div>
                       </div>
                     </button>
                   );
@@ -1374,6 +1396,14 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <BookOpen className="h-4 w-4" />
                               </button>
                             )}
+                            {/* Copy schema link */}
+                            <button
+                              onClick={(e) => copySchemaLink(schema.id, e)}
+                              className={`p-1.5 transition-colors flex-shrink-0 self-start ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                              title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                            >
+                              {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                            </button>
                           </div>
                           </div>
                           )}
@@ -1444,6 +1474,14 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <BookOpen className="h-4 w-4" />
                               </div>
                             )}
+                            {/* Copy schema link */}
+                            <div
+                              onClick={(e) => copySchemaLink(schema.id, e)}
+                              className={`p-1.5 transition-colors flex-shrink-0 self-start cursor-pointer ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                              title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                            >
+                              {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                            </div>
                           </div>
                         </button>
                       );
