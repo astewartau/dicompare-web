@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, FlaskConical, Link2 } from 'lucide-react';
+import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, FlaskConical, Link2, ExternalLink } from 'lucide-react';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { Acquisition, AcquisitionSelection } from '../../types';
@@ -55,6 +55,9 @@ interface UnifiedSchemaSelectorProps {
   // Acquisition scores for sorting/display
   acquisitionScores?: (schemaId: string, acquisitionIndex: number) => AcquisitionScore | undefined;
 
+  // Open schema page (replaces copy link when provided)
+  onOpenSchema?: (schemaId: string) => void;
+
   // Height constraint (for modal usage)
   maxHeight?: string;
 }
@@ -78,6 +81,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   onAcquisitionReadmeClick,
   onSchemaEdit,
   acquisitionScores,
+  onOpenSchema,
   maxHeight
 }) => {
   const { deleteSchema, fullAcquisitionsCache, loadFullAcquisitions, isAcquisitionsLoading } = useSchemaContext();
@@ -727,14 +731,24 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                 </button>
               )}
 
-              {/* Copy schema link */}
-              <button
-                onClick={(e) => copySchemaLink(schema.id, e)}
-                className={`p-1 transition-colors ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
-                title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
-              >
-                {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-              </button>
+              {/* Open schema / Copy link */}
+              {onOpenSchema ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenSchema(schema.id); }}
+                  className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
+                  title="Open schema"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </button>
+              ) : (
+                <button
+                  onClick={(e) => copySchemaLink(schema.id, e)}
+                  className={`p-1 transition-colors ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                  title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                >
+                  {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                </button>
+              )}
 
               {/* Download button */}
               <button
@@ -900,14 +914,24 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             <BookOpen className="h-4 w-4" />
                           </button>
                         )}
-                        {/* Copy schema link */}
-                        <button
-                          onClick={(e) => copySchemaLink(schema.id, e)}
-                          className={`p-1.5 transition-colors flex-shrink-0 self-start ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
-                          title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
-                        >
-                          {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-                        </button>
+                        {/* Open schema / Copy link */}
+                        {onOpenSchema ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onOpenSchema(schema.id); }}
+                            className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start"
+                            title="Open schema"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => copySchemaLink(schema.id, e)}
+                            className={`p-1.5 transition-colors flex-shrink-0 self-start ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                            title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                          >
+                            {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                          </button>
+                        )}
                       </div>
                       </div>
                       )}
@@ -979,14 +1003,24 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                             <BookOpen className="h-4 w-4" />
                           </div>
                         )}
-                        {/* Copy schema link */}
-                        <div
-                          onClick={(e) => copySchemaLink(schema.id, e)}
-                          className={`p-1.5 transition-colors flex-shrink-0 self-start cursor-pointer ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
-                          title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
-                        >
-                          {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-                        </div>
+                        {/* Open schema / Copy link */}
+                        {onOpenSchema ? (
+                          <div
+                            onClick={(e) => { e.stopPropagation(); onOpenSchema(schema.id); }}
+                            className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start cursor-pointer"
+                            title="Open schema"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </div>
+                        ) : (
+                          <div
+                            onClick={(e) => copySchemaLink(schema.id, e)}
+                            className={`p-1.5 transition-colors flex-shrink-0 self-start cursor-pointer ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                            title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                          >
+                            {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                          </div>
+                        )}
                       </div>
                     </button>
                   );
@@ -1396,14 +1430,24 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <BookOpen className="h-4 w-4" />
                               </button>
                             )}
-                            {/* Copy schema link */}
-                            <button
-                              onClick={(e) => copySchemaLink(schema.id, e)}
-                              className={`p-1.5 transition-colors flex-shrink-0 self-start ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
-                              title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
-                            >
-                              {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-                            </button>
+                            {/* Open schema / Copy link */}
+                            {onOpenSchema ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onOpenSchema(schema.id); }}
+                                className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start"
+                                title="Open schema"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => copySchemaLink(schema.id, e)}
+                                className={`p-1.5 transition-colors flex-shrink-0 self-start ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                                title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                              >
+                                {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                              </button>
+                            )}
                           </div>
                           </div>
                           )}
@@ -1474,14 +1518,24 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <BookOpen className="h-4 w-4" />
                               </div>
                             )}
-                            {/* Copy schema link */}
-                            <div
-                              onClick={(e) => copySchemaLink(schema.id, e)}
-                              className={`p-1.5 transition-colors flex-shrink-0 self-start cursor-pointer ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
-                              title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
-                            >
-                              {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-                            </div>
+                            {/* Open schema / Copy link */}
+                            {onOpenSchema ? (
+                              <div
+                                onClick={(e) => { e.stopPropagation(); onOpenSchema(schema.id); }}
+                                className="p-1.5 text-content-tertiary hover:text-brand-600 transition-colors flex-shrink-0 self-start cursor-pointer"
+                                title="Open schema"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </div>
+                            ) : (
+                              <div
+                                onClick={(e) => copySchemaLink(schema.id, e)}
+                                className={`p-1.5 transition-colors flex-shrink-0 self-start cursor-pointer ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
+                                title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
+                              >
+                                {copiedSchemaId === schema.id ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                              </div>
+                            )}
                           </div>
                         </button>
                       );

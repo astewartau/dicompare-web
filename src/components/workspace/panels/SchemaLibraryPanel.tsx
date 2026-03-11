@@ -52,6 +52,7 @@ const SchemaLibraryPanel: React.FC<SchemaLibraryPanelProps> = ({
           onAcquisitionReadmeClick={onAcquisitionReadmeClick}
           onSchemaEdit={onSchemaEdit}
           onSchemaUpload={onSchemaUpload}
+          onOpenSchema={(schemaId) => window.open(`${import.meta.env.BASE_URL}schema/${schemaId}`, '_blank')}
         />
       </div>
 

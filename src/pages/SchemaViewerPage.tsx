@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  ShieldCheck, Github, BookOpen, Check, Square,
+  ShieldCheck, Github, BookOpen, Check, Square, ArrowLeft,
   Download, Link2, Layers, Quote, Shield, AlertTriangle, Loader, CheckSquare, Printer,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -10,9 +10,11 @@ import ThemeToggle from '../components/common/ThemeToggle';
 import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
 import AcquisitionTable from '../components/schema/AcquisitionTable';
+import UnifiedSchemaSelector from '../components/schema/UnifiedSchemaSelector';
 import { VERSION } from '../version';
 import { Acquisition } from '../types';
-import { UnifiedSchema } from '../hooks/useSchemaService';
+import { useSchemaService, UnifiedSchema } from '../hooks/useSchemaService';
+import { useSchemaContext } from '../contexts/SchemaContext';
 import { convertSchemaToAcquisitions } from '../utils/schemaToAcquisition';
 import { fetchExternalSchema, validateSchemaStructure } from '../utils/externalSchemaFetch';
 import { generateSchemaViewerPrintHtml, openPrintWindow, exportToPdf, isElectron } from '../utils/printReportGenerator';
@@ -67,11 +69,16 @@ const markdownComponents = {
 
 const SchemaViewerPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const externalUrl = searchParams.get('url');
   const navigate = useNavigate();
 
-  // Schema data state
+  // Catalog mode: no specific schema selected
+  const isCatalogMode = !id && !externalUrl;
+  const schemaService = useSchemaService();
+  const { uploadSchema } = useSchemaContext();
+
+  // Schema data state (used in detail mode only)
   const [schemaData, setSchemaData] = useState<any>(null);
   const [schemaContent, setSchemaContent] = useState<string | null>(null);
   const [acquisitions, setAcquisitions] = useState<Acquisition[]>([]);
@@ -80,7 +87,10 @@ const SchemaViewerPage: React.FC = () => {
 
   // UI state
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
-  const [selectedNavItem, setSelectedNavItem] = useState<'schema' | number>('schema');
+  const acqParam = searchParams.get('acq');
+  const [selectedNavItem, setSelectedNavItem] = useState<'schema' | number>(
+    acqParam !== null ? parseInt(acqParam, 10) : 'schema'
+  );
   const [copiedLink, setCopiedLink] = useState(false);
   const [showCitation, setShowCitation] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -88,8 +98,13 @@ const SchemaViewerPage: React.FC = () => {
 
   const schemaId = id || (externalUrl ? `external_${Date.now()}` : null);
 
-  // Load schema once when route params change
+  // Load schema once when route params change (detail mode only)
   useEffect(() => {
+    if (isCatalogMode) {
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     const loadSchema = async () => {
@@ -154,7 +169,7 @@ const SchemaViewerPage: React.FC = () => {
 
     loadSchema();
     return () => { cancelled = true; };
-  }, [id, externalUrl]);
+  }, [id, externalUrl, isCatalogMode]);
 
   // Selection handlers
   const toggleSelection = (index: number) => {
@@ -179,9 +194,18 @@ const SchemaViewerPage: React.FC = () => {
 
   const allSelected = acquisitions.length > 0 && selectedIndices.size === acquisitions.length;
 
+  // Sync nav selection from URL acq param
+  useEffect(() => {
+    if (acqParam !== null) {
+      setSelectedNavItem(parseInt(acqParam, 10));
+    } else if (id || externalUrl) {
+      setSelectedNavItem('schema');
+    }
+  }, [acqParam, id, externalUrl]);
+
   // Reset nav selection if index is out of bounds
   useEffect(() => {
-    if (typeof selectedNavItem === 'number' && selectedNavItem >= acquisitions.length) {
+    if (typeof selectedNavItem === 'number' && selectedNavItem >= acquisitions.length && acquisitions.length > 0) {
       setSelectedNavItem('schema');
     }
   }, [acquisitions.length, selectedNavItem]);
@@ -260,9 +284,23 @@ const SchemaViewerPage: React.FC = () => {
               <span className="text-xl font-bold text-content-primary">dicompare</span>
             </Link>
             <span className="mx-4 text-content-muted">/</span>
-            <h1 className="text-xl font-semibold text-content-secondary truncate max-w-md">
-              {schemaData?.name || 'Schema Viewer'}
-            </h1>
+            {isCatalogMode ? (
+              <h1 className="text-xl font-semibold text-content-secondary flex items-center gap-2">
+                <BookOpen className="h-5 w-5 flex-shrink-0 text-brand-600" />
+                Schema Library
+              </h1>
+            ) : (
+              <>
+                <Link to="/schema" className="text-xl font-semibold text-content-secondary hover:text-content-primary transition-colors flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 flex-shrink-0 text-brand-600" />
+                  Schema Library
+                </Link>
+                <span className="mx-4 text-content-muted">/</span>
+                <h1 className="text-xl font-semibold text-content-secondary truncate max-w-md">
+                  {schemaData?.name || 'Schema Viewer'}
+                </h1>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <ThemeToggle />
@@ -300,16 +338,40 @@ const SchemaViewerPage: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Loading */}
-        {isLoading && (
+        {/* Catalog mode — browse all schemas */}
+        {isCatalogMode && (
+          <div className="h-[calc(100vh-130px)]">
+            {schemaService.isLoading ? (
+              <div className="flex flex-col items-center justify-center py-24">
+                <Loader className="h-8 w-8 text-brand-600 animate-spin mb-4" />
+                <p className="text-content-secondary">Loading schemas...</p>
+              </div>
+            ) : (
+              <UnifiedSchemaSelector
+                librarySchemas={schemaService.librarySchemas}
+                uploadedSchemas={schemaService.uploadedSchemas}
+                selectionMode="acquisition"
+                expandable={true}
+                onAcquisitionSelect={(selectedId, acqIndex) => navigate(`/schema/${selectedId}?acq=${acqIndex}`)}
+                onOpenSchema={(selectedId) => navigate(`/schema/${selectedId}`)}
+                onSchemaUpload={(file) => uploadSchema(file)}
+                getSchemaContent={schemaService.getSchemaContent}
+                maxHeight="calc(100vh - 150px)"
+              />
+            )}
+          </div>
+        )}
+
+        {/* Detail mode — Loading */}
+        {!isCatalogMode && isLoading && (
           <div className="flex flex-col items-center justify-center py-24">
             <Loader className="h-8 w-8 text-brand-600 animate-spin mb-4" />
             <p className="text-content-secondary">Loading schema...</p>
           </div>
         )}
 
-        {/* Error */}
-        {!isLoading && error && (
+        {/* Detail mode — Error */}
+        {!isCatalogMode && !isLoading && error && (
           <div className="max-w-2xl mx-auto py-12">
             <div className="bg-surface-primary rounded-lg border border-status-error/30 p-8 text-center">
               <AlertTriangle className="h-12 w-12 text-status-error mx-auto mb-4" />
@@ -317,10 +379,10 @@ const SchemaViewerPage: React.FC = () => {
               <p className="text-content-secondary mb-6">{error}</p>
               <div className="flex justify-center gap-3">
                 <Link
-                  to="/"
+                  to="/schema"
                   className="px-4 py-2 rounded-lg bg-surface-secondary text-content-primary hover:bg-surface-tertiary transition-colors"
                 >
-                  Back to Home
+                  Browse Schemas
                 </Link>
                 <Link
                   to="/workspace"
@@ -333,14 +395,18 @@ const SchemaViewerPage: React.FC = () => {
           </div>
         )}
 
-        {/* Loaded — sidebar + detail pane layout */}
-        {!isLoading && !error && schemaData && (
+        {/* Detail mode — sidebar + detail pane layout */}
+        {!isCatalogMode && !isLoading && !error && schemaData && (
           <div className="grid grid-cols-12 gap-6 h-auto md:h-[calc(100vh-130px)]">
             {/* Left sidebar — navigation */}
             <div className="col-span-12 md:col-span-3 flex flex-col min-h-0 max-h-[50vh] md:max-h-none">
               <div className="bg-surface-primary rounded-lg border border-border shadow-sm flex flex-col h-full">
                 {/* Schema metadata */}
                 <div className="p-4 border-b border-border flex-shrink-0">
+                  <Link to="/schema" className="flex items-center gap-1 text-xs text-content-secondary hover:text-content-primary transition-colors mb-2">
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    All schemas
+                  </Link>
                   <h2 className="text-lg font-bold text-content-primary mb-1">
                     {schemaData.name || 'Untitled Schema'}
                   </h2>
@@ -386,29 +452,11 @@ const SchemaViewerPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Select All / Deselect All */}
-                <div className="px-4 py-2 border-b border-border flex-shrink-0 flex items-center justify-between">
-                  <button
-                    onClick={allSelected ? deselectAll : selectAll}
-                    className="flex items-center gap-1.5 text-xs text-content-secondary hover:text-content-primary transition-colors"
-                  >
-                    {allSelected ? (
-                      <CheckSquare className="h-3.5 w-3.5 text-brand-600" />
-                    ) : (
-                      <Square className="h-3.5 w-3.5" />
-                    )}
-                    {allSelected ? 'Deselect all' : 'Select all'}
-                  </button>
-                  <span className="text-xs text-content-tertiary">
-                    {selectedIndices.size}/{acquisitions.length}
-                  </span>
-                </div>
-
                 {/* Navigation list */}
                 <div className="flex-1 overflow-y-auto min-h-0">
                   {/* Schema README nav item */}
                   <button
-                    onClick={() => setSelectedNavItem('schema')}
+                    onClick={() => setSearchParams(prev => { prev.delete('acq'); return prev; }, { replace: true })}
                     className={`w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors border-b border-border ${
                       selectedNavItem === 'schema'
                         ? 'bg-brand-50 dark:bg-brand-900/20 border-l-2 border-l-brand-500'
@@ -425,6 +473,24 @@ const SchemaViewerPage: React.FC = () => {
                     </span>
                   </button>
 
+                  {/* Select All / Deselect All */}
+                  <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+                    <button
+                      onClick={allSelected ? deselectAll : selectAll}
+                      className="flex items-center gap-1.5 text-xs text-content-secondary hover:text-content-primary transition-colors"
+                    >
+                      {allSelected ? (
+                        <CheckSquare className="h-3.5 w-3.5 text-brand-600" />
+                      ) : (
+                        <Square className="h-3.5 w-3.5" />
+                      )}
+                      {allSelected ? 'Deselect all' : 'Select all'}
+                    </button>
+                    <span className="text-xs text-content-tertiary">
+                      {selectedIndices.size}/{acquisitions.length}
+                    </span>
+                  </div>
+
                   {/* Acquisition nav items */}
                   {acquisitions.map((acq, index) => {
                     const isNavSelected = selectedNavItem === index;
@@ -433,7 +499,7 @@ const SchemaViewerPage: React.FC = () => {
                     return (
                       <div
                         key={acq.id || index}
-                        onClick={() => setSelectedNavItem(index)}
+                        onClick={() => setSearchParams(prev => { prev.set('acq', String(index)); return prev; }, { replace: true })}
                         className={`w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors border-b border-border cursor-pointer ${
                           isNavSelected
                             ? 'bg-brand-50 dark:bg-brand-900/20 border-l-2 border-l-brand-500'
