@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Github, ShieldCheck, Layers, Upload, FileCheck, Printer, Lock, ArrowRight, Quote, Shield } from 'lucide-react';
+import { Github, ShieldCheck, Layers, Upload, FileCheck, Printer, Lock, ArrowRight, Quote, Shield, BookOpen } from 'lucide-react';
 import ThemeToggle from '../components/common/ThemeToggle';
 import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
@@ -82,15 +82,24 @@ const LandingPage: React.FC = () => {
                 dicompare validates your DICOMs against community protocols and standards. You can also build and share your own schemas for multi-site studies or the community.
               </p>
 
-              {/* Primary CTA */}
-              <Link
-                to="/workspace"
-                className="inline-flex items-center px-6 py-3 text-lg font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-lg hover:shadow-xl"
-              >
-                <Layers className="h-5 w-5 mr-2" />
-                Open Workspace
-                <ArrowRight className="h-5 w-5 ml-2" />
-              </Link>
+              {/* CTAs */}
+              <div className="flex flex-wrap items-center gap-4">
+                <Link
+                  to="/workspace"
+                  className="inline-flex items-center px-6 py-3 text-lg font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-lg hover:shadow-xl"
+                >
+                  <Layers className="h-5 w-5 mr-2" />
+                  Open Workspace
+                  <ArrowRight className="h-5 w-5 ml-2" />
+                </Link>
+                <Link
+                  to="/schema"
+                  className="inline-flex items-center px-6 py-3 text-lg font-medium text-content-primary bg-surface-primary border border-border rounded-lg hover:bg-surface-secondary transition-colors shadow-sm hover:shadow-md"
+                >
+                  <BookOpen className="h-5 w-5 mr-2" />
+                  Schema Library
+                </Link>
+              </div>
 
               {/* Privacy Badge */}
               <p className="mt-5 text-sm text-content-secondary">
