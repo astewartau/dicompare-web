@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  ShieldCheck, Github, ChevronDown, ChevronRight, Check, Square,
+  ShieldCheck, Github, BookOpen, Check, Square,
   Download, Link2, Layers, Quote, Shield, AlertTriangle, Loader, CheckSquare, Printer,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -80,7 +80,7 @@ const SchemaViewerPage: React.FC = () => {
 
   // UI state
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
-  const [expandedIndices, setExpandedIndices] = useState<Set<number>>(new Set());
+  const [selectedNavItem, setSelectedNavItem] = useState<'schema' | number>('schema');
   const [copiedLink, setCopiedLink] = useState(false);
   const [showCitation, setShowCitation] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -179,18 +179,12 @@ const SchemaViewerPage: React.FC = () => {
 
   const allSelected = acquisitions.length > 0 && selectedIndices.size === acquisitions.length;
 
-  // Expand/collapse
-  const toggleExpand = (index: number) => {
-    setExpandedIndices(prev => {
-      const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
-  };
+  // Reset nav selection if index is out of bounds
+  useEffect(() => {
+    if (typeof selectedNavItem === 'number' && selectedNavItem >= acquisitions.length) {
+      setSelectedNavItem('schema');
+    }
+  }, [acquisitions.length, selectedNavItem]);
 
   // Actions
   const handleOpenInWorkspace = () => {
@@ -253,14 +247,6 @@ const SchemaViewerPage: React.FC = () => {
         alert('Please allow popups to print the schema.');
       }
     }
-  };
-
-  // Summary counts for an acquisition
-  const getAcquisitionSummary = (acq: Acquisition) => {
-    const fieldCount = acq.acquisitionFields?.length || 0;
-    const seriesCount = acq.series?.length || 0;
-    const ruleCount = acq.validationFunctions?.length || 0;
-    return { fieldCount, seriesCount, ruleCount };
   };
 
   return (
@@ -347,115 +333,112 @@ const SchemaViewerPage: React.FC = () => {
           </div>
         )}
 
-        {/* Loaded — two-column layout */}
+        {/* Loaded — sidebar + detail pane layout */}
         {!isLoading && !error && schemaData && (
-          <div className="grid grid-cols-12 gap-6 h-[calc(100vh-130px)]">
-            {/* Left column — README / metadata */}
-            <div className="col-span-12 md:col-span-4 overflow-y-auto">
-              <div className="bg-surface-primary rounded-lg border border-border shadow-sm p-6">
-                <h2 className="text-2xl font-bold text-content-primary mb-2">
-                  {schemaData.name || 'Untitled Schema'}
-                </h2>
-                <div className="flex items-center flex-wrap gap-2 text-sm text-content-tertiary mb-4">
-                  {schemaData.version && (
-                    <span className="px-2 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-xs font-medium">
-                      v{schemaData.version}
-                    </span>
-                  )}
-                  {schemaData.authors && schemaData.authors.length > 0 && (
-                    <span>{schemaData.authors.join(', ')}</span>
-                  )}
-                  <span>{Object.keys(schemaData.acquisitions || {}).length} acquisitions</span>
+          <div className="grid grid-cols-12 gap-6 h-auto md:h-[calc(100vh-130px)]">
+            {/* Left sidebar — navigation */}
+            <div className="col-span-12 md:col-span-3 flex flex-col min-h-0 max-h-[50vh] md:max-h-none">
+              <div className="bg-surface-primary rounded-lg border border-border shadow-sm flex flex-col h-full">
+                {/* Schema metadata */}
+                <div className="p-4 border-b border-border flex-shrink-0">
+                  <h2 className="text-lg font-bold text-content-primary mb-1">
+                    {schemaData.name || 'Untitled Schema'}
+                  </h2>
+                  <div className="flex items-center flex-wrap gap-2 text-xs text-content-tertiary">
+                    {schemaData.version && (
+                      <span className="px-2 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 font-medium">
+                        v{schemaData.version}
+                      </span>
+                    )}
+                    {schemaData.authors && schemaData.authors.length > 0 && (
+                      <span>{schemaData.authors.join(', ')}</span>
+                    )}
+                    <span>{Object.keys(schemaData.acquisitions || {}).length} acquisitions</span>
+                  </div>
                 </div>
 
                 {/* Action buttons */}
-                <div className="flex flex-wrap gap-2 mb-5 pb-5 border-b border-border">
-                  <button
-                    onClick={handleCopyLink}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
-                  >
-                    <Link2 className="h-4 w-4" />
-                    {copiedLink ? 'Copied!' : 'Copy link'}
-                  </button>
-                  <button
-                    onClick={handleDownload}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download
-                  </button>
-                  <button
-                    onClick={handlePrint}
-                    disabled={pdfExporting || acquisitions.length === 0}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title={selectedIndices.size > 0 ? `Print ${selectedIndices.size} selected acquisition${selectedIndices.size === 1 ? '' : 's'}` : 'Print all acquisitions'}
-                  >
-                    <Printer className="h-4 w-4" />
-                    {pdfExporting ? 'Exporting...' : isElectron() ? 'Export PDF' : selectedIndices.size > 0 ? `Print (${selectedIndices.size})` : 'Print'}
-                  </button>
+                <div className="px-4 py-3 border-b border-border flex-shrink-0">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleCopyLink}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      {copiedLink ? 'Copied!' : 'Copy link'}
+                    </button>
+                    <button
+                      onClick={handleDownload}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </button>
+                    <button
+                      onClick={handlePrint}
+                      disabled={pdfExporting || acquisitions.length === 0}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title={selectedIndices.size > 0 ? `Print ${selectedIndices.size} selected` : 'Print all'}
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      {pdfExporting ? 'Exporting...' : isElectron() ? 'PDF' : selectedIndices.size > 0 ? `Print (${selectedIndices.size})` : 'Print'}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Description / README */}
-                {schemaData.description && (
-                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                      {schemaData.description}
-                    </ReactMarkdown>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right column — acquisitions */}
-            <div className="col-span-12 md:col-span-8 flex flex-col min-h-0">
-              {/* Action bar */}
-              <div className="bg-surface-primary rounded-lg border border-border shadow-sm px-4 py-3 mb-4 flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-4">
+                {/* Select All / Deselect All */}
+                <div className="px-4 py-2 border-b border-border flex-shrink-0 flex items-center justify-between">
                   <button
                     onClick={allSelected ? deselectAll : selectAll}
-                    className="flex items-center gap-2 text-sm text-content-secondary hover:text-content-primary transition-colors"
+                    className="flex items-center gap-1.5 text-xs text-content-secondary hover:text-content-primary transition-colors"
                   >
                     {allSelected ? (
-                      <CheckSquare className="h-4 w-4 text-brand-600" />
+                      <CheckSquare className="h-3.5 w-3.5 text-brand-600" />
                     ) : (
-                      <Square className="h-4 w-4" />
+                      <Square className="h-3.5 w-3.5" />
                     )}
                     {allSelected ? 'Deselect all' : 'Select all'}
                   </button>
-                  <span className="text-sm text-content-tertiary">
-                    {selectedIndices.size} of {acquisitions.length} selected
+                  <span className="text-xs text-content-tertiary">
+                    {selectedIndices.size}/{acquisitions.length}
                   </span>
                 </div>
-                <button
-                  onClick={handleOpenInWorkspace}
-                  disabled={selectedIndices.size === 0}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Layers className="h-4 w-4" />
-                  Open in Workspace
-                </button>
-              </div>
 
-              {/* Acquisition cards */}
-              <div className="overflow-y-auto space-y-3 flex-1 min-h-0">
-                {acquisitions.map((acq, index) => {
-                  const isSelected = selectedIndices.has(index);
-                  const isExpanded = expandedIndices.has(index);
-                  const { fieldCount, seriesCount, ruleCount } = getAcquisitionSummary(acq);
+                {/* Navigation list */}
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  {/* Schema README nav item */}
+                  <button
+                    onClick={() => setSelectedNavItem('schema')}
+                    className={`w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors border-b border-border ${
+                      selectedNavItem === 'schema'
+                        ? 'bg-brand-50 dark:bg-brand-900/20 border-l-2 border-l-brand-500'
+                        : 'hover:bg-surface-secondary'
+                    }`}
+                  >
+                    <BookOpen className={`h-4 w-4 flex-shrink-0 ${
+                      selectedNavItem === 'schema' ? 'text-brand-600' : 'text-content-tertiary'
+                    }`} />
+                    <span className={`text-sm font-medium truncate ${
+                      selectedNavItem === 'schema' ? 'text-brand-700 dark:text-brand-300' : 'text-content-primary'
+                    }`}>
+                      Schema README
+                    </span>
+                  </button>
 
-                  return (
-                    <div
-                      key={acq.id || index}
-                      className={`bg-surface-primary rounded-lg border shadow-sm transition-colors ${
-                        isSelected
-                          ? 'border-brand-500'
-                          : 'border-border'
-                      }`}
-                    >
-                      {/* Card header */}
+                  {/* Acquisition nav items */}
+                  {acquisitions.map((acq, index) => {
+                    const isNavSelected = selectedNavItem === index;
+                    const isChecked = selectedIndices.has(index);
+
+                    return (
                       <div
-                        className="flex items-start gap-3 p-4 cursor-pointer"
-                        onClick={() => toggleExpand(index)}
+                        key={acq.id || index}
+                        onClick={() => setSelectedNavItem(index)}
+                        className={`w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors border-b border-border cursor-pointer ${
+                          isNavSelected
+                            ? 'bg-brand-50 dark:bg-brand-900/20 border-l-2 border-l-brand-500'
+                            : 'hover:bg-surface-secondary'
+                        }`}
                       >
                         {/* Checkbox */}
                         <button
@@ -463,94 +446,137 @@ const SchemaViewerPage: React.FC = () => {
                             e.stopPropagation();
                             toggleSelection(index);
                           }}
-                          className="mt-0.5 flex-shrink-0"
+                          className="flex-shrink-0"
                         >
-                          {isSelected ? (
-                            <div className="w-5 h-5 rounded border-2 flex items-center justify-center bg-brand-600 border-brand-600">
-                              <Check className="h-3 w-3 text-white" />
+                          {isChecked ? (
+                            <div className="w-4 h-4 rounded border-2 flex items-center justify-center bg-brand-600 border-brand-600">
+                              <Check className="h-2.5 w-2.5 text-white" />
                             </div>
                           ) : (
-                            <div className="w-5 h-5 rounded border-2 border-content-muted hover:border-brand-500 transition-colors" />
+                            <div className="w-4 h-4 rounded border-2 border-content-muted hover:border-brand-500 transition-colors" />
                           )}
                         </button>
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-medium text-content-primary">
-                              {acq.protocolName || 'Untitled Acquisition'}
-                            </h3>
-                          </div>
+                        {/* Acquisition name */}
+                        <span className={`text-sm truncate flex-1 ${
+                          isNavSelected ? 'text-brand-700 dark:text-brand-300 font-medium' : 'text-content-primary'
+                        }`}>
+                          {acq.protocolName || 'Untitled Acquisition'}
+                        </span>
+
+                        {/* BookOpen indicator if has detailedDescription */}
+                        {acq.detailedDescription && (
+                          <BookOpen className="h-3.5 w-3.5 text-content-tertiary flex-shrink-0" />
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {acquisitions.length === 0 && (
+                    <div className="px-4 py-6 text-center text-xs text-content-tertiary">
+                      No acquisitions in this schema.
+                    </div>
+                  )}
+                </div>
+
+                {/* Open in Workspace button */}
+                <div className="p-3 border-t border-border flex-shrink-0">
+                  <button
+                    onClick={handleOpenInWorkspace}
+                    disabled={selectedIndices.size === 0}
+                    className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Layers className="h-4 w-4" />
+                    Open in Workspace
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right detail pane */}
+            <div className="col-span-12 md:col-span-9 overflow-y-auto">
+              <div className="bg-surface-primary rounded-lg border border-border shadow-sm p-6 min-h-full">
+                {selectedNavItem === 'schema' ? (
+                  /* Schema README view */
+                  schemaData.description ? (
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                        {schemaData.description}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-content-tertiary">
+                      <BookOpen className="h-8 w-8 mx-auto mb-3 opacity-50" />
+                      <p>This schema has no README description.</p>
+                    </div>
+                  )
+                ) : (
+                  /* Acquisition detail view */
+                  (() => {
+                    const acq = acquisitions[selectedNavItem];
+                    if (!acq) return null;
+                    return (
+                      <div>
+                        {/* Acquisition header */}
+                        <div className="mb-4">
+                          <h2 className="text-xl font-bold text-content-primary mb-1">
+                            {acq.protocolName || 'Untitled Acquisition'}
+                          </h2>
                           {acq.seriesDescription && (
-                            <p className="text-sm text-content-secondary mb-2 line-clamp-2">
+                            <p className="text-sm text-content-secondary mb-2">
                               {acq.seriesDescription}
                             </p>
                           )}
-                          <div className="flex items-center flex-wrap gap-2">
-                            {/* Tags */}
-                            {acq.tags && acq.tags.map(tag => (
-                              <span
-                                key={tag}
-                                className={`px-2 py-0.5 rounded text-xs ${
-                                  tag.startsWith('analysis:')
-                                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                                    : 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
-                                }`}
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                            {/* Summary stats */}
-                            <span className="text-xs text-content-tertiary">
-                              {fieldCount > 0 && `${fieldCount} fields`}
-                              {fieldCount > 0 && seriesCount > 0 && ', '}
-                              {seriesCount > 0 && `${seriesCount} series`}
-                              {(fieldCount > 0 || seriesCount > 0) && ruleCount > 0 && ', '}
-                              {ruleCount > 0 && `${ruleCount} rules`}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Expand toggle */}
-                        <div className="flex-shrink-0 mt-1 text-content-tertiary">
-                          {isExpanded ? (
-                            <ChevronDown className="h-5 w-5" />
-                          ) : (
-                            <ChevronRight className="h-5 w-5" />
+                          {acq.tags && acq.tags.length > 0 && (
+                            <div className="flex items-center flex-wrap gap-2">
+                              {acq.tags.map(tag => (
+                                <span
+                                  key={tag}
+                                  className={`px-2 py-0.5 rounded text-xs ${
+                                    tag.startsWith('analysis:')
+                                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                                      : 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
+                                  }`}
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </div>
+
+                        {/* Detailed description markdown */}
+                        {acq.detailedDescription && (
+                          <div className="mb-6 pb-6 border-b border-border">
+                            <div className="prose prose-sm max-w-none dark:prose-invert">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                {acq.detailedDescription}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Acquisition table (fields, series, validation rules) */}
+                        <AcquisitionTable
+                          acquisition={acq}
+                          isEditMode={false}
+                          mode="view"
+                          hideHeader={true}
+                          schemaId={schemaId || undefined}
+                          onUpdate={noop}
+                          onDelete={noop}
+                          onFieldUpdate={noop}
+                          onFieldConvert={noop}
+                          onFieldDelete={noop}
+                          onFieldAdd={noop}
+                          onSeriesUpdate={noop}
+                          onSeriesAdd={noop}
+                          onSeriesDelete={noop}
+                          onSeriesNameUpdate={noop}
+                        />
                       </div>
-
-                      {/* Expanded content */}
-                      {isExpanded && (
-                        <div className="border-t border-border px-4 pb-4">
-                          <AcquisitionTable
-                            acquisition={acq}
-                            isEditMode={false}
-                            mode="view"
-                            hideHeader={true}
-                            schemaId={schemaId || undefined}
-                            onUpdate={noop}
-                            onDelete={noop}
-                            onFieldUpdate={noop}
-                            onFieldConvert={noop}
-                            onFieldDelete={noop}
-                            onFieldAdd={noop}
-                            onSeriesUpdate={noop}
-                            onSeriesAdd={noop}
-                            onSeriesDelete={noop}
-                            onSeriesNameUpdate={noop}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {acquisitions.length === 0 && (
-                  <div className="bg-surface-primary rounded-lg border border-border p-12 text-center">
-                    <p className="text-content-secondary">This schema has no acquisitions.</p>
-                  </div>
+                    );
+                  })()
                 )}
               </div>
             </div>
