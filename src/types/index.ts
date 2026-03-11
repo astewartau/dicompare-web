@@ -77,6 +77,7 @@ export interface Acquisition {
   series?: Series[];
   validationFunctions?: SelectedValidationFunction[]; // Add validation functions to acquisitions
   tags?: string[]; // Tags/categories for organizing acquisitions
+  seriesFileMapping?: Record<string, string[]>;  // series name -> DICOM filenames
   metadata: {
     manufacturer?: string;
     magneticFieldStrength?: string;

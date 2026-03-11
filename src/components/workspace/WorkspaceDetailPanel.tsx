@@ -151,6 +151,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   const [showTestDataNotes, setShowTestDataNotes] = useState(false);
   const [showDicomViewer, setShowDicomViewer] = useState(false);
   const [dicomViewerBatchId, setDicomViewerBatchId] = useState<string | null>(null);
+  const [dicomViewerFiles, setDicomViewerFiles] = useState<File[] | null>(null); // For per-series viewing
+  const [dicomViewerLabel, setDicomViewerLabel] = useState<string | null>(null);
   const [loadedSchemaAcquisition, setLoadedSchemaAcquisition] = useState<Acquisition | null>(null);
 
   // Use a ref to store latest compliance results for print view (refs update synchronously)
@@ -798,6 +800,43 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
               // Update ref synchronously for print view
               complianceResultsRef.current = results;
             }}
+            onSeriesView={(() => {
+              // Determine if per-series viewing is available
+              // Check both the main acquisition and attached data for seriesFileMapping
+              const acq = selectedItem.acquisition;
+              const attached = selectedItem.attachedData;
+              const mainMapping = acq?.seriesFileMapping;
+              const attachedMapping = attached?.seriesFileMapping;
+              const mainBatchId = selectedItem.dicomFileBatchId;
+              const attachedBatchId = selectedItem.attachedDataBatchId;
+
+              // Find which mapping + batchId pair has files
+              const hasMainFiles = mainMapping && mainBatchId && dicomFileCache.has(mainBatchId);
+              const hasAttachedFiles = attachedMapping && attachedBatchId && dicomFileCache.has(attachedBatchId);
+
+              if (!hasMainFiles && !hasAttachedFiles) return undefined;
+
+              return (_seriesIndex: number, seriesName: string) => {
+                const mapping = hasMainFiles ? mainMapping : attachedMapping;
+                const batchId = hasMainFiles ? mainBatchId : attachedBatchId;
+                const filenames = mapping?.[seriesName];
+                if (!filenames || !batchId) return;
+
+                const allFiles = dicomFileCache.get(batchId) || [];
+                const filenameSet = new Set(filenames);
+                // Match using webkitRelativePath (folder uploads) or name (single file uploads)
+                const seriesFiles = allFiles.filter(f => {
+                  const key = (f as any).webkitRelativePath || f.name;
+                  return filenameSet.has(key);
+                });
+
+                if (seriesFiles.length > 0) {
+                  setDicomViewerFiles(seriesFiles);
+                  setDicomViewerLabel(`${acq.protocolName || 'DICOM Data'} — ${seriesName}`);
+                  setShowDicomViewer(true);
+                }
+              };
+            })()}
           />
       </div>
 
@@ -841,9 +880,11 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         onClose={() => {
           setShowDicomViewer(false);
           setDicomViewerBatchId(null);
+          setDicomViewerFiles(null);
+          setDicomViewerLabel(null);
         }}
-        files={dicomViewerBatchId ? dicomFileCache.get(dicomViewerBatchId) || [] : []}
-        acquisitionName={selectedItem.acquisition.protocolName || 'DICOM Data'}
+        files={dicomViewerFiles || (dicomViewerBatchId ? dicomFileCache.get(dicomViewerBatchId) || [] : [])}
+        acquisitionName={dicomViewerLabel || selectedItem.acquisition.protocolName || 'DICOM Data'}
       />
     </div>
   );

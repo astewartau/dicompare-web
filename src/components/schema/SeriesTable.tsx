@@ -22,6 +22,7 @@ interface SeriesTableProps {
   onSeriesDelete: (seriesIndex: number) => void;
   onFieldConvert: (fieldTag: string) => void;
   onSeriesNameUpdate?: (seriesIndex: number, name: string) => void;
+  onSeriesView?: (seriesIndex: number, seriesName: string) => void;
 }
 
 const SeriesTable: React.FC<SeriesTableProps> = ({
@@ -36,6 +37,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   onSeriesDelete,
   onFieldConvert,
   onSeriesNameUpdate,
+  onSeriesView,
 }) => {
   const [editingCell, setEditingCell] = useState<{
     seriesIndex: number;
@@ -192,6 +194,10 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                   Actions
                 </th>
               )}
+              {onSeriesView && (
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-12">
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-surface-primary divide-y divide-border">
@@ -311,6 +317,17 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                         <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
+                  </td>
+                )}
+                {onSeriesView && (
+                  <td className="px-2 py-1.5 text-center">
+                    <button
+                      onClick={() => onSeriesView(seriesIndex, ser.name)}
+                      className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
+                      title={`View ${ser.name} images`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
                   </td>
                 )}
               </tr>
