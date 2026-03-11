@@ -6,6 +6,7 @@ import { processUploadedFiles, FileObject } from '../utils/fileUploadUtils';
 import { filesToFileList } from '../utils/workspaceHelpers';
 import { FileHandleManager, ManagedFileHandle } from '../utils/fileHandleManager';
 import { readFileHandle } from '../utils/fileSystemAccessUtils';
+import { dicomFileCache } from '../utils/dicomFileCache';
 
 // Batch config - based on Pyodide's buffer size limits (~2GB safe limit)
 const BATCH_SIZE_BYTES = 1 * 1024 * 1024 * 1024; // 1GB per batch - safe margin under Pyodide's ~2GB limit
@@ -16,13 +17,18 @@ const READ_CONCURRENCY = 100; // Read 100 files in parallel
 
 export type ProcessingTarget = 'schema' | 'data' | 'addNew' | null;
 
+export interface ProcessingResult {
+  acquisitions: Acquisition[];
+  dicomFileBatchId?: string;
+}
+
 export interface UseFileProcessingReturn {
   isProcessing: boolean;
   processingTarget: ProcessingTarget;
   processingProgress: ProcessingProgress | null;
   processingError: string | null;
-  processFiles: (files: FileList, target: ProcessingTarget) => Promise<Acquisition[]>;
-  processFileHandles: (manager: FileHandleManager, target: ProcessingTarget) => Promise<Acquisition[]>;
+  processFiles: (files: FileList, target: ProcessingTarget) => Promise<ProcessingResult>;
+  processFileHandles: (manager: FileHandleManager, target: ProcessingTarget) => Promise<ProcessingResult>;
   clearError: () => void;
 }
 
@@ -58,7 +64,7 @@ export function useFileProcessing(): UseFileProcessingReturn {
   const processFiles = useCallback(async (
     files: FileList,
     target: ProcessingTarget
-  ): Promise<Acquisition[]> => {
+  ): Promise<ProcessingResult> => {
     setIsProcessing(true);
     setProcessingTarget(target);
     setProcessingError(null);
@@ -75,6 +81,13 @@ export function useFileProcessing(): UseFileProcessingReturn {
       const dicomFiles = fileArray.filter(f => getProtocolFileType(f.name) === null);
 
       const acquisitions: Acquisition[] = [];
+      let dicomFileBatchId: string | undefined;
+
+      // Cache DICOM File objects for later visualization
+      if (dicomFiles.length > 0) {
+        dicomFileBatchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        dicomFileCache.set(dicomFileBatchId, [...dicomFiles]);
+      }
 
       // Process protocol files
       if (protocolFiles.length > 0) {
@@ -132,11 +145,11 @@ export function useFileProcessing(): UseFileProcessingReturn {
         acquisitions.push(...(result || []));
       }
 
-      return acquisitions;
+      return { acquisitions, dicomFileBatchId };
     } catch (error) {
       console.error('Failed to process files:', error);
       setProcessingError(error instanceof Error ? error.message : 'Unknown error occurred');
-      return [];
+      return { acquisitions: [] };
     } finally {
       setIsProcessing(false);
       setProcessingTarget(null);
@@ -151,7 +164,7 @@ export function useFileProcessing(): UseFileProcessingReturn {
   const processFileHandles = useCallback(async (
     manager: FileHandleManager,
     target: ProcessingTarget
-  ): Promise<Acquisition[]> => {
+  ): Promise<ProcessingResult> => {
     setIsProcessing(true);
     setProcessingTarget(target);
     setProcessingError(null);
@@ -160,12 +173,28 @@ export function useFileProcessing(): UseFileProcessingReturn {
     const totalFiles = handles.length;
     const totalSize = manager.totalSize;
 
+    // Cache File objects from handles for later visualization
+    let dicomFileBatchId: string | undefined;
+    if (handles.length > 0) {
+      dicomFileBatchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        const fileObjects = await Promise.all(
+          handles.map(h => h.handle.getFile())
+        );
+        dicomFileCache.set(dicomFileBatchId, fileObjects);
+      } catch (error) {
+        console.warn('Failed to cache File objects from handles:', error);
+        dicomFileBatchId = undefined;
+      }
+    }
+
     // Decide if we need batching (only based on size)
     const needsBatching = totalSize > NO_BATCH_THRESHOLD_BYTES;
 
     if (!needsBatching) {
       // Small dataset - load all at once
-      return processAllFilesAtOnce(handles, totalFiles);
+      const acquisitions = await processAllFilesAtOnce(handles, totalFiles);
+      return { acquisitions, dicomFileBatchId };
     }
 
     // Large dataset - use batching
@@ -220,11 +249,11 @@ export function useFileProcessing(): UseFileProcessingReturn {
       const aggregated = dicompareAPI.aggregateAcquisitions(allResults);
       console.log(`[useFileProcessing] Done: ${aggregated.length} acquisitions from ${batches.length} batches`);
 
-      return aggregated;
+      return { acquisitions: aggregated, dicomFileBatchId };
     } catch (error) {
       console.error('Failed to process files:', error);
       setProcessingError(error instanceof Error ? error.message : 'Unknown error occurred');
-      return [];
+      return { acquisitions: [] };
     } finally {
       setIsProcessing(false);
       setProcessingTarget(null);

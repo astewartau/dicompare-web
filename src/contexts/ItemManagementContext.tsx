@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, Dispatch, SetStateAction } from 'react';
 import { WorkspaceItem } from './workspace/types';
+import { dicomFileCache } from '../utils/dicomFileCache';
 
 export type { WorkspaceItem };
 
@@ -30,8 +31,18 @@ export const ItemManagementProvider: React.FC<ItemManagementProviderProps> = ({ 
 
   const removeItem = useCallback((id: string) => {
     setItems(prev => {
-      const index = prev.findIndex(item => item.id === id);
+      const removedItem = prev.find(item => item.id === id);
       const newItems = prev.filter(item => item.id !== id);
+      const index = prev.findIndex(item => item.id === id);
+
+      // Clean up DICOM file cache if batch is no longer referenced
+      if (removedItem) {
+        for (const batchId of [removedItem.dicomFileBatchId, removedItem.attachedDataBatchId]) {
+          if (batchId && !newItems.some(item => item.dicomFileBatchId === batchId || item.attachedDataBatchId === batchId)) {
+            dicomFileCache.delete(batchId);
+          }
+        }
+      }
 
       // Auto-select another item if needed
       if (id === selectedId && newItems.length > 0) {

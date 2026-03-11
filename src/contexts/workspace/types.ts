@@ -35,6 +35,10 @@ export interface WorkspaceItem {
 
   // User notes about test data (for print report only, not exported to schema)
   testDataNotes?: string;
+
+  // Links to cached DICOM File objects for image visualization
+  dicomFileBatchId?: string;
+  attachedDataBatchId?: string;
 }
 
 // Schema metadata for export

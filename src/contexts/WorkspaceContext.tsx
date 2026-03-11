@@ -6,6 +6,7 @@ import { generateDicomsFromAcquisition } from '../utils/testDataGeneration';
 import { convertSchemaToAcquisition } from '../utils/schemaToAcquisition';
 import { createEmptyAcquisition } from '../utils/workspaceHelpers';
 import { processUploadedFiles } from '../utils/fileUploadUtils';
+import { dicomFileCache } from '../utils/dicomFileCache';
 
 // Import from new contexts
 import { useProcessing } from './ProcessingContext';
@@ -239,7 +240,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   // Add items from DICOM files or protocol files
   const addFromData = useCallback(async (files: FileList, mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
     const target = mode === 'validation-subject' ? 'data' : 'schema';
-    const newAcquisitions = await processFiles(files, target);
+    const { acquisitions: newAcquisitions, dicomFileBatchId } = await processFiles(files, target);
 
     // Create new items for all uploaded acquisitions
     // User can use "Assign data to references" panel to match them to existing references
@@ -248,7 +249,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       acquisition: acq,
       source: 'data' as const,
       isEditing: false,
-      dataUsageMode: mode
+      dataUsageMode: mode,
+      dicomFileBatchId,
     }));
 
     setItems(prev => [...prev, ...newItems]);
@@ -280,14 +282,15 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     mode: 'schema-template' | 'validation-subject' = 'schema-template'
   ) => {
     const target = mode === 'validation-subject' ? 'data' : 'schema';
-    const newAcquisitions = await processFileHandles(manager, target);
+    const { acquisitions: newAcquisitions, dicomFileBatchId } = await processFileHandles(manager, target);
 
     const newItems: WorkspaceItem[] = newAcquisitions.map((acq, idx) => ({
       id: `ws_${Date.now()}_${acq.id || idx}`,
       acquisition: acq,
       source: 'data' as const,
       isEditing: false,
-      dataUsageMode: mode
+      dataUsageMode: mode,
+      dicomFileBatchId,
     }));
 
     setItems(prev => [...prev, ...newItems]);
@@ -386,6 +389,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     clearItems();
     resetMetadata();
     schemaAcquisitionsRef.current = new Map();
+    dicomFileCache.clear();
     try {
       await dicompareAPI.clearSessionCache();
     } catch (error) {
@@ -419,12 +423,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   // Attach data to a schema-sourced item
   const attachData = useCallback(async (id: string, files: FileList) => {
-    const allAcquisitions = await processFiles(files, 'data');
+    const { acquisitions: allAcquisitions, dicomFileBatchId } = await processFiles(files, 'data');
 
     if (allAcquisitions.length === 1) {
       // Single acquisition: attach directly to the item
       setItems(prev => prev.map(item =>
-        item.id === id ? { ...item, attachedData: allAcquisitions[0] } : item
+        item.id === id ? { ...item, attachedData: allAcquisitions[0], attachedDataBatchId: dicomFileBatchId } : item
       ));
     } else if (allAcquisitions.length > 1) {
       // Multiple acquisitions: create items for all and navigate to matching panel
@@ -433,7 +437,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         acquisition: acq,
         source: 'data' as const,
         isEditing: false,
-        dataUsageMode: 'validation-subject' as const
+        dataUsageMode: 'validation-subject' as const,
+        dicomFileBatchId,
       }));
 
       setItems(prev => [...prev, ...newItems]);
@@ -472,7 +477,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   // Upload files to build a schema for an existing item
   const uploadSchemaForItem = useCallback(async (id: string, files: FileList) => {
-    const newAcquisitions = await processFiles(files, 'schema');
+    const { acquisitions: newAcquisitions } = await processFiles(files, 'schema');
 
     if (newAcquisitions.length > 0) {
       const schemaAcquisition = newAcquisitions[0];

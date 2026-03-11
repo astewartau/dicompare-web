@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { FileText, Edit2, Save, Database, X, Book, Printer } from 'lucide-react';
+import { FileText, Edit2, Save, Database, X, Book, Printer, Eye } from 'lucide-react';
 import { WorkspaceItem, ProcessingProgress, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { Acquisition, AcquisitionSelection } from '../../types';
@@ -8,6 +8,7 @@ import AcquisitionTable from '../schema/AcquisitionTable';
 import InlineTagInput from '../common/InlineTagInput';
 import DetailedDescriptionModal from '../schema/DetailedDescriptionModal';
 import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
+import DicomViewerModal from '../viewer/DicomViewerModal';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { useTagSuggestions } from '../../hooks/useTagSuggestions';
@@ -15,6 +16,7 @@ import { convertSchemaToAcquisition } from '../../utils/schemaToAcquisition';
 import { buildReadmeItems } from '../../utils/readmeHelpers';
 import { fetchAndParseSchema } from '../../utils/schemaHelpers';
 import { getItemFlags } from '../../utils/workspaceHelpers';
+import { dicomFileCache } from '../../utils/dicomFileCache';
 import { generatePrintReportHtml, openPrintWindow, isElectron, exportToPdf } from '../../utils/printReportGenerator';
 import { useDropZone } from '../../hooks/useDropZone';
 import DropZone from '../common/DropZone';
@@ -147,6 +149,8 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   // Modal and editing state
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
   const [showTestDataNotes, setShowTestDataNotes] = useState(false);
+  const [showDicomViewer, setShowDicomViewer] = useState(false);
+  const [dicomViewerBatchId, setDicomViewerBatchId] = useState<string | null>(null);
   const [loadedSchemaAcquisition, setLoadedSchemaAcquisition] = useState<Acquisition | null>(null);
 
   // Use a ref to store latest compliance results for print view (refs update synchronously)
@@ -571,6 +575,21 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
               {/* Right: README, Edit, and X buttons */}
               {isUsedAsSchema && (
                 <div className="flex items-center gap-1.5">
+                  {/* View DICOM images button */}
+                  {selectedItem.source === 'data' && selectedItem.dicomFileBatchId && dicomFileCache.has(selectedItem.dicomFileBatchId) && (
+                    <button
+                      onClick={() => {
+                        setDicomViewerBatchId(selectedItem.dicomFileBatchId!);
+                        setShowDicomViewer(true);
+                      }}
+                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
+                      title="View DICOM images"
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1" />
+                      View
+                    </button>
+                  )}
+
                   {/* README button - always opens editable modal */}
                   <button
                     onClick={() => setShowDetailedDescription(true)}
@@ -644,9 +663,28 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             <div className="flex items-center justify-between mb-3">
               {/* Left: label */}
               <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Test data</div>
-              {/* Right: Notes button + X button when data is attached */}
+              {/* Right: View, Notes, and X buttons when data is attached */}
               {(hasAttachedData || (selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject')) && (
                 <div className="flex items-center gap-1">
+                  {/* View DICOM images button */}
+                  {(() => {
+                    const testDataBatchId = selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject'
+                      ? selectedItem.dicomFileBatchId
+                      : selectedItem.attachedDataBatchId;
+                    return testDataBatchId && dicomFileCache.has(testDataBatchId) ? (
+                      <button
+                        onClick={() => {
+                          setDicomViewerBatchId(testDataBatchId!);
+                          setShowDicomViewer(true);
+                        }}
+                        className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
+                        title="View DICOM images"
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        View
+                      </button>
+                    ) : null;
+                  })()}
                   <button
                     onClick={() => setShowTestDataNotes(true)}
                     className={`inline-flex items-center px-2 py-1 border text-xs rounded ${
@@ -795,6 +833,17 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         schemaName={readmeModalData?.schemaName || ''}
         readmeItems={readmeModalData?.readmeItems || []}
         initialSelection={readmeModalData?.initialSelection || 'schema'}
+      />
+
+      {/* DICOM Image Viewer Modal */}
+      <DicomViewerModal
+        isOpen={showDicomViewer}
+        onClose={() => {
+          setShowDicomViewer(false);
+          setDicomViewerBatchId(null);
+        }}
+        files={dicomViewerBatchId ? dicomFileCache.get(dicomViewerBatchId) || [] : []}
+        acquisitionName={selectedItem.acquisition.protocolName || 'DICOM Data'}
       />
     </div>
   );

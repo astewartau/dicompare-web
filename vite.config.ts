@@ -16,6 +16,9 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  optimizeDeps: {
+    exclude: ['@niivue/dcm2niix'],
+  },
   resolve: {
     alias: {
       '@': '/src',
