@@ -1,0 +1,295 @@
+{
+  "name": "QSM Test Schema",
+  "description": "",
+  "version": "1.0",
+  "authors": [
+    "Ashley Stewart"
+  ],
+  "acquisitions": {
+    "acq-wip925b1mmpat3eco6": {
+      "description": "wip925B_1mm_PAT3_eco6_INV2",
+      "detailed_description": "",
+      "fields": [
+        {
+          "field": "SeriesDescription",
+          "tag": "0008,103E",
+          "value": "wip925B_1mm_PAT3_eco6_INV2"
+        },
+        {
+          "field": "SequenceName",
+          "tag": "0018,0024",
+          "value": "WIP_cmp3d6_16ns"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "value": [
+            "SK",
+            "SP",
+            "MP"
+          ]
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "value": [
+            "GR",
+            "IR"
+          ]
+        },
+        {
+          "field": "ImageType",
+          "tag": "0008,0008",
+          "value": [
+            "ORIGINAL",
+            "PRIMARY",
+            "M",
+            "NORM",
+            "DIS3D",
+            "DIS2D",
+            "FM",
+            "FIL"
+          ]
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS"
+        },
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "value": "Prisma"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "3D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 1
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            1,
+            1
+          ]
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 256
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 240
+        },
+        {
+          "field": "AcquisitionMatrix",
+          "tag": "0018,1310",
+          "value": [
+            0,
+            256,
+            240,
+            0
+          ]
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 4000
+        },
+        {
+          "field": "InversionTime",
+          "tag": "0018,0082",
+          "value": 2510
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 7
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 1
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "value": 23180
+        },
+        {
+          "field": "AccelerationFactorPE",
+          "tag": "derived",
+          "value": 3
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 300
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "ROW"
+        },
+        {
+          "field": "NumberOfPhaseEncodingSteps",
+          "tag": "0018,0089",
+          "value": 181
+        },
+        {
+          "field": "PhaseEncodingDirectionPositive",
+          "tag": "derived",
+          "value": 1
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "value": 3
+        },
+        {
+          "field": "ImagingFrequency",
+          "tag": "0018,0084",
+          "value": 123.25503
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body"
+        },
+        {
+          "field": "CoilCombinationMethod",
+          "tag": "derived",
+          "value": "Adaptive Combine"
+        },
+        {
+          "field": "SAR",
+          "tag": "0018,1316",
+          "value": 0.02153
+        },
+        {
+          "field": "dBdt",
+          "tag": "0018,1318",
+          "value": 0
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1
+        },
+        {
+          "field": "CoilType",
+          "tag": "derived",
+          "value": "Combined"
+        },
+        {
+          "field": "PercentSampling",
+          "tag": "0018,0093",
+          "value": 100
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 93.75
+        },
+        {
+          "field": "ScanOptions",
+          "tag": "0018,0022",
+          "value": [
+            "IR",
+            "PFP"
+          ]
+        },
+        {
+          "field": "AngioFlag",
+          "tag": "0018,0025",
+          "value": "N"
+        },
+        {
+          "field": "ArterialSpinLabelingType",
+          "tag": "derived",
+          "value": "PCASL"
+        },
+        {
+          "field": "LabelOffset",
+          "tag": "derived",
+          "value": 0.0006
+        }
+      ],
+      "series": [
+        {
+          "name": "Series 01",
+          "fields": [
+            {
+              "field": "EchoTime",
+              "tag": "0018,0081",
+              "value": 2.5
+            }
+          ]
+        },
+        {
+          "name": "Series 02",
+          "fields": [
+            {
+              "field": "EchoTime",
+              "tag": "0018,0081",
+              "value": 5.99
+            }
+          ]
+        },
+        {
+          "name": "Series 03",
+          "fields": [
+            {
+              "field": "EchoTime",
+              "tag": "0018,0081",
+              "value": 9.48
+            }
+          ]
+        },
+        {
+          "name": "Series 04",
+          "fields": [
+            {
+              "field": "EchoTime",
+              "tag": "0018,0081",
+              "value": 12.97
+            }
+          ]
+        },
+        {
+          "name": "Series 05",
+          "fields": [
+            {
+              "field": "EchoTime",
+              "tag": "0018,0081",
+              "value": 16.46
+            }
+          ]
+        },
+        {
+          "name": "Series 06",
+          "fields": [
+            {
+              "field": "EchoTime",
+              "tag": "0018,0081",
+              "value": 19.95
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
