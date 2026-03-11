@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader, X, Book, Edit2, Eye, Download, Code, Check, AlertTriangle, Layers, Save, Copy } from 'lucide-react';
+import { Loader, X, Book, Edit2, Eye, Download, Code, Check, AlertTriangle, Layers, Save, Copy, ExternalLink } from 'lucide-react';
 import { SchemaMetadata } from '../../../contexts/WorkspaceContext';
 import { useWorkspace } from '../../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../../contexts/SchemaContext';
@@ -296,6 +296,61 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
     setExistingSchemaId(null);
   };
 
+  // Publish to GitHub - copies JSON to clipboard and opens a pre-filled GitHub issue
+  const handlePublish = async () => {
+    if (!isMetadataValid) {
+      setShowValidationErrors(true);
+      setSchemaInfoTab('metadata');
+      return;
+    }
+
+    const jsonToPublish = await generateJsonForSave();
+    if (!jsonToPublish) {
+      setSaveMessage({ type: 'error', text: 'Failed to generate schema.' });
+      return;
+    }
+
+    try {
+      await copyToClipboard(jsonToPublish);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      setSaveMessage({ type: 'error', text: 'Failed to copy schema to clipboard.' });
+      return;
+    }
+
+    const name = schemaMetadata?.name || 'Untitled';
+    const version = schemaMetadata?.version || '1.0';
+    const authors = schemaMetadata?.authors?.join(', ') || '';
+
+    const title = `Schema submission: ${name}`;
+    const body = [
+      '## Schema Submission',
+      '',
+      `**Name:** ${name}`,
+      `**Version:** ${version}`,
+      `**Authors:** ${authors}`,
+      '',
+      '### Schema JSON',
+      '',
+      '> The schema JSON has been copied to your clipboard. Paste it below (replace this line):',
+      '',
+      '```json',
+      '',
+      '```',
+      '',
+      '---',
+      '*Submitted via [dicompare](https://dicompare.neurodesk.org)*',
+    ].join('\n');
+
+    const url = `https://github.com/astewartau/dicompare-web/issues/new?` +
+      `title=${encodeURIComponent(title)}` +
+      `&body=${encodeURIComponent(body)}` +
+      `&labels=${encodeURIComponent('schema-submission')}`;
+
+    window.open(url, '_blank');
+    setSaveMessage({ type: 'success', text: 'Schema JSON copied to clipboard. Paste it into the GitHub issue.' });
+  };
+
   return (
     <div className="border border-border rounded-lg bg-surface-primary shadow-sm flex flex-col h-full">
       {/* Tab bar */}
@@ -388,6 +443,15 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                     Save to Library
                   </>
                 )}
+              </button>
+              <button
+                onClick={handlePublish}
+                disabled={isGeneratingPreview || isSavingToLibrary}
+                className="flex items-center px-3 py-2 text-sm border border-border-secondary rounded-lg hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed text-content-secondary"
+                title="Submit this schema for inclusion in the public dicompare schema library"
+              >
+                <ExternalLink className="h-4 w-4 mr-1.5" />
+                Publish to dicompare
               </button>
             </div>
           </div>
