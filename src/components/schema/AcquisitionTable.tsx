@@ -106,6 +106,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [showRuleStatusMessages, setShowRuleStatusMessages] = useState(false);
   const [showUncheckedFields, setShowUncheckedFields] = useState(false);
   const [showUncheckedSeriesFields, setShowUncheckedSeriesFields] = useState(false);
+  const [expandedRuleIndices, setExpandedRuleIndices] = useState<Set<number>>(new Set());
   const { allTags } = useTagSuggestions();
 
   const isComplianceMode = mode === 'compliance';
@@ -626,76 +627,105 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                       <tbody className="bg-surface-primary divide-y divide-border">
                         {validationFunctions.map((func, index) => {
                           const ruleResult = isComplianceMode ? getValidationRuleResult(func) : null;
+                          const ruleCode = func.customImplementation || func.implementation;
+                          const isRuleExpanded = expandedRuleIndices.has(index);
+                          const colCount = isComplianceMode ? 3 : (isEditMode ? 3 : 2);
 
                           return (
-                            <tr
-                              key={`${func.id}-${index}`}
-                              className={`${index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
-                                isEditMode && !isComplianceMode ? 'hover:bg-surface-hover transition-colors' : ''
-                              }`}
-                            >
-                              <td className="px-2 py-1.5">
-                                <div className="min-w-0">
-                                  <p className="text-xs font-medium text-content-primary break-words">{func.customName || func.name}</p>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {(func.customFields || func.fields).map(field => (
-                                      <span key={field} className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs rounded">
-                                        {field}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <p className="text-xs text-content-primary break-words">{func.customDescription || func.description}</p>
-                              </td>
-                              {isComplianceMode && ruleResult && (
+                            <React.Fragment key={`${func.id}-${index}`}>
+                              <tr
+                                className={`${index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'} ${
+                                  isEditMode && !isComplianceMode ? 'hover:bg-surface-hover transition-colors' : ''
+                                }`}
+                              >
                                 <td className="px-2 py-1.5">
-                                  {isValidatingRules ? (
-                                    <div className="flex justify-center">
-                                      <Loader className="h-4 w-4 animate-spin text-content-tertiary" />
-                                    </div>
-                                  ) : (
-                                    <div className={`flex items-center gap-2 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
-                                      <CustomTooltip
-                                        content={ruleResult.message}
-                                        position="top"
-                                        delay={100}
-                                      >
-                                        <div className="inline-flex items-center justify-center cursor-help flex-shrink-0">
-                                          {getStatusIcon(ruleResult.status)}
-                                        </div>
-                                      </CustomTooltip>
-                                      {showRuleStatusMessages && ruleResult.message && (
-                                        <span className="text-xs text-content-secondary">
-                                          {ruleResult.message}
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-content-primary break-words">{func.customName || func.name}</p>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {(func.customFields || func.fields).map(field => (
+                                        <span key={field} className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs rounded">
+                                          {field}
                                         </span>
-                                      )}
+                                      ))}
                                     </div>
-                                  )}
-                                </td>
-                              )}
-                              {isEditMode && !isComplianceMode && (
-                                <td className="px-2 py-1.5 text-right">
-                                  <div className="flex items-center justify-end space-x-1">
-                                    <button
-                                      onClick={() => handleValidationFunctionEdit(index)}
-                                      className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
-                                      title="Edit function"
-                                    >
-                                      <Edit2 className="h-3 w-3" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleValidationFunctionDelete(index)}
-                                      className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                                      title="Remove function"
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </button>
+                                    {ruleCode && (
+                                      <button
+                                        onClick={() => setExpandedRuleIndices(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(index)) next.delete(index);
+                                          else next.add(index);
+                                          return next;
+                                        })}
+                                        className="flex items-center gap-1 mt-1.5 text-xs text-content-tertiary hover:text-brand-600 transition-colors"
+                                        title={isRuleExpanded ? 'Hide code' : 'Show code'}
+                                      >
+                                        <Code className="h-3 w-3" />
+                                        <span>{isRuleExpanded ? 'Hide code' : 'Show code'}</span>
+                                        <ChevronDown className={`h-3 w-3 transition-transform ${isRuleExpanded ? 'rotate-180' : ''}`} />
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
+                                <td className="px-2 py-1.5">
+                                  <p className="text-xs text-content-primary break-words">{func.customDescription || func.description}</p>
+                                </td>
+                                {isComplianceMode && ruleResult && (
+                                  <td className="px-2 py-1.5">
+                                    {isValidatingRules ? (
+                                      <div className="flex justify-center">
+                                        <Loader className="h-4 w-4 animate-spin text-content-tertiary" />
+                                      </div>
+                                    ) : (
+                                      <div className={`flex items-center gap-2 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
+                                        <CustomTooltip
+                                          content={ruleResult.message}
+                                          position="top"
+                                          delay={100}
+                                        >
+                                          <div className="inline-flex items-center justify-center cursor-help flex-shrink-0">
+                                            {getStatusIcon(ruleResult.status)}
+                                          </div>
+                                        </CustomTooltip>
+                                        {showRuleStatusMessages && ruleResult.message && (
+                                          <span className="text-xs text-content-secondary">
+                                            {ruleResult.message}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+                                )}
+                                {isEditMode && !isComplianceMode && (
+                                  <td className="px-2 py-1.5 text-right">
+                                    <div className="flex items-center justify-end space-x-1">
+                                      <button
+                                        onClick={() => handleValidationFunctionEdit(index)}
+                                        className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
+                                        title="Edit function"
+                                      >
+                                        <Edit2 className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleValidationFunctionDelete(index)}
+                                        className="p-0.5 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                        title="Remove function"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                              {isRuleExpanded && ruleCode && (
+                                <tr className={index % 2 === 0 ? 'bg-surface-primary' : 'bg-surface-alt'}>
+                                  <td colSpan={colCount} className="px-2 py-1.5">
+                                    <pre className="text-[11px] leading-relaxed font-mono bg-gray-900 dark:bg-gray-950 text-gray-100 p-3 rounded overflow-x-auto whitespace-pre-wrap">
+                                      <code>{ruleCode}</code>
+                                    </pre>
+                                  </td>
+                                </tr>
                               )}
-                            </tr>
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
