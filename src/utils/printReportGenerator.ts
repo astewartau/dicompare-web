@@ -9,6 +9,7 @@ import { Acquisition, DicomField } from '../types';
 import { ComplianceFieldResult } from '../types/schema';
 import { getItemFlags } from './workspaceHelpers';
 import { escapeHtml, normalizeTag } from './stringHelpers';
+import { isAnalysisTag } from './tagUtils';
 import { formatFieldDisplay, buildValidationRuleFromField } from './fieldFormatters';
 
 /**
@@ -181,7 +182,7 @@ export function generateSchemaViewerPrintHtml(options: SchemaViewerPrintOptions)
     }
 
     const tagsHtml = acq.tags && acq.tags.length > 0
-      ? `<div class="schema-tags">${acq.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>`
+      ? `<div class="schema-tags">${acq.tags.map(t => `<span class="tag${isAnalysisTag(t) ? ' tag-analysis' : ''}">${escapeHtml(t)}</span>`).join('')}</div>`
       : '';
 
     const hasContent = fieldsHtml || seriesHtml || rulesHtml || acqDescHtml;
@@ -208,6 +209,8 @@ export function generateSchemaViewerPrintHtml(options: SchemaViewerPrintOptions)
     <html>
       <head>
         <title>${escapeHtml(schemaName)} - Schema Report</title>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <style>${getPrintStyles()}
           .schema-header { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 2px solid #e5e5e5; }
           .schema-title { font-size: 24px; font-weight: 700; margin: 0 0 6px 0; }
@@ -671,6 +674,12 @@ function buildRulesHtml(
       ? `<div class="rule-fields">${ruleFields.map((f: string) => `<span class="field-tag-badge">${escapeHtml(f)}</span>`).join('')}</div>`
       : '';
 
+    const ruleCode = v.customImplementation || v.implementation || '';
+    const colSpan = isComplianceMode ? 3 : 2;
+    const codeRowHtml = ruleCode
+      ? `<tr class="rule-code-row"><td colspan="${colSpan}" class="rule-code-cell"><pre class="rule-code"><code>${escapeHtml(ruleCode)}</code></pre></td></tr>`
+      : '';
+
     return `
       <tr>
         <td>
@@ -680,6 +689,7 @@ function buildRulesHtml(
         <td>${escapeHtml(ruleDescription)}</td>
         ${isComplianceMode ? `<td class="${ruleStatusClass}">${escapeHtml(ruleStatus)}</td>` : ''}
       </tr>
+      ${codeRowHtml}
     `;
   }).join('');
 
@@ -714,7 +724,7 @@ function buildHeaderHtml(
   const primaryItemClass = isDataOnly ? 'data' : 'schema';
 
   const tagsHtml = schemaTags.length > 0 && !isDataOnly
-    ? `<div class="schema-tags">${schemaTags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>`
+    ? `<div class="schema-tags">${schemaTags.map(t => `<span class="tag${isAnalysisTag(t) ? ' tag-analysis' : ''}">${escapeHtml(t)}</span>`).join('')}</div>`
     : '';
 
   const sourceHtml = schemaSource && !isDataOnly
@@ -766,6 +776,8 @@ function buildFullHtml(
     <html>
       <head>
         <title>${escapeHtml(schemaName)} - Acquisition Details</title>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <style>${getPrintStyles()}</style>
       </head>
       <body>
@@ -799,6 +811,7 @@ function getPrintStyles(): string {
     .schema-source strong { color: #333; }
     .schema-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .tag { display: inline-block; padding: 3px 10px; background: #e0e7ff; color: #3730a3; font-size: 11px; border-radius: 12px; font-weight: 500; }
+    .tag-analysis { background: #f3e8ff; color: #7e22ce; }
     .header-row { display: flex; gap: 40px; }
     .header-item { flex: 1; }
     .header-item.schema { border-left: 3px solid #2563eb; padding-left: 12px; }
@@ -815,6 +828,9 @@ function getPrintStyles(): string {
     .field-name { font-weight: 500; color: #1a1a1a; }
     .rule-fields { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .field-tag-badge { display: inline-block; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; font-size: 10px; border-radius: 3px; }
+    .rule-code-row td { border-top: none; padding-top: 0; }
+    .rule-code { font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace; font-size: 10px; line-height: 1.5; background: #1e1e2e; color: #cdd6f4; padding: 10px 14px; border-radius: 4px; margin: 0; white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
+    .rule-code code { background: none; padding: 0; border-radius: 0; font-size: inherit; color: inherit; font-family: inherit; }
     .pass { color: #16a34a; font-weight: 500; }
     .fail { color: #dc2626; font-weight: 500; }
     .warning { color: #ca8a04; font-weight: 500; }
