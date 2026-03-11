@@ -7,5 +7,6 @@
   "/schemas/UMMS_Ping_v1.0.json",
   "/schemas/Generic_Spine_v1.0.json",
   "/schemas/hcp_schema.json",
-  "/schemas/abcd_schema_cleaned.json"
+  "/schemas/abcd_schema_cleaned.json",
+  "/schemas/My_schema_v1.0.json"
 ]

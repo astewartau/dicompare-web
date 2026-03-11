@@ -1,0 +1,308 @@
+{
+  "name": "My schema",
+  "description": "",
+  "version": "1.0",
+  "authors": [
+    "Ashley Stewart"
+  ],
+  "acquisitions": {
+    "MS Brain 3D T1 Pre-contrast": {
+      "description": "3D T1-weighted anatomic imaging for MS brain protocol (pre-contrast)",
+      "detailed_description": "## 3D T1-Weighted Pre-Contrast (Anatomic)\n\nThis is the anatomic 3D T1-weighted sequence acquired BEFORE gadolinium contrast administration.\n\n### Technical Parameters\n\n| Parameter | Value |\n|-----------|-------|\n| Sequence type | 3D IR-prepared T1 gradient echo (e.g., MPRAGE, BRAVO, 3D TFE) |\n| Acquisition thickness | 1.0-1.5 mm isotropic |\n| Reconstruction | 3 mm for clinical review |\n| In-plane resolution | ≤1 x 1 mm |\n| Coverage | Whole brain |\n| Orientation | Subcallosal plane |\n\n### Clinical Purpose\n\n- Volumetric analysis (brain atrophy)\n- Confirmation of juxtacortical and infratentorial lesions\n- Anatomical reference\n- Must be acquired BEFORE contrast for accurate volumetrics\n\n### Important Notes\n\n- **Acquire before gadolinium administration**\n- T1 \"black holes\" are best assessed on 2D spin-echo sequences, not 3D IR-prepared images\n- 3D acquisition enables multiplanar reformatting\n\n### Reference\n\nCMSC Task Force. AJNR Am J Neuroradiol 2016;37:394-401.",
+      "fields": [
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "3D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 1,
+          "tolerance": 0.5
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            1,
+            1
+          ],
+          "tolerance": 0.3
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "contains_any": [
+            "GR",
+            "IR"
+          ]
+        },
+        {
+          "field": "ImageType",
+          "tag": "0008,0008",
+          "contains": "ORIGINAL"
+        },
+        {
+          "field": "ContrastBolusAgent",
+          "tag": "0018,0010",
+          "value": ""
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "min": 1.5
+        }
+      ],
+      "series": [],
+      "tags": [
+        "analysis:volumetry",
+        "analysis:segmentation",
+        "MS",
+        "brain",
+        "T1-weighted",
+        "3D",
+        "structural",
+        "pre-contrast",
+        "volumetric"
+      ],
+      "rules": [
+        {
+          "id": "check_whole_brain_coverage",
+          "name": "Whole Brain Coverage",
+          "description": "MS brain imaging requires whole-brain coverage (typically >140mm in z-direction).",
+          "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nnum_slices = value[\"Count\"].iloc[0]\ncoverage = slice_thickness * num_slices\n\nif coverage < 140:\n    raise ValidationWarning(f\"Brain coverage ({coverage:.0f} mm) may be insufficient for whole-brain MS imaging. Typical coverage is >140mm.\")",
+          "parameters": {},
+          "fields": [
+            "SliceThickness"
+          ],
+          "testCases": [
+            {
+              "id": "test_good_coverage",
+              "name": "Good coverage",
+              "data": {
+                "SliceThickness": [
+                  1
+                ],
+                "Count": [
+                  180
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "180 slices x 1mm = 180mm coverage"
+            },
+            {
+              "id": "test_insufficient_coverage",
+              "name": "Insufficient coverage",
+              "data": {
+                "SliceThickness": [
+                  1
+                ],
+                "Count": [
+                  120
+                ]
+              },
+              "expectedResult": "warning",
+              "description": "120 slices x 1mm = 120mm may be insufficient"
+            }
+          ]
+        }
+      ]
+    },
+    "MS Brain 3D FLAIR": {
+      "description": "3D T2-FLAIR for MS lesion detection - primary sequence for white matter lesions",
+      "detailed_description": "## 3D T2-FLAIR (Primary Lesion Detection)\n\nFLAIR is the primary sequence for detecting MS white matter lesions. The 3D acquisition enables multiplanar reformatting.\n\n### Technical Parameters\n\n| Parameter | Value |\n|-----------|-------|\n| Sequence type | 3D T2-FLAIR |\n| Acquisition thickness | 1.0-1.5 mm isotropic |\n| Reconstruction | 3 mm for clinical review |\n| In-plane resolution | ≤1 x 1 mm |\n| Acquisition plane | Sagittal (for reformatting) |\n| Coverage | Whole brain |\n\n### Clinical Purpose\n\n- **Primary sequence for MS lesion detection**\n- Corpus callosum lesions (best seen on sagittal)\n- Juxtacortical lesions (white matter touching cortex)\n- Periventricular lesions (touching ventricles)\n- Oval perivenular lesion configuration\n\n### Key Lesion Locations for McDonald Criteria\n\n| Location | Requirement |\n|----------|-------------|\n| Periventricular | ≥1 lesion touching ventricles |\n| Juxtacortical | ≥1 lesion touching cortex |\n| Infratentorial | ≥1 lesion |\n| Spinal cord | ≥1 lesion |\n\n**2 of 4 locations required for dissemination in space**\n\n### Timing Note\n\nFLAIR can be acquired during the 5-minute post-contrast delay (after gadolinium injection, before post-contrast T1).\n\n### 2D Alternative\n\nIf 3D not available: 2D axial AND sagittal FLAIR at ≤3mm thickness, no gap.\n\n### Reference\n\nCMSC Task Force. AJNR Am J Neuroradiol 2016;37:394-401.",
+      "fields": [
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "3D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 1,
+          "tolerance": 0.5
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            1,
+            1
+          ],
+          "tolerance": 0.3
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "contains": "IR"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "contains": "SK"
+        },
+        {
+          "field": "ImageType",
+          "tag": "0008,0008",
+          "contains": "ORIGINAL"
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "min": 1.5
+        }
+      ],
+      "series": [],
+      "tags": [
+        "MS",
+        "brain",
+        "FLAIR",
+        "T2-weighted",
+        "3D",
+        "lesion",
+        "white matter"
+      ],
+      "rules": [
+        {
+          "id": "check_whole_brain_coverage",
+          "name": "Whole Brain Coverage",
+          "description": "MS brain imaging requires whole-brain coverage (typically >140mm in z-direction).",
+          "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nnum_slices = value[\"Count\"].iloc[0]\ncoverage = slice_thickness * num_slices\n\nif coverage < 140:\n    raise ValidationWarning(f\"Brain coverage ({coverage:.0f} mm) may be insufficient for whole-brain MS imaging. Typical coverage is >140mm.\")",
+          "parameters": {},
+          "fields": [
+            "SliceThickness"
+          ],
+          "testCases": [
+            {
+              "id": "test_good_coverage",
+              "name": "Good coverage",
+              "data": {
+                "SliceThickness": [
+                  1
+                ],
+                "Count": [
+                  180
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "180 slices x 1mm = 180mm coverage"
+            },
+            {
+              "id": "test_insufficient_coverage",
+              "name": "Insufficient coverage",
+              "data": {
+                "SliceThickness": [
+                  1
+                ],
+                "Count": [
+                  120
+                ]
+              },
+              "expectedResult": "warning",
+              "description": "120 slices x 1mm = 120mm may be insufficient"
+            }
+          ]
+        }
+      ]
+    },
+    "MS Brain 2D FLAIR (Alternative)": {
+      "description": "2D T2-FLAIR alternative when 3D not available - requires both axial and sagittal acquisitions",
+      "detailed_description": "## 2D T2-FLAIR (Alternative)\n\nWhen 3D FLAIR is not available, 2D FLAIR should be acquired in **both axial AND sagittal** planes.\n\n### Technical Parameters\n\n| Parameter | Value |\n|-----------|-------|\n| Sequence type | 2D T2-FLAIR |\n| Slice thickness | ≤3 mm |\n| Gap | **No gap** |\n| Planes | Axial AND Sagittal |\n| Coverage | Whole brain |\n\n### Why Both Planes?\n\n- **Sagittal**: Best for corpus callosum lesions (Dawson's fingers)\n- **Axial**: Standard orientation for lesion counting and comparison\n\n### No Gap Requirement\n\nSlice gap can cause lesions to be missed. SpacingBetweenSlices should equal SliceThickness.\n\n### Reference\n\nCMSC Task Force. AJNR Am J Neuroradiol 2016;37:394-401.",
+      "fields": [
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "max": 3
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            1,
+            1
+          ],
+          "tolerance": 0.5
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "contains": "IR"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "contains": "SK"
+        },
+        {
+          "field": "ImageType",
+          "tag": "0008,0008",
+          "contains": "ORIGINAL"
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "min": 1.5
+        }
+      ],
+      "series": [],
+      "tags": [
+        "MS",
+        "brain",
+        "FLAIR",
+        "T2-weighted",
+        "2D",
+        "lesion"
+      ],
+      "rules": [
+        {
+          "id": "check_no_gap",
+          "name": "No Gap Between Slices",
+          "description": "2D MS brain sequences should have no gap between slices. SpacingBetweenSlices should equal SliceThickness.",
+          "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nspacing = value[\"SpacingBetweenSlices\"].iloc[0] if \"SpacingBetweenSlices\" in value.columns and not pd.isna(value[\"SpacingBetweenSlices\"].iloc[0]) else slice_thickness\n\ngap = spacing - slice_thickness\nif gap > 0.5:\n    raise ValidationWarning(f\"Gap detected between slices ({gap:.1f} mm). MS protocols require no gap (SpacingBetweenSlices should equal SliceThickness).\")",
+          "parameters": {},
+          "fields": [
+            "SliceThickness",
+            "SpacingBetweenSlices"
+          ],
+          "testCases": [
+            {
+              "id": "test_no_gap",
+              "name": "No gap - passes",
+              "data": {
+                "SliceThickness": [
+                  3
+                ],
+                "SpacingBetweenSlices": [
+                  3
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "No gap between slices"
+            },
+            {
+              "id": "test_gap_present",
+              "name": "Gap present - warning",
+              "data": {
+                "SliceThickness": [
+                  3
+                ],
+                "SpacingBetweenSlices": [
+                  4.5
+                ]
+              },
+              "expectedResult": "warning",
+              "description": "1.5mm gap detected"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
