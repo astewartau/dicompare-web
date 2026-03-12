@@ -4,7 +4,6 @@ on:
   workflow_run:
     workflows: ["Version Bump"]
     types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
