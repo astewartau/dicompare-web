@@ -42,7 +42,7 @@ jobs:
 
       - name: Update src/version.ts
         run: |
-          sed -i "s/VERSION = '[^']*'/VERSION = '${{ steps.version.outputs.VERSION }}'/" src/version.ts
+          sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '${{ steps.version.outputs.VERSION }}'/" src/version.ts
 
       - name: Commit and push version bump
         run: |
