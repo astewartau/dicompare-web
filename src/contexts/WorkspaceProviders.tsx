@@ -4,6 +4,7 @@ import { SchemaMetadataProvider } from './SchemaMetadataContext';
 import { ItemManagementProvider } from './ItemManagementContext';
 import { SchemaEditingProvider } from './SchemaEditingContext';
 import { WorkspaceProvider } from './WorkspaceContext';
+import { SessionPersistenceProvider } from './SessionPersistenceContext';
 import { TutorialProvider } from './TutorialContext';
 
 interface WorkspaceProvidersProps {
@@ -20,6 +21,7 @@ interface WorkspaceProvidersProps {
  * - ItemManagementProvider: Items list and selection (independent)
  * - SchemaEditingProvider: Field/series/validation mutations (depends on ItemManagement)
  * - WorkspaceProvider: Cross-cutting operations (depends on all above)
+ * - SessionPersistenceProvider: Auto-saves workspace state to IndexedDB (depends on ItemManagement, SchemaMetadata, SchemaService)
  */
 export const WorkspaceProviders: React.FC<WorkspaceProvidersProps> = ({ children }) => {
   return (
@@ -28,9 +30,11 @@ export const WorkspaceProviders: React.FC<WorkspaceProvidersProps> = ({ children
         <ItemManagementProvider>
           <SchemaEditingProvider>
             <WorkspaceProvider>
-              <TutorialProvider>
-                {children}
-              </TutorialProvider>
+              <SessionPersistenceProvider>
+                <TutorialProvider>
+                  {children}
+                </TutorialProvider>
+              </SessionPersistenceProvider>
             </WorkspaceProvider>
           </SchemaEditingProvider>
         </ItemManagementProvider>

@@ -28,6 +28,7 @@ import SchemaReadmeModal from '../schema/SchemaReadmeModal';
 import { useReadmeModal } from '../../hooks/useReadmeModal';
 import { useFileSystemAccess } from '../../hooks/useFileSystemAccess';
 import { useSchemaImportFromViewer } from '../../hooks/useSchemaImportFromViewer';
+import { useSessionPersistence } from '../../contexts/SessionPersistenceContext';
 
 const UnifiedWorkspace: React.FC = () => {
   const {
@@ -85,6 +86,14 @@ const UnifiedWorkspace: React.FC = () => {
 
   // Import schema from Schema Viewer page (if navigated via "Open in Workspace")
   useSchemaImportFromViewer();
+
+  // Session persistence
+  const { endSession } = useSessionPersistence();
+
+  const handleReset = useCallback(async () => {
+    await clearAll();
+    endSession();
+  }, [clearAll, endSession]);
 
   // Local UI state
   const [schemaInfoTab, setSchemaInfoTab] = useState<SchemaInfoTab>('welcome');
@@ -413,7 +422,7 @@ const UnifiedWorkspace: React.FC = () => {
                 setSchemaInfoTab(tab);
               }}
               onRemove={removeItem}
-              onReset={clearAll}
+              onReset={handleReset}
             />
           </div>
 

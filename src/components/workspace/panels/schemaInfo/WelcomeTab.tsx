@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { ChevronDown, CheckCircle, PlusCircle, FileSearch, Download, Play } from 'lucide-react';
 import { useTutorial, TutorialId } from '../../../../contexts/TutorialContext';
+import { useSessionPersistence } from '../../../../contexts/SessionPersistenceContext';
+import { useWorkspace } from '../../../../contexts/WorkspaceContext';
+import RecentSessions from './RecentSessions';
 
 /**
  * Welcome tab content for SchemaInfoPanel.
@@ -8,6 +11,20 @@ import { useTutorial, TutorialId } from '../../../../contexts/TutorialContext';
  */
 const WelcomeTab: React.FC = () => {
   const { startTutorial } = useTutorial();
+  const { clearAll } = useWorkspace();
+  const {
+    sessions,
+    isLoadingSessions,
+    activeSessionId,
+    loadSession,
+    deleteSession,
+    endSession,
+  } = useSessionPersistence();
+
+  const handleCreateNew = async () => {
+    await clearAll();
+    endSession();
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-6 min-h-0">
@@ -83,6 +100,16 @@ const WelcomeTab: React.FC = () => {
           />
         </div>
       </div>
+
+      {/* Recent Sessions */}
+      <RecentSessions
+        sessions={sessions}
+        isLoading={isLoadingSessions}
+        activeSessionId={activeSessionId}
+        onLoadSession={loadSession}
+        onDeleteSession={deleteSession}
+        onCreateNew={handleCreateNew}
+      />
     </div>
   );
 };
