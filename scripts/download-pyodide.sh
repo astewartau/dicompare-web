@@ -4,7 +4,8 @@
 set -e
 
 PYODIDE_VERSION="0.27.0"
-DICOMPARE_VERSION="0.2.0"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DICOMPARE_VERSION=$(sed -n "s/.*DICOMPARE_VERSION = '\([^']*\)'.*/\1/p" "$SCRIPT_DIR/../src/version.ts")
 DEST_DIR="public/pyodide"
 
 echo "📦 Setting up offline Pyodide for Electron..."
