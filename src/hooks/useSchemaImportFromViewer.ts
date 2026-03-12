@@ -69,8 +69,10 @@ export function useSchemaImportFromViewer() {
           acquisitionName: pending.acquisitionNames[idx] || `Acquisition ${idx}`,
         }));
 
-        await addFromSchema(selections, getSchemaContent, getUnifiedSchema);
-        selectItem('__add_from_data__');
+        const newItemIds = await addFromSchema(selections, getSchemaContent, getUnifiedSchema);
+        if (newItemIds.length > 0) {
+          selectItem(newItemIds[newItemIds.length - 1]);
+        }
       } catch (err) {
         console.error('Failed to process pending schema import:', err);
       }

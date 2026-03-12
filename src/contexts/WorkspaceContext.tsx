@@ -48,7 +48,7 @@ interface WorkspaceContextType {
   pendingMatchingOperation: PendingMatchingOperation | null;
 
   // Add items
-  addFromSchema: (selections: AcquisitionSelection[], getSchemaContent: (id: string) => Promise<string | null>, getUnifiedSchema: (id: string) => UnifiedSchema | null) => Promise<void>;
+  addFromSchema: (selections: AcquisitionSelection[], getSchemaContent: (id: string) => Promise<string | null>, getUnifiedSchema: (id: string) => UnifiedSchema | null) => Promise<string[]>;
   addFromData: (files: FileList, mode?: 'schema-template' | 'validation-subject') => Promise<void>;
   addFromDataWithHandles: (manager: FileHandleManager, mode?: 'schema-template' | 'validation-subject') => Promise<void>;
   addFromScratch: () => string;
@@ -235,6 +235,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }
 
     setItems(prev => [...prev, ...newItems]);
+    return newItems.map(item => item.id);
   }, [setItems]);
 
   // Add items from DICOM files or protocol files
