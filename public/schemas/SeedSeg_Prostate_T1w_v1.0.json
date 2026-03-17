@@ -1,6 +1,6 @@
 {
   "name": "SeedSeg Prostate T1-Weighted Protocol",
-  "description": "T1-weighted gradient echo (FLASH) protocol for prostate MRI optimized for gold fiducial marker (seed) segmentation using the SeedSeg tool. Designed for radiation therapy planning on Siemens 3T systems with high in-plane resolution (0.7\u00d70.7 mm\u00b2) and thin slices (2 mm) to enable accurate localization of implanted gold markers (1\u00d73 mm cylindrical, Riverpoint Medical). T1-weighted MRI data were acquired using a MAGNETOM Skyra 3T scanner (Siemens Healthcare, Erlangen, Germany) with a 32-channel spine coil and 18-channel body coil. Ground truth FM and prostate (CTV) segmentations were delineated on registered CT images by radiation oncologists and transformed to MRI space using DICOM registration objects.",
+  "description": "T1-weighted gradient echo (FLASH) protocol for prostate MRI optimized for gold fiducial marker (seed) segmentation using the SeedSeg tool. Designed for radiation therapy planning on Siemens 3T systems with high in-plane resolution (0.7\u00d70.7 mm\u00b2) and thin slices (2 mm) to enable accurate localization of implanted gold markers (1\u00d73 mm cylindrical, Riverpoint Medical). T1-weighted MRI data were acquired using a MAGNETOM 3.0T XQ scanner (Siemens Healthcare, Erlangen, Germany; Numaris/X VA60A) with a 32-channel spine coil and 18-channel body coil. Ground truth FM and prostate (CTV) segmentations were delineated on registered CT images by radiation oncologists and transformed to MRI space using DICOM registration objects.",
   "version": "1.0",
   "authors": [
     "Ashley Stewart"
@@ -8,7 +8,7 @@
   "acquisitions": {
     "T1-Weighted Gradient Echo (Seed)": {
       "description": "2D T1-weighted gradient echo (FLASH) acquisition for gold fiducial marker segmentation in prostate radiation therapy planning",
-      "detailed_description": "## T1-Weighted Gradient Echo for Gold Seed Segmentation\n\n### Overview\nHigh-resolution 2D T1-weighted gradient echo acquisition optimized for visualizing and segmenting implanted gold fiducial markers (seeds) in the prostate. This sequence is part of an RT planning protocol and is designed for compatibility with the SeedSeg automated segmentation tool.\n\n### Clinical Context\n- **Application:** Radiation therapy (RT) planning for prostate cancer (PCa)\n- **Target:** Implanted gold fiducial markers (Riverpoint Medical, Portland, Oregon, US)\n- **Marker Dimensions:** 1\u00d73 mm cylindrical gold markers (3 per patient)\n- **Patient Cohort:** 127 PCa patients, each with 3 implanted gold markers\n- **Coils:** 32-channel spine coil + 18-channel body coil\n- **Scanner:** Siemens MAGNETOM Skyra 3T (also validated on MAGNETOM 3.0T XQ, Numaris/X VA60A)\n\n### Sequence Details\n- **Sequence Name:** `fl_r` (FLASH \u2013 Fast Low Angle Shot)\n- **Dimension:** 2D multi-slice\n- **Orientation:** Transversal (axial)\n- **Phase Encoding:** R >> L\n- **Multi-Slice Mode:** Interleaved, ascending\n- **RF Spoiling:** Enabled\n- **Flow Compensation:** Slice/Read\n- **Gradient Mode:** Fast\n- **Acceleration:** GRAPPA factor 2 with 24 integrated reference lines\n\n### Key Parameters\n- **TR:** 600 ms\n- **TE:** 6.66 ms\n- **Flip Angle:** 80\u00b0\n- **Voxel Size:** 0.7\u00d70.7\u00d72.0 mm\u00b3\n- **FOV:** 220\u00d7220 mm\u00b2\n- **Base Resolution:** 320\n- **Phase Resolution:** 80%\n- **Slices:** 40\n- **Slice Thickness:** 2.0 mm (no gap)\n- **Bandwidth:** 400 Hz/Px\n- **Averages:** 1\n- **Scan Duration:** ~2:42 min\n\n### Why T1-Weighted GRE for Gold Seeds?\nGold fiducial markers produce characteristic signal voids on MRI due to their strong magnetic susceptibility. The T1-weighted gradient echo sequence with a relatively long TE (6.66 ms) and high flip angle (80\u00b0) enhances the susceptibility artifact around the gold markers while maintaining sufficient anatomical contrast for prostate delineation. The high in-plane resolution (0.7 mm) is critical for accurate localization of the small 1\u00d73 mm markers.\n\n### Ground Truth Segmentation\nGround truth FM and prostate (CTV) segmentations were delineated on registered CT images by radiation oncologists and transformed to MRI space using DICOM registration objects.\n\n### SeedSeg Compatibility\nThis protocol is designed to produce images compatible with the SeedSeg tool for automated segmentation of gold fiducial markers in prostate MRI.",
+      "detailed_description": "## T1-Weighted Gradient Echo for Gold Seed Segmentation\n\n### Overview\nHigh-resolution 2D T1-weighted gradient echo acquisition optimized for visualizing and segmenting implanted gold fiducial markers (seeds) in the prostate. This sequence is part of an RT planning protocol and is designed for compatibility with the SeedSeg automated segmentation tool.\n\n### Clinical Context\n- **Application:** Radiation therapy (RT) planning for prostate cancer (PCa)\n- **Target:** Implanted gold fiducial markers (Riverpoint Medical, Portland, Oregon, US)\n- **Marker Dimensions:** 1\u00d73 mm cylindrical gold markers (3 per patient)\n- **Patient Cohort:** 127 PCa patients, each with 3 implanted gold markers\n- **Coils:** 32-channel spine coil + 18-channel body coil\n- **Scanner:** Siemens MAGNETOM 3.0T XQ (Numaris/X VA60A)\n\n### Sequence Details\n- **Sequence Name:** `fl_r` (FLASH \u2013 Fast Low Angle Shot)\n- **Dimension:** 2D multi-slice\n- **Orientation:** Transversal (axial)\n- **Phase Encoding:** R >> L\n- **Multi-Slice Mode:** Interleaved, ascending\n- **RF Spoiling:** Enabled\n- **Flow Compensation:** Slice/Read\n- **Gradient Mode:** Fast\n- **Acceleration:** GRAPPA factor 2 with 24 integrated reference lines\n\n### Key Parameters\n- **TR:** 600 ms\n- **TE:** 6.66 ms\n- **Flip Angle:** 80\u00b0\n- **Voxel Size:** 0.7\u00d70.7\u00d72.0 mm\u00b3\n- **FOV:** 220\u00d7220 mm\u00b2\n- **Base Resolution:** 320\n- **Phase Resolution:** 80%\n- **Slices:** 40\n- **Slice Thickness:** 2.0 mm (no gap)\n- **Bandwidth:** 400 Hz/Px\n- **Averages:** 1\n- **Scan Duration:** ~2:42 min\n\n### Why T1-Weighted GRE for Gold Seeds?\nGold fiducial markers produce characteristic signal voids on MRI due to their strong magnetic susceptibility. The T1-weighted gradient echo sequence with a relatively long TE (6.66 ms) and high flip angle (80\u00b0) enhances the susceptibility artifact around the gold markers while maintaining sufficient anatomical contrast for prostate delineation. The high in-plane resolution (0.7 mm) is critical for accurate localization of the small 1\u00d73 mm markers.\n\n### Ground Truth Segmentation\nGround truth FM and prostate (CTV) segmentations were delineated on registered CT images by radiation oncologists and transformed to MRI space using DICOM registration objects.\n\n### SeedSeg Compatibility\nThis protocol is designed to produce images compatible with the SeedSeg tool for automated segmentation of gold fiducial markers in prostate MRI.",
       "tags": ["analysis:segmentation", "prostate", "T1-weighted", "RT-planning", "fiducial-markers"],
       "fields": [
         {
@@ -121,6 +121,35 @@
           "field": "InPlanePhaseEncodingDirection",
           "tag": "0018,1312",
           "value": "ROW",
+          "vr": "CS",
+          "dataType": "string"
+        },
+        {
+          "field": "SpacingBetweenSlices",
+          "tag": "0018,0088",
+          "value": 2.0,
+          "vr": "DS",
+          "dataType": "number",
+          "tolerance": 0.5
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS",
+          "vr": "LO",
+          "dataType": "string"
+        },
+        {
+          "field": "ImageType",
+          "tag": "0008,0008",
+          "vr": "CS",
+          "dataType": "string",
+          "contains": "M"
+        },
+        {
+          "field": "BodyPartExamined",
+          "tag": "0018,0015",
+          "value": "PELVIS",
           "vr": "CS",
           "dataType": "string"
         }
