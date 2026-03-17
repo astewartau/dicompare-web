@@ -122,7 +122,10 @@ export function convertValueToDataType(value: any, dataType: FieldDataType): any
 export function processSchemaFieldForUI(schemaField: any): any {
   // Try to get proper data type from VR and VM if available, otherwise check for known field patterns
   let dataType;
-  if (schemaField.vr && schemaField.valueMultiplicity) {
+  // First, respect explicit dataType from the schema JSON if provided
+  if (schemaField.dataType) {
+    dataType = schemaField.dataType;
+  } else if (schemaField.vr && schemaField.valueMultiplicity) {
     dataType = getDataTypeFromVR(schemaField.vr, schemaField.valueMultiplicity, schemaField.value);
   } else if (schemaField.tag) {
     // Check for known multi-value fields by tag
