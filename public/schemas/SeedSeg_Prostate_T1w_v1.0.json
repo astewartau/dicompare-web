@@ -21,16 +21,16 @@
         {
           "field": "ScanningSequence",
           "tag": "0018,0020",
-          "value": "GR",
           "vr": "CS",
-          "dataType": "string"
+          "dataType": "string",
+          "contains": "GR"
         },
         {
           "field": "SequenceVariant",
           "tag": "0018,0021",
-          "value": "SP",
           "vr": "CS",
-          "dataType": "string"
+          "dataType": "string",
+          "contains": "SP"
         },
         {
           "field": "RepetitionTime",
@@ -83,14 +83,14 @@
         {
           "field": "Rows",
           "tag": "0028,0010",
-          "value": 320,
+          "min": 320,
           "vr": "US",
           "dataType": "number"
         },
         {
           "field": "Columns",
           "tag": "0028,0011",
-          "value": 320,
+          "min": 320,
           "vr": "US",
           "dataType": "number"
         },
