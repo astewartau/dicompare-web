@@ -17,6 +17,13 @@ export type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' 
 export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'contains_any' | 'contains_all';
 export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 
+// Schema Image Types
+export interface SchemaImage {
+  url: string;
+  label?: string;
+  description?: string;
+}
+
 // Series Types
 export interface SeriesField {
   name: string;
@@ -31,6 +38,7 @@ export interface SeriesField {
 export interface Series {
   name: string;
   fields: SeriesField[];
+  images?: SchemaImage[];
 }
 
 // Validation Functions Types (imported from validation components)
@@ -77,6 +85,7 @@ export interface Acquisition {
   series?: Series[];
   validationFunctions?: SelectedValidationFunction[]; // Add validation functions to acquisitions
   tags?: string[]; // Tags/categories for organizing acquisitions
+  images?: SchemaImage[]; // Representative images for this acquisition
   seriesFileMapping?: Record<string, string[]>;  // series name -> DICOM filenames
   metadata: {
     manufacturer?: string;

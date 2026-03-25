@@ -775,13 +775,13 @@ function buildFullHtml(
       </head>
       <body>
         ${headerHtml}
+        ${readmeHtml}
         ${testNotesHtml}
         ${rulesHtml}
         ${fieldsHtml}
         ${seriesHtml}
         ${uncheckedFieldsHtml}
         ${uncheckedSeriesFieldsHtml}
-        ${readmeHtml}
         ${emptyMessage}
         <div class="print-date">Printed on ${new Date().toLocaleDateString()}</div>
       </body>

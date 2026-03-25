@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { FileText, Edit2, Save, Database, X, Book, Printer, Eye } from 'lucide-react';
+import { FileText, Edit2, Save, Database, X, Book, Printer, Eye, ImageIcon } from 'lucide-react';
 import { WorkspaceItem, ProcessingProgress, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { Acquisition, AcquisitionSelection } from '../../types';
@@ -7,6 +7,7 @@ import { ComplianceFieldResult } from '../../types/schema';
 import AcquisitionTable from '../schema/AcquisitionTable';
 import InlineTagInput from '../common/InlineTagInput';
 import DetailedDescriptionModal from '../schema/DetailedDescriptionModal';
+import ImageManagerModal from '../schema/ImageManagerModal';
 import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
 import DicomViewerModal from '../viewer/DicomViewerModal';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -148,6 +149,9 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
 
   // Modal and editing state
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
+  const [showImageManager, setShowImageManager] = useState(false);
+  const [imageManagerOverrideFiles, setImageManagerOverrideFiles] = useState<File[] | null>(null);
+  const [imageManagerInitialTab, setImageManagerInitialTab] = useState<'loaded' | 'schema' | undefined>(undefined);
   const [showTestDataNotes, setShowTestDataNotes] = useState(false);
   const [showDicomViewer, setShowDicomViewer] = useState(false);
   const [dicomViewerBatchId, setDicomViewerBatchId] = useState<string | null>(null);
@@ -577,21 +581,6 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
               {/* Right: README, Edit, and X buttons */}
               {isUsedAsSchema && (
                 <div className="flex items-center gap-1.5">
-                  {/* View DICOM images button */}
-                  {selectedItem.source === 'data' && selectedItem.dicomFileBatchId && dicomFileCache.has(selectedItem.dicomFileBatchId) && (
-                    <button
-                      onClick={() => {
-                        setDicomViewerBatchId(selectedItem.dicomFileBatchId!);
-                        setShowDicomViewer(true);
-                      }}
-                      className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
-                      title="View DICOM images"
-                    >
-                      <Eye className="h-3.5 w-3.5 mr-1" />
-                      View
-                    </button>
-                  )}
-
                   {/* README button - always opens editable modal */}
                   <button
                     onClick={() => setShowDetailedDescription(true)}
@@ -601,6 +590,20 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                   >
                     <Book className="h-3.5 w-3.5 mr-1" />
                     README
+                  </button>
+
+                  {/* Images button */}
+                  <button
+                    onClick={() => setShowImageManager(true)}
+                    className={`inline-flex items-center px-2 py-1 border text-xs rounded ${
+                      selectedItem.acquisition.images?.length
+                        ? 'border-brand-500/30 text-brand-600 bg-brand-50 dark:bg-brand-900/20'
+                        : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
+                    }`}
+                    title={selectedItem.acquisition.images?.length ? `View/edit images (${selectedItem.acquisition.images.length})` : 'Add images'}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5 mr-1" />
+                    Images{selectedItem.acquisition.images?.length ? ` (${selectedItem.acquisition.images.length})` : ''}
                   </button>
 
                   {/* Edit toggle */}
@@ -824,16 +827,15 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
 
                 const allFiles = dicomFileCache.get(batchId) || [];
                 const filenameSet = new Set(filenames);
-                // Match using webkitRelativePath (folder uploads) or name (single file uploads)
                 const seriesFiles = allFiles.filter(f => {
                   const key = (f as any).webkitRelativePath || f.name;
                   return filenameSet.has(key);
                 });
 
                 if (seriesFiles.length > 0) {
-                  setDicomViewerFiles(seriesFiles);
-                  setDicomViewerLabel(`${acq.protocolName || 'DICOM Data'} — ${seriesName}`);
-                  setShowDicomViewer(true);
+                  setImageManagerOverrideFiles(seriesFiles);
+                  setImageManagerInitialTab('loaded');
+                  setShowImageManager(true);
                 }
               };
             })()}
@@ -856,6 +858,26 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         onSave={(description) => onUpdateAcquisition({ detailedDescription: description })}
       />
 
+      {/* Image Manager Modal */}
+      <ImageManagerModal
+        isOpen={showImageManager}
+        onClose={() => {
+          setShowImageManager(false);
+          setImageManagerOverrideFiles(null);
+          setImageManagerInitialTab(undefined);
+        }}
+        title={selectedItem.acquisition.protocolName || 'Acquisition'}
+        images={selectedItem.acquisition.images || []}
+        onSave={(images) => onUpdateAcquisition({ images })}
+        dicomFiles={
+          imageManagerOverrideFiles
+            ?? (selectedItem.source === 'data' && selectedItem.dicomFileBatchId
+              ? dicomFileCache.get(selectedItem.dicomFileBatchId)
+              : undefined)
+        }
+        initialTab={imageManagerInitialTab}
+      />
+
       {/* Test Data Notes Modal - for adding notes about test data (print report only) */}
       <DetailedDescriptionModal
         isOpen={showTestDataNotes}
@@ -874,7 +896,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         initialSelection={readmeModalData?.initialSelection || 'schema'}
       />
 
-      {/* DICOM Image Viewer Modal */}
+      {/* DICOM Viewer Modal — for test data and per-series viewing */}
       <DicomViewerModal
         isOpen={showDicomViewer}
         onClose={() => {

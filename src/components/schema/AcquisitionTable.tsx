@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText, Eye, EyeOff } from 'lucide-react';
+import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText, Eye, EyeOff, ImageIcon } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
@@ -13,6 +13,7 @@ import ValidationFunctionLibraryModal from '../validation/ValidationFunctionLibr
 import ValidationFunctionEditorModal from '../validation/ValidationFunctionEditorModal';
 import FieldConversionModal from './FieldConversionModal';
 import DetailedDescriptionModal from './DetailedDescriptionModal';
+import ImageManagerModal from './ImageManagerModal';
 import CustomTooltip from '../common/CustomTooltip';
 import { ValidationFunction } from '../validation/ValidationFunctionLibraryModal';
 import TestDicomGeneratorModal from './TestDicomGeneratorModal';
@@ -106,6 +107,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const [allComplianceResults, setAllComplianceResults] = useState<ComplianceFieldResult[]>([]);
   const [showTestDicomGenerator, setShowTestDicomGenerator] = useState(false);
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
+  const [showImageManager, setShowImageManager] = useState(false);
   const [showRuleStatusMessages, setShowRuleStatusMessages] = useState(false);
   const [showUncheckedFields, setShowUncheckedFields] = useState(false);
   const [showUncheckedSeriesFields, setShowUncheckedSeriesFields] = useState(false);
@@ -468,6 +470,18 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                     <FileText className="h-3 w-3 mr-1" />
                     README
                   </button>
+                  <button
+                    onClick={() => setShowImageManager(true)}
+                    className={`flex items-center px-2 py-1 text-xs rounded border transition-colors flex-shrink-0 ${
+                      acquisition.images?.length
+                        ? 'text-brand-700 border-brand-500/30 bg-brand-50 hover:bg-brand-100'
+                        : 'text-content-tertiary border-border-secondary hover:bg-surface-secondary'
+                    }`}
+                    title={acquisition.images?.length ? 'View/Edit images' : 'Add images'}
+                  >
+                    <ImageIcon className="h-3 w-3 mr-1" />
+                    Images{acquisition.images?.length ? ` (${acquisition.images.length})` : ''}
+                  </button>
                 </div>
               </div>
             ) : (
@@ -483,6 +497,19 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                       title="View detailed description"
                     >
                       <FileText className="h-3 w-3" />
+                    </button>
+                  )}
+                  {(acquisition.images && acquisition.images.length > 0 || (isEditMode && !isComplianceMode)) && (
+                    <button
+                      onClick={() => setShowImageManager(true)}
+                      className={`flex items-center px-1.5 py-0.5 text-xs rounded transition-colors ${
+                        acquisition.images?.length
+                          ? 'text-brand-600 hover:text-brand-700 hover:bg-brand-50'
+                          : 'text-content-tertiary hover:text-content-secondary hover:bg-surface-secondary'
+                      }`}
+                      title={acquisition.images?.length ? `View/Edit images (${acquisition.images.length})` : 'Add images'}
+                    >
+                      <ImageIcon className="h-3 w-3" />
                     </button>
                   )}
                 </div>
@@ -958,6 +985,16 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
         title={acquisition.protocolName || 'Acquisition'}
         description={acquisition.detailedDescription || ''}
         onSave={isEditMode && !isComplianceMode ? (description) => onUpdate('detailedDescription', description) : undefined}
+        isReadOnly={!isEditMode || isComplianceMode}
+      />
+
+      {/* Image Manager Modal - available in all modes */}
+      <ImageManagerModal
+        isOpen={showImageManager}
+        onClose={() => setShowImageManager(false)}
+        title={acquisition.protocolName || 'Acquisition'}
+        images={acquisition.images || []}
+        onSave={isEditMode && !isComplianceMode ? (images) => onUpdate('images', images) : undefined}
         isReadOnly={!isEditMode || isComplianceMode}
       />
     </div>

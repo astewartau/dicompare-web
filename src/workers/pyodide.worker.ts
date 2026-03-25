@@ -493,15 +493,16 @@ async function handleGenerateSchema(
 
   const { acquisitions, metadata } = payload;
 
-  pyodide.globals.set('_ui_acquisitions', acquisitions);
-  pyodide.globals.set('_schema_metadata', metadata);
+  // JSON-serialize on JS side to avoid Pyodide proxy conversion issues with nested objects
+  pyodide.globals.set('_ui_acquisitions_json', JSON.stringify(acquisitions));
+  pyodide.globals.set('_schema_metadata_json', JSON.stringify(metadata));
 
   const result = await pyodide.runPython(`
 import json
 from dicompare.interface import build_schema_from_ui_acquisitions
 
-acqs = _ui_acquisitions.to_py() if hasattr(_ui_acquisitions, 'to_py') else _ui_acquisitions
-meta = _schema_metadata.to_py() if hasattr(_schema_metadata, 'to_py') else _schema_metadata
+acqs = json.loads(_ui_acquisitions_json)
+meta = json.loads(_schema_metadata_json)
 
 schema = build_schema_from_ui_acquisitions(acqs, meta)
 json.dumps(schema, default=str)

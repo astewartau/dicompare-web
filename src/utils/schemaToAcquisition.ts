@@ -90,10 +90,12 @@ export const convertSchemaToAcquisition = async (
             validationRule: processedField.validationRule || { type: 'exact' as const },
             fieldType: processedField.fieldType || field.fieldType  // Preserve field type (standard/derived)
           };
-        })
+        }),
+        images: series.images || [],
       })) || [],
       validationFunctions: acquisitionData.rules || acquisitionData.validationFunctions || [],
       tags: acquisitionData.tags || [],
+      images: acquisitionData.images || [],
       metadata: {
         manufacturer: schema.authors?.join(', ') || 'Schema Template',
         notes: `Template from schema: ${schema.name} v${schema.version || '1.0.0'}`,
@@ -167,6 +169,7 @@ export const convertRawAcquisitionToContext = (
     series: [],
     validationFunctions: [],
     tags: tags || targetAcquisition.tags || [],
+    images: targetAcquisition.images || [],
     metadata: targetAcquisition.metadata || {}
   };
 
@@ -202,7 +205,8 @@ export const convertRawAcquisitionToContext = (
 
       return {
         name: series.name,
-        fields: seriesFields
+        fields: seriesFields,
+        images: series.images || [],
       };
     });
   }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ShieldCheck, Github, BookOpen, Check, Square, ArrowLeft,
-  Download, Link2, Layers, Quote, Shield, AlertTriangle, Loader, CheckSquare, Printer,
+  Download, Link2, Layers, Quote, Shield, AlertTriangle, Loader, CheckSquare, Printer, Brain,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,6 +18,9 @@ import { useSchemaContext } from '../contexts/SchemaContext';
 import { convertSchemaToAcquisitions } from '../utils/schemaToAcquisition';
 import { fetchExternalSchema, validateSchemaStructure } from '../utils/externalSchemaFetch';
 import { generateSchemaViewerPrintHtml, openPrintWindow, exportToPdf, isElectron } from '../utils/printReportGenerator';
+import { isVolumeUrl, isFlatImageUrl } from '../utils/imageHelpers';
+import ImageManagerModal from '../components/schema/ImageManagerModal';
+import VolumeThumbnail from '../components/common/VolumeThumbnail';
 
 const noop = () => {};
 
@@ -76,7 +79,7 @@ const SchemaViewerPage: React.FC = () => {
   // Catalog mode: no specific schema selected
   const isCatalogMode = !id && !externalUrl;
   const schemaService = useSchemaService();
-  const { uploadSchema } = useSchemaContext();
+  const { uploadSchema, getUniversalSchemaContent } = useSchemaContext();
 
   // Schema data state (used in detail mode only)
   const [schemaData, setSchemaData] = useState<any>(null);
@@ -95,6 +98,8 @@ const SchemaViewerPage: React.FC = () => {
   const [showCitation, setShowCitation] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [imageModalAcq, setImageModalAcq] = useState<Acquisition | null>(null);
+  const [imageModalIndex, setImageModalIndex] = useState(0);
 
   const schemaId = id || (externalUrl ? `external_${Date.now()}` : null);
 
@@ -115,12 +120,8 @@ const SchemaViewerPage: React.FC = () => {
         let content: string | null = null;
 
         if (id) {
-          // Fetch library schema using absolute base path
-          const basePath = import.meta.env.BASE_URL || '/';
-          const response = await fetch(`${basePath}schemas/${id}.json`);
-          if (response.ok) {
-            content = await response.text();
-          }
+          // Try uploaded schemas first, then library schemas
+          content = await getUniversalSchemaContent(id);
           if (!content) {
             throw new Error(`Schema "${id}" not found.`);
           }
@@ -169,7 +170,7 @@ const SchemaViewerPage: React.FC = () => {
 
     loadSchema();
     return () => { cancelled = true; };
-  }, [id, externalUrl, isCatalogMode]);
+  }, [id, externalUrl, isCatalogMode, getUniversalSchemaContent]);
 
   // Selection handlers
   const toggleSelection = (index: number) => {
@@ -335,6 +336,14 @@ const SchemaViewerPage: React.FC = () => {
       </header>
       <CitationModal isOpen={showCitation} onClose={() => setShowCitation(false)} />
       <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
+      <ImageManagerModal
+        isOpen={imageModalAcq !== null}
+        onClose={() => setImageModalAcq(null)}
+        title={imageModalAcq?.protocolName || 'Acquisition'}
+        images={imageModalAcq?.images || []}
+        isReadOnly={true}
+        initialSelectedIndex={imageModalIndex}
+      />
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -618,6 +627,50 @@ const SchemaViewerPage: React.FC = () => {
                               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                                 {acq.detailedDescription}
                               </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Image strip */}
+                        {acq.images && acq.images.length > 0 && (
+                          <div className="mb-6 pb-6 border-b border-border">
+                            <h3 className="text-xs font-medium text-content-tertiary uppercase tracking-wider mb-2">Images</h3>
+                            <div className="flex flex-wrap gap-3">
+                              {acq.images.map((img, imgIdx) => (
+                                <button
+                                  key={imgIdx}
+                                  onClick={() => { setImageModalIndex(imgIdx); setImageModalAcq(acq); }}
+                                  className="group w-32 rounded-lg border border-border-secondary hover:border-brand-400 overflow-hidden transition-colors bg-surface-secondary"
+                                  title={img.label || img.url}
+                                >
+                                  {isFlatImageUrl(img.url) ? (
+                                    <div className="w-32 h-24">
+                                      <img
+                                        src={img.url}
+                                        alt={img.label || ''}
+                                        className="w-full h-full object-contain"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                      />
+                                    </div>
+                                  ) : isVolumeUrl(img.url) ? (
+                                    <div className="w-32 h-24 relative">
+                                      <VolumeThumbnail url={img.url} className="w-full h-full" />
+                                      <div className="absolute top-1 right-1 p-1 rounded-full bg-brand-600 shadow">
+                                        <Brain className="h-3 w-3 text-white" />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="w-32 h-24 flex items-center justify-center text-content-tertiary">
+                                      <span className="text-xs">Preview N/A</span>
+                                    </div>
+                                  )}
+                                  <div className="px-1.5 py-1 border-t border-border-secondary">
+                                    <span className="text-[10px] text-content-secondary truncate block">
+                                      {img.label || img.url.split('/').pop() || 'Untitled'}
+                                    </span>
+                                  </div>
+                                </button>
+                              ))}
                             </div>
                           </div>
                         )}
