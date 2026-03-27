@@ -17,7 +17,8 @@ import { useSchemaService, UnifiedSchema } from '../hooks/useSchemaService';
 import { useSchemaContext } from '../contexts/SchemaContext';
 import { convertSchemaToAcquisitions } from '../utils/schemaToAcquisition';
 import { fetchExternalSchema, validateSchemaStructure } from '../utils/externalSchemaFetch';
-import { generateSchemaViewerPrintHtml, openPrintWindow, exportToPdf, isElectron } from '../utils/printReportGenerator';
+import { generateSchemaViewerPrintHtml, openPrintWindow, exportToPdf, isElectron, PrintSectionOptions } from '../utils/printReportGenerator';
+import PrintOptionsModal from '../components/common/PrintOptionsModal';
 import { isVolumeUrl, isFlatImageUrl } from '../utils/imageHelpers';
 import ImageManagerModal from '../components/schema/ImageManagerModal';
 import VolumeThumbnail from '../components/common/VolumeThumbnail';
@@ -98,6 +99,7 @@ const SchemaViewerPage: React.FC = () => {
   const [showCitation, setShowCitation] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
   const [imageModalAcq, setImageModalAcq] = useState<Acquisition | null>(null);
   const [imageModalIndex, setImageModalIndex] = useState(0);
 
@@ -243,7 +245,7 @@ const SchemaViewerPage: React.FC = () => {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handlePrint = async () => {
+  const handlePrint = async (sections?: PrintSectionOptions) => {
     if (!schemaData || acquisitions.length === 0) return;
 
     // If some are selected, print only those; otherwise print all
@@ -251,26 +253,31 @@ const SchemaViewerPage: React.FC = () => {
       ? acquisitions.filter((_, i) => selectedIndices.has(i))
       : acquisitions;
 
-    const html = generateSchemaViewerPrintHtml({
-      schemaName: schemaData.name || 'Untitled Schema',
-      schemaVersion: schemaData.version,
-      schemaAuthors: schemaData.authors,
-      schemaDescription: schemaData.description,
-      acquisitions: acqsToPrint,
-    });
+    setPdfExporting(true);
+    try {
+      const html = await generateSchemaViewerPrintHtml({
+        schemaName: schemaData.name || 'Untitled Schema',
+        schemaVersion: schemaData.version,
+        schemaAuthors: schemaData.authors,
+        schemaDescription: schemaData.description,
+        acquisitions: acqsToPrint,
+        sections,
+      });
 
-    if (isElectron()) {
-      setPdfExporting(true);
-      const filename = `${schemaData.name || 'schema'}-report.pdf`;
-      const result = await exportToPdf(html, filename);
+      if (isElectron()) {
+        const filename = `${schemaData.name || 'schema'}-report.pdf`;
+        const result = await exportToPdf(html, filename);
+        if (!result.success && result.message !== 'Export cancelled') {
+          alert(result.message || 'Failed to export PDF');
+        }
+      } else {
+        if (!openPrintWindow(html)) {
+          alert('Please allow popups to print the schema.');
+        }
+      }
+    } finally {
       setPdfExporting(false);
-      if (!result.success && result.message !== 'Export cancelled') {
-        alert(result.message || 'Failed to export PDF');
-      }
-    } else {
-      if (!openPrintWindow(html)) {
-        alert('Please allow popups to print the schema.');
-      }
+      setShowPrintOptions(false);
     }
   };
 
@@ -450,13 +457,13 @@ const SchemaViewerPage: React.FC = () => {
                       Download
                     </button>
                     <button
-                      onClick={handlePrint}
-                      disabled={pdfExporting || acquisitions.length === 0}
+                      onClick={() => setShowPrintOptions(true)}
+                      disabled={acquisitions.length === 0}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       title={selectedIndices.size > 0 ? `Print ${selectedIndices.size} selected` : 'Print all'}
                     >
                       <Printer className="h-3.5 w-3.5" />
-                      {pdfExporting ? 'Exporting...' : isElectron() ? 'PDF' : selectedIndices.size > 0 ? `Print (${selectedIndices.size})` : 'Print'}
+                      {isElectron() ? 'PDF' : selectedIndices.size > 0 ? `Print (${selectedIndices.size})` : 'Print'}
                     </button>
                   </div>
                 </div>
@@ -702,6 +709,28 @@ const SchemaViewerPage: React.FC = () => {
           </div>
         )}
       </div>
+      {/* Print Options Modal */}
+      <PrintOptionsModal
+        isOpen={showPrintOptions}
+        onClose={() => setShowPrintOptions(false)}
+        onPrint={handlePrint}
+        isPrinting={pdfExporting}
+        printLabel={isElectron() ? 'Export PDF' : 'Print'}
+        availableSections={(() => {
+          const sections: Array<'header' | 'readme' | 'schemaImages' | 'validationRules' | 'fieldsTable' | 'seriesTable'> = ['header', 'readme', 'fieldsTable', 'seriesTable', 'validationRules'];
+          const acqsToPrint = selectedIndices.size > 0
+            ? acquisitions.filter((_, i) => selectedIndices.has(i))
+            : acquisitions;
+          if (acqsToPrint.some(a => a.images && a.images.length > 0)) sections.push('schemaImages');
+          return sections;
+        })()}
+        hasImages={(() => {
+          const acqsToPrint = selectedIndices.size > 0
+            ? acquisitions.filter((_, i) => selectedIndices.has(i))
+            : acquisitions;
+          return acqsToPrint.some(a => a.images && a.images.length > 0);
+        })()}
+      />
     </div>
   );
 };

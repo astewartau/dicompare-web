@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { FileText, Edit2, Save, Database, X, Book, Printer, Eye, ImageIcon } from 'lucide-react';
+import { FileText, Edit2, Save, Database, X, Book, Printer, ImageIcon } from 'lucide-react';
 import { WorkspaceItem, ProcessingProgress, SchemaMetadata } from '../../contexts/WorkspaceContext';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
 import { Acquisition, AcquisitionSelection } from '../../types';
@@ -9,7 +9,7 @@ import InlineTagInput from '../common/InlineTagInput';
 import DetailedDescriptionModal from '../schema/DetailedDescriptionModal';
 import ImageManagerModal from '../schema/ImageManagerModal';
 import SchemaReadmeModal, { ReadmeItem } from '../schema/SchemaReadmeModal';
-import DicomViewerModal from '../viewer/DicomViewerModal';
+
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../contexts/SchemaContext';
 import { useTagSuggestions } from '../../hooks/useTagSuggestions';
@@ -18,7 +18,8 @@ import { buildReadmeItems } from '../../utils/readmeHelpers';
 import { fetchAndParseSchema } from '../../utils/schemaHelpers';
 import { getItemFlags } from '../../utils/workspaceHelpers';
 import { dicomFileCache } from '../../utils/dicomFileCache';
-import { generatePrintReportHtml, openPrintWindow, isElectron, exportToPdf } from '../../utils/printReportGenerator';
+import { generatePrintReportHtml, openPrintWindow, isElectron, exportToPdf, PrintSectionOptions } from '../../utils/printReportGenerator';
+import PrintOptionsModal from '../common/PrintOptionsModal';
 import { useDropZone } from '../../hooks/useDropZone';
 import DropZone from '../common/DropZone';
 import { SchemaLibraryPanel, AddFromDataPanel, SchemaInfoPanel, MatchingPanel } from './panels';
@@ -150,13 +151,10 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   // Modal and editing state
   const [showDetailedDescription, setShowDetailedDescription] = useState(false);
   const [showImageManager, setShowImageManager] = useState(false);
-  const [imageManagerOverrideFiles, setImageManagerOverrideFiles] = useState<File[] | null>(null);
-  const [imageManagerInitialTab, setImageManagerInitialTab] = useState<'loaded' | 'schema' | undefined>(undefined);
+  const [imageManagerInitialTab, setImageManagerInitialTab] = useState<'reference' | 'schema' | 'test' | undefined>(undefined);
+  const [imageManagerInitialMatchFiles, setImageManagerInitialMatchFiles] = useState<File[] | undefined>(undefined);
   const [showTestDataNotes, setShowTestDataNotes] = useState(false);
-  const [showDicomViewer, setShowDicomViewer] = useState(false);
-  const [dicomViewerBatchId, setDicomViewerBatchId] = useState<string | null>(null);
-  const [dicomViewerFiles, setDicomViewerFiles] = useState<File[] | null>(null); // For per-series viewing
-  const [dicomViewerLabel, setDicomViewerLabel] = useState<string | null>(null);
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
   const [loadedSchemaAcquisition, setLoadedSchemaAcquisition] = useState<Acquisition | null>(null);
 
   // Use a ref to store latest compliance results for print view (refs update synchronously)
@@ -250,31 +248,41 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
   const [pdfExporting, setPdfExporting] = useState(false);
 
   // Print acquisition (browser) or export to PDF (Electron)
-  const handlePrintAcquisition = useCallback(async () => {
+  const handlePrintAcquisition = useCallback(async (sections?: PrintSectionOptions) => {
     if (!selectedItem) return;
 
-    const html = generatePrintReportHtml({
-      selectedItem,
-      loadedSchemaAcquisition,
-      complianceResults: complianceResultsRef.current,
-      schemaMetadata,
-    });
+    setPdfExporting(true);
+    try {
+      const html = await generatePrintReportHtml({
+        selectedItem,
+        loadedSchemaAcquisition,
+        complianceResults: complianceResultsRef.current,
+        schemaMetadata,
+        dicomFiles: selectedItem.dicomFileBatchId
+          ? dicomFileCache.get(selectedItem.dicomFileBatchId)
+          : undefined,
+        testDicomFiles: selectedItem.attachedDataBatchId
+          ? dicomFileCache.get(selectedItem.attachedDataBatchId)
+          : undefined,
+        sections,
+      });
 
-    // In Electron, export to PDF
-    if (isElectron()) {
-      setPdfExporting(true);
-      const filename = `${selectedItem.acquisition.protocolName || 'acquisition'}-report.pdf`;
-      const result = await exportToPdf(html, filename);
+      // In Electron, export to PDF
+      if (isElectron()) {
+        const filename = `${selectedItem.acquisition.protocolName || 'acquisition'}-report.pdf`;
+        const result = await exportToPdf(html, filename);
+        if (!result.success && result.message !== 'Export cancelled') {
+          alert(result.message || 'Failed to export PDF');
+        }
+      } else {
+        // In browser, open print window
+        if (!openPrintWindow(html)) {
+          alert('Please allow popups to print the acquisition.');
+        }
+      }
+    } finally {
       setPdfExporting(false);
-
-      if (!result.success && result.message !== 'Export cancelled') {
-        alert(result.message || 'Failed to export PDF');
-      }
-    } else {
-      // In browser, open print window
-      if (!openPrintWindow(html)) {
-        alert('Please allow popups to print the acquisition.');
-      }
+      setShowPrintOptions(false);
     }
   }, [selectedItem, loadedSchemaAcquisition, schemaMetadata]);
 
@@ -556,17 +564,12 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
       {/* Print/Export PDF button as floating tab extending upward */}
       <button
         data-tutorial="print-button"
-        onClick={handlePrintAcquisition}
-        disabled={pdfExporting}
-        className={`absolute -top-7 right-4 inline-flex items-center px-2.5 py-1.5 text-xs rounded-t border border-b-0 border-border bg-surface-primary z-10 ${
-          pdfExporting
-            ? 'text-content-muted cursor-not-allowed'
-            : 'text-content-secondary hover:bg-surface-secondary hover:text-content-primary'
-        }`}
+        onClick={() => setShowPrintOptions(true)}
+        className="absolute -top-7 right-4 inline-flex items-center px-2.5 py-1.5 text-xs rounded-t border border-b-0 border-border bg-surface-primary z-10 text-content-secondary hover:bg-surface-secondary hover:text-content-primary"
         title={isElectron() ? "Export acquisition report as PDF" : "Print acquisition report"}
       >
         <Printer className="h-3.5 w-3.5 mr-1" />
-        {pdfExporting ? 'Exporting...' : isElectron() ? 'Export PDF' : 'Print'}
+        {isElectron() ? 'Export PDF' : 'Print'}
       </button>
 
       {/* Header with split layout - fixed height */}
@@ -581,29 +584,29 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
               {/* Right: README, Edit, and X buttons */}
               {isUsedAsSchema && (
                 <div className="flex items-center gap-1.5">
+                  {/* Images button */}
+                  <button
+                    onClick={() => setShowImageManager(true)}
+                    className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
+                    title="View/edit images"
+                  >
+                    <ImageIcon className="h-3.5 w-3.5 mr-1" />
+                    Images
+                  </button>
+
                   {/* README button - always opens editable modal */}
                   <button
                     onClick={() => setShowDetailedDescription(true)}
-                    className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
+                    className={`inline-flex items-center px-2 py-1 border text-xs rounded ${
+                      selectedItem.acquisition.detailedDescription
+                        ? 'text-blue-700 border-blue-500/30 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/30'
+                        : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
+                    }`}
                     title={selectedItem.acquisition.detailedDescription ? 'View/edit README' : 'Add README'}
                     data-tutorial="readme-button"
                   >
                     <Book className="h-3.5 w-3.5 mr-1" />
                     README
-                  </button>
-
-                  {/* Images button */}
-                  <button
-                    onClick={() => setShowImageManager(true)}
-                    className={`inline-flex items-center px-2 py-1 border text-xs rounded ${
-                      selectedItem.acquisition.images?.length
-                        ? 'border-brand-500/30 text-brand-600 bg-brand-50 dark:bg-brand-900/20'
-                        : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
-                    }`}
-                    title={selectedItem.acquisition.images?.length ? `View/edit images (${selectedItem.acquisition.images.length})` : 'Add images'}
-                  >
-                    <ImageIcon className="h-3.5 w-3.5 mr-1" />
-                    Images{selectedItem.acquisition.images?.length ? ` (${selectedItem.acquisition.images.length})` : ''}
                   </button>
 
                   {/* Edit toggle */}
@@ -671,7 +674,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
               {/* Right: View, Notes, and X buttons when data is attached */}
               {(hasAttachedData || (selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject')) && (
                 <div className="flex items-center gap-1">
-                  {/* View DICOM images button */}
+                  {/* View test data images button */}
                   {(() => {
                     const testDataBatchId = selectedItem.source === 'data' && selectedItem.dataUsageMode === 'validation-subject'
                       ? selectedItem.dicomFileBatchId
@@ -679,14 +682,14 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
                     return testDataBatchId && dicomFileCache.has(testDataBatchId) ? (
                       <button
                         onClick={() => {
-                          setDicomViewerBatchId(testDataBatchId!);
-                          setShowDicomViewer(true);
+                          setImageManagerInitialTab('test');
+                          setShowImageManager(true);
                         }}
                         className="inline-flex items-center px-2 py-1 border text-xs rounded border-border-secondary text-content-secondary hover:bg-surface-secondary"
-                        title="View DICOM images"
+                        title="View test data images"
                       >
-                        <Eye className="h-3 w-3 mr-1" />
-                        View
+                        <ImageIcon className="h-3 w-3 mr-1" />
+                        Images
                       </button>
                     ) : null;
                   })()}
@@ -804,37 +807,44 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
               complianceResultsRef.current = results;
             }}
             onSeriesView={(() => {
-              // Determine if per-series viewing is available
-              // Check both the main acquisition and attached data for seriesFileMapping
-              const acq = selectedItem.acquisition;
-              const attached = selectedItem.attachedData;
-              const mainMapping = acq?.seriesFileMapping;
-              const attachedMapping = attached?.seriesFileMapping;
-              const mainBatchId = selectedItem.dicomFileBatchId;
-              const attachedBatchId = selectedItem.attachedDataBatchId;
-
-              // Find which mapping + batchId pair has files
-              const hasMainFiles = mainMapping && mainBatchId && dicomFileCache.has(mainBatchId);
-              const hasAttachedFiles = attachedMapping && attachedBatchId && dicomFileCache.has(attachedBatchId);
-
-              if (!hasMainFiles && !hasAttachedFiles) return undefined;
+              const mapping = selectedItem.acquisition?.seriesFileMapping;
+              const batchId = selectedItem.dicomFileBatchId;
+              if (!mapping || !batchId || !dicomFileCache.has(batchId)) return undefined;
 
               return (_seriesIndex: number, seriesName: string) => {
-                const mapping = hasMainFiles ? mainMapping : attachedMapping;
-                const batchId = hasMainFiles ? mainBatchId : attachedBatchId;
-                const filenames = mapping?.[seriesName];
-                if (!filenames || !batchId) return;
-
+                const filenames = mapping[seriesName];
+                if (!filenames) return;
                 const allFiles = dicomFileCache.get(batchId) || [];
                 const filenameSet = new Set(filenames);
                 const seriesFiles = allFiles.filter(f => {
                   const key = (f as any).webkitRelativePath || f.name;
                   return filenameSet.has(key);
                 });
-
                 if (seriesFiles.length > 0) {
-                  setImageManagerOverrideFiles(seriesFiles);
-                  setImageManagerInitialTab('loaded');
+                  setImageManagerInitialTab('reference');
+                  setImageManagerInitialMatchFiles(seriesFiles);
+                  setShowImageManager(true);
+                }
+              };
+            })()}
+            onSeriesViewTestData={(() => {
+              const attached = selectedItem.attachedData;
+              const mapping = attached?.seriesFileMapping;
+              const batchId = selectedItem.attachedDataBatchId;
+              if (!mapping || !batchId || !dicomFileCache.has(batchId)) return undefined;
+
+              return (_seriesIndex: number, seriesName: string) => {
+                const filenames = mapping[seriesName];
+                if (!filenames) return;
+                const allFiles = dicomFileCache.get(batchId) || [];
+                const filenameSet = new Set(filenames);
+                const seriesFiles = allFiles.filter(f => {
+                  const key = (f as any).webkitRelativePath || f.name;
+                  return filenameSet.has(key);
+                });
+                if (seriesFiles.length > 0) {
+                  setImageManagerInitialTab('test');
+                  setImageManagerInitialMatchFiles(seriesFiles);
                   setShowImageManager(true);
                 }
               };
@@ -863,19 +873,24 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         isOpen={showImageManager}
         onClose={() => {
           setShowImageManager(false);
-          setImageManagerOverrideFiles(null);
           setImageManagerInitialTab(undefined);
+          setImageManagerInitialMatchFiles(undefined);
         }}
         title={selectedItem.acquisition.protocolName || 'Acquisition'}
         images={selectedItem.acquisition.images || []}
         onSave={(images) => onUpdateAcquisition({ images })}
         dicomFiles={
-          imageManagerOverrideFiles
-            ?? (selectedItem.source === 'data' && selectedItem.dicomFileBatchId
-              ? dicomFileCache.get(selectedItem.dicomFileBatchId)
-              : undefined)
+          selectedItem.source === 'data' && selectedItem.dicomFileBatchId
+            ? dicomFileCache.get(selectedItem.dicomFileBatchId)
+            : undefined
+        }
+        testDicomFiles={
+          selectedItem.attachedDataBatchId
+            ? dicomFileCache.get(selectedItem.attachedDataBatchId)
+            : undefined
         }
         initialTab={imageManagerInitialTab}
+        initialMatchFiles={imageManagerInitialMatchFiles}
       />
 
       {/* Test Data Notes Modal - for adding notes about test data (print report only) */}
@@ -896,18 +911,28 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         initialSelection={readmeModalData?.initialSelection || 'schema'}
       />
 
-      {/* DICOM Viewer Modal — for test data and per-series viewing */}
-      <DicomViewerModal
-        isOpen={showDicomViewer}
-        onClose={() => {
-          setShowDicomViewer(false);
-          setDicomViewerBatchId(null);
-          setDicomViewerFiles(null);
-          setDicomViewerLabel(null);
-        }}
-        files={dicomViewerFiles || (dicomViewerBatchId ? dicomFileCache.get(dicomViewerBatchId) || [] : [])}
-        acquisitionName={dicomViewerLabel || selectedItem.acquisition.protocolName || 'DICOM Data'}
+      {/* Print Options Modal */}
+      <PrintOptionsModal
+        isOpen={showPrintOptions}
+        onClose={() => setShowPrintOptions(false)}
+        onPrint={handlePrintAcquisition}
+        isPrinting={pdfExporting}
+        printLabel={isElectron() ? 'Export PDF' : 'Print'}
+        availableSections={(() => {
+          const sections: Array<'header' | 'readme' | 'schemaImages' | 'referenceDicoms' | 'testDicoms' | 'testNotes' | 'validationRules' | 'fieldsTable' | 'seriesTable' | 'uncheckedFields' | 'uncheckedSeriesFields'> = ['header', 'readme', 'fieldsTable', 'seriesTable', 'validationRules'];
+          if (selectedItem.acquisition.images && selectedItem.acquisition.images.length > 0) sections.push('schemaImages');
+          if (selectedItem.dicomFileBatchId && dicomFileCache.has(selectedItem.dicomFileBatchId)) sections.push('referenceDicoms');
+          if (selectedItem.attachedDataBatchId && dicomFileCache.has(selectedItem.attachedDataBatchId)) sections.push('testDicoms');
+          if (selectedItem.testDataNotes) sections.push('testNotes');
+          if (hasAttachedSchema || hasCreatedSchema) {
+            sections.push('uncheckedFields', 'uncheckedSeriesFields');
+          }
+          return sections;
+        })()}
+        hasImages
+        schemaImages={selectedItem.acquisition.images?.map(img => ({ label: img.label || '', url: img.url }))}
       />
+
     </div>
   );
 };

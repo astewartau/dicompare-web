@@ -3,7 +3,7 @@
  * Results are cached so each URL is only rendered once.
  */
 
-import { Niivue, SLICE_TYPE } from '@niivue/niivue';
+import { Niivue, SLICE_TYPE, MULTIPLANAR_TYPE } from '@niivue/niivue';
 
 const cache = new Map<string, string>();
 const pending = new Map<string, Promise<string | null>>();
@@ -14,8 +14,8 @@ let hiddenCanvas: HTMLCanvasElement | null = null;
 function getHiddenCanvas(): HTMLCanvasElement {
   if (!hiddenCanvas) {
     hiddenCanvas = document.createElement('canvas');
-    hiddenCanvas.width = 256;
-    hiddenCanvas.height = 192;
+    hiddenCanvas.width = 576;
+    hiddenCanvas.height = 256;
     hiddenCanvas.style.position = 'fixed';
     hiddenCanvas.style.left = '-9999px';
     hiddenCanvas.style.top = '-9999px';
@@ -53,7 +53,7 @@ async function processQueue() {
   running = false;
 }
 
-async function generateSingle(url: string): Promise<string | null> {
+async function generateSingle(url: string, nameOverride?: string): Promise<string | null> {
   const canvas = getHiddenCanvas();
 
   let nv: Niivue | null = null;
@@ -69,10 +69,10 @@ async function generateSingle(url: string): Promise<string | null> {
     });
 
     await nv.attachToCanvas(canvas);
-    nv.setSliceType(SLICE_TYPE.AXIAL);
+    nv.setMultiplanarLayout(MULTIPLANAR_TYPE.ROW);
+    nv.setSliceType(SLICE_TYPE.MULTIPLANAR);
 
-    // Determine a filename so NiiVue knows the format
-    const name = url.split('/').pop() || 'volume.nii.gz';
+    const name = nameOverride || url.split('/').pop() || 'volume.nii.gz';
     await nv.loadVolumes([{ url, name }]);
 
     if (nv.volumes.length === 0) return null;
@@ -91,6 +91,40 @@ async function generateSingle(url: string): Promise<string | null> {
     console.warn('Failed to generate NIfTI thumbnail for', url, err);
     return null;
   }
+}
+
+/**
+ * Get a thumbnail data URL for a NIfTI/DICOM volume.
+ * Returns cached result if available, otherwise generates one.
+ * Returns null if generation fails.
+ */
+/**
+ * Get a thumbnail data URL for a NIfTI volume from a File object.
+ * Uses blob URL internally. Cached by file name + size.
+ */
+export function getVolumeThumbnailFromFile(file: File): Promise<string | null> {
+  const cacheKey = `file:${file.name}:${file.size}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return Promise.resolve(cached);
+
+  const inflight = pending.get(cacheKey);
+  if (inflight) return inflight;
+
+  const promise = enqueue(async () => {
+    const blobUrl = URL.createObjectURL(file);
+    try {
+      return await generateSingle(blobUrl, file.name);
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  }).then(dataUrl => {
+    pending.delete(cacheKey);
+    if (dataUrl) cache.set(cacheKey, dataUrl);
+    return dataUrl;
+  });
+
+  pending.set(cacheKey, promise);
+  return promise;
 }
 
 /**

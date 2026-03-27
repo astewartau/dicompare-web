@@ -58,6 +58,7 @@ interface AcquisitionTableProps {
   onComplianceResultsChange?: (results: ComplianceFieldResult[]) => void;
   // Series-level DICOM viewer
   onSeriesView?: (seriesIndex: number, seriesName: string) => void;
+  onSeriesViewTestData?: (seriesIndex: number, seriesName: string) => void;
 }
 
 const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
@@ -94,6 +95,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   onValidationFunctionDelete,
   onComplianceResultsChange,
   onSeriesView,
+  onSeriesViewTestData,
 }) => {
   const [isExpanded, setIsExpanded] = useState(!isCollapsed);
   const [showValidationLibrary, setShowValidationLibrary] = useState(false);
@@ -809,6 +811,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'acquisition')}
                 onSeriesNameUpdate={onSeriesNameUpdate}
                 onSeriesView={onSeriesView}
+                onSeriesViewTestData={onSeriesViewTestData}
               />
             </div>
           )}

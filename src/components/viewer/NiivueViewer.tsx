@@ -21,11 +21,17 @@ export interface NiivueViewerProps {
   onVolumesDiscovered?: (volumes: VolumeInfo[]) => void;
   /** When set, parent controls which volume is displayed. Hides the internal volume dropdown. */
   externalVolumeIndex?: number;
+  /** Called with the Niivue instance once ready (and null on cleanup). Useful for syncing viewers. */
+  onNiivueReady?: (nv: Niivue | null) => void;
+  /** When set, parent controls the view mode and hides the internal view mode buttons. */
+  externalViewMode?: ViewMode;
+  /** Called when the user changes the view mode internally (only when externalViewMode is not set). */
+  onViewModeChange?: (mode: ViewMode) => void;
 }
 
-type ViewMode = 'multiplanar' | 'axial' | 'coronal' | 'sagittal' | 'render';
+export type ViewMode = 'multiplanar' | 'axial' | 'coronal' | 'sagittal' | 'render';
 
-const VIEW_MODES: { key: ViewMode; label: string; sliceType: number }[] = [
+export const VIEW_MODES: { key: ViewMode; label: string; sliceType: number }[] = [
   { key: 'multiplanar', label: '3-Plane', sliceType: SLICE_TYPE.MULTIPLANAR },
   { key: 'axial', label: 'Axial', sliceType: SLICE_TYPE.AXIAL },
   { key: 'coronal', label: 'Coronal', sliceType: SLICE_TYPE.CORONAL },
@@ -40,6 +46,9 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
   height,
   onVolumesDiscovered,
   externalVolumeIndex,
+  onNiivueReady,
+  externalViewMode,
+  onViewModeChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -49,6 +58,7 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [volumes, setVolumes] = useState<File[]>([]);
   const [selectedVolumeIndex, setSelectedVolumeIndex] = useState(0);
+  const [viewerReady, setViewerReady] = useState(false);
 
   // Toolbar state
   const [activeView, setActiveView] = useState<ViewMode>('multiplanar');
@@ -94,8 +104,9 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
         // Ignore cleanup errors
       }
       nvRef.current = null;
+      onNiivueReady?.(null);
     }
-  }, []);
+  }, [onNiivueReady]);
 
   // Load a specific volume into niivue and update windowing state
   const loadVolume = useCallback(async (nv: Niivue, file: File) => {
@@ -172,7 +183,9 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
     const initViewer = async () => {
       setIsLoading(true);
       setError(null);
+      setViewerReady(false);
       setActiveView('multiplanar');
+      lastAppliedExternalIndex.current = undefined;
       setCrosshairVisible(true);
 
       try {
@@ -185,6 +198,8 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
           await loadVolumeFromUrl(nv, urls![0].url, urls![0].name);
 
           nvRef.current = nv;
+          onNiivueReady?.(nv);
+          setViewerReady(true);
           setIsLoading(false);
         } else {
           setLoadingMessage('Converting DICOM to viewable format...');
@@ -208,16 +223,20 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
           }
 
           setVolumes(niftiFiles);
-          setSelectedVolumeIndex(0);
+          const initialIndex = (externalVolumeIndex != null && niftiFiles[externalVolumeIndex]) ? externalVolumeIndex : 0;
+          setSelectedVolumeIndex(initialIndex);
+          lastAppliedExternalIndex.current = externalVolumeIndex ?? undefined;
           onVolumesDiscovered?.(niftiFiles.map((f, i) => ({ name: f.name, index: i })));
           setLoadingMessage('Initializing viewer...');
 
           const nv = await initNiivue();
           if (cancelled || !nv) return;
 
-          await loadVolume(nv, niftiFiles[0]);
+          await loadVolume(nv, niftiFiles[initialIndex]);
 
           nvRef.current = nv;
+          onNiivueReady?.(nv);
+          setViewerReady(true);
           setIsLoading(false);
         }
       } catch (err) {
@@ -238,12 +257,15 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
   }, [active, files, urls, hasFiles, hasUrls, cleanup, loadVolume, loadVolumeFromUrl]);
 
   // Respond to external volume index changes
+  const lastAppliedExternalIndex = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (externalVolumeIndex == null || !nvRef.current || !volumes[externalVolumeIndex]) return;
-    if (externalVolumeIndex === selectedVolumeIndex) return;
+    if (externalVolumeIndex == null || !viewerReady || !nvRef.current || !volumes[externalVolumeIndex]) return;
+    // Skip if we already applied this exact index
+    if (externalVolumeIndex === lastAppliedExternalIndex.current) return;
+    lastAppliedExternalIndex.current = externalVolumeIndex;
     handleVolumeChangeInternal(externalVolumeIndex);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalVolumeIndex]);
+  }, [externalVolumeIndex, volumes, viewerReady]);
 
   const handleVolumeChangeInternal = async (index: number) => {
     if (!nvRef.current || !volumes[index]) return;
@@ -264,8 +286,20 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
     if (config) {
       nv.setSliceType(config.sliceType);
       setActiveView(mode);
+      onViewModeChange?.(mode);
     }
   };
+
+  // Respond to external view mode changes
+  useEffect(() => {
+    if (externalViewMode == null || !nvRef.current) return;
+    const config = VIEW_MODES.find(v => v.key === externalViewMode);
+    if (config && externalViewMode !== activeView) {
+      nvRef.current.setSliceType(config.sliceType);
+      setActiveView(externalViewMode);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalViewMode]);
 
   const handleVolumeChange = (index: number) => handleVolumeChangeInternal(index);
 
@@ -348,22 +382,24 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
 
           {/* View modes, windowing, actions */}
           <div className="px-4 py-1.5 flex items-center gap-3">
-            {/* View mode tabs */}
-            <div className="flex items-center gap-0.5 bg-surface-primary rounded-md p-0.5 border border-border-secondary">
-              {VIEW_MODES.map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => handleViewChange(key)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-                    activeView === key
-                      ? 'bg-brand-600 text-white'
-                      : 'text-content-secondary hover:text-content-primary hover:bg-surface-secondary'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* View mode tabs — hidden when externally controlled */}
+            {externalViewMode == null && (
+              <div className="flex items-center gap-0.5 bg-surface-primary rounded-md p-0.5 border border-border-secondary">
+                {VIEW_MODES.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => handleViewChange(key)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                      activeView === key
+                        ? 'bg-brand-600 text-white'
+                        : 'text-content-secondary hover:text-content-primary hover:bg-surface-secondary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="w-px h-5 bg-border-secondary" />
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit2, ArrowLeftRight, Eye, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Edit2, ArrowLeftRight, ImageIcon, Eye, EyeOff } from 'lucide-react';
 import { Series, SeriesField } from '../../types';
 import { ComplianceFieldResult } from '../../types/schema';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
@@ -23,6 +23,7 @@ interface SeriesTableProps {
   onFieldConvert: (fieldTag: string) => void;
   onSeriesNameUpdate?: (seriesIndex: number, name: string) => void;
   onSeriesView?: (seriesIndex: number, seriesName: string) => void;
+  onSeriesViewTestData?: (seriesIndex: number, seriesName: string) => void;
 }
 
 const SeriesTable: React.FC<SeriesTableProps> = ({
@@ -38,6 +39,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   onFieldConvert,
   onSeriesNameUpdate,
   onSeriesView,
+  onSeriesViewTestData,
 }) => {
   const [editingCell, setEditingCell] = useState<{
     seriesIndex: number;
@@ -194,8 +196,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                   Actions
                 </th>
               )}
-              {onSeriesView && (
-                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-12">
+              {(onSeriesView || onSeriesViewTestData) && (
+                <th className="px-2 py-1.5 text-center text-xs font-medium text-content-tertiary uppercase tracking-wider w-auto">
                 </th>
               )}
             </tr>
@@ -319,15 +321,30 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                     </div>
                   </td>
                 )}
-                {onSeriesView && (
+                {(onSeriesView || onSeriesViewTestData) && (
                   <td className="px-2 py-1.5 text-center">
-                    <button
-                      onClick={() => onSeriesView(seriesIndex, ser.name)}
-                      className="p-0.5 text-content-tertiary hover:text-brand-600 transition-colors"
-                      title={`View ${ser.name} images`}
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      {onSeriesView && (
+                        <button
+                          onClick={() => onSeriesView(seriesIndex, ser.name)}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-content-tertiary hover:text-brand-600 rounded hover:bg-brand-50 transition-colors"
+                          title={`View ${ser.name} reference images`}
+                        >
+                          <ImageIcon className="h-3 w-3" />
+                          {onSeriesViewTestData ? 'Ref' : 'Images'}
+                        </button>
+                      )}
+                      {onSeriesViewTestData && (
+                        <button
+                          onClick={() => onSeriesViewTestData(seriesIndex, ser.name)}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-content-tertiary hover:text-amber-600 rounded hover:bg-amber-50 transition-colors"
+                          title={`View ${ser.name} test data images`}
+                        >
+                          <ImageIcon className="h-3 w-3" />
+                          {onSeriesView ? 'Test' : 'Images'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
