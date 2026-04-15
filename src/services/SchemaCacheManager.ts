@@ -7,8 +7,8 @@ interface StoredSchema {
 }
 
 // Metaschema URLs - local in development, GitHub raw in production
-const METASCHEMA_URL_DEV = 'http://localhost:8000/dicompare/metaschema.json';
-const METASCHEMA_URL_PROD = 'https://raw.githubusercontent.com/astewartau/dicompare/master/dicompare/metaschema.json';
+const METASCHEMA_URL_DEV = 'http://localhost:3001/metaschema.json';
+const METASCHEMA_URL_PROD = 'https://raw.githubusercontent.com/astewartau/dicompare/main/dicompare/metaschema.json';
 
 export class SchemaCacheManager {
   private dbName = 'DicompareSchemasDB';
