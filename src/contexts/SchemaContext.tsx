@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo, ReactNode } from 'react';
 import { SchemaMetadata, SchemaTemplate } from '../types/schema';
 import { Acquisition } from '../types';
 import { schemaCacheManager } from '../services/SchemaCacheManager';
@@ -171,7 +171,7 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
     }
   };
 
-  const getSchemaContent = async (id: string): Promise<string | null> => {
+  const getSchemaContent = useCallback(async (id: string): Promise<string | null> => {
     try {
       const schema = await schemaCacheManager.getSchema(id);
       return schema?.content || null;
@@ -179,10 +179,10 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
       setError(err instanceof Error ? err.message : 'Failed to load schema content');
       return null;
     }
-  };
+  }, []);
 
   // Universal schema content loader (handles both uploaded and library schemas)
-  const getUniversalSchemaContent = async (schemaId: string): Promise<string | null> => {
+  const getUniversalSchemaContent = useCallback(async (schemaId: string): Promise<string | null> => {
     // Try uploaded schemas first
     const uploadedContent = await getSchemaContent(schemaId);
     if (uploadedContent) {
@@ -200,7 +200,7 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
     }
 
     return null;
-  };
+  }, [getSchemaContent]);
 
   // Parse acquisitions from schema content (with caching)
   const parseSchemaAcquisitions = async (schemaId: string): Promise<SchemaAcquisition[]> => {
