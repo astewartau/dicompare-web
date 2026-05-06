@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to set (without v prefix, e.g., 0.2.0)'
+        description: 'Version to set (without v prefix, e.g., 0.5.2)'
         required: false
         default: ''
 
@@ -44,10 +44,18 @@ jobs:
         run: |
           sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '${{ steps.version.outputs.VERSION }}'/" src/version.ts
 
-      - name: Commit and push version bump
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json src/version.ts
-          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
-          git push || echo "Nothing to push"
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
+          git push
+
+      - name: Move tag to include version bump commit
+        if: github.event_name == 'release'
+        run: |
+          TAG="v${{ steps.version.outputs.VERSION }}"
+          git tag -f "$TAG"
+          git push origin "$TAG" --force
