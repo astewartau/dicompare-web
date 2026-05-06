@@ -10,7 +10,8 @@ import SchemaViewerPage from './pages/SchemaViewerPage';
 const isElectron = typeof window !== 'undefined' &&
   (window.location.protocol === 'file:' || navigator.userAgent.includes('Electron'));
 const Router = isElectron ? HashRouter : BrowserRouter;
-const basename = isElectron ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '');
+const rawBase = import.meta.env.BASE_URL.replace(/\/$/, '');
+const basename = isElectron ? undefined : (rawBase === '.' || rawBase === '') ? '' : rawBase;
 
 function App() {
   return (
