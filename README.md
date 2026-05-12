@@ -43,6 +43,92 @@ The desktop app includes full offline support (no internet required after instal
 
 ---
 
+## Embedding dicompare in your tool
+
+dicompare provides reusable JavaScript modules for adding DICOM protocol validation to any browser-based tool. These are served from the deployed app and can be imported directly — no npm install or build step required.
+
+### Quick start
+
+```js
+import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
+import { DicompareReportRenderer } from 'https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js';
+
+// 1. Create controller with your schema
+const controller = new DicompareController({
+  schemaUrl: 'https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json',
+  updateOutput: (msg) => console.log(msg)
+});
+
+// 2. Retain DICOM files (e.g. from a file input)
+await controller.retainDicomFiles(fileInput.files);
+
+// 3. Run validation
+const { acquisitions, complianceResults, schema } = await controller.runValidation((progress) => {
+  console.log(`${progress.percentage}% — ${progress.currentOperation}`);
+});
+
+// 4. Render results
+const renderer = new DicompareReportRenderer();
+renderer.render(document.getElementById('report-container'), { acquisitions, complianceResults, schema });
+
+// 5. (Optional) Generate printable HTML
+const printHtml = renderer.generatePrintHtml({ acquisitions, complianceResults, schema });
+const printWindow = window.open('', '_blank');
+printWindow.document.write(printHtml);
+```
+
+### Embed files
+
+All files are served from `https://dicompare.neurodesk.org/embed/`:
+
+| File | Description |
+|------|-------------|
+| `DicompareController.js` | ES module. Manages Pyodide worker lifecycle, DICOM analysis, and schema validation. |
+| `DicompareReportRenderer.js` | ES module. Renders compliance results into DOM elements and generates printable HTML reports. |
+| `dicompare-worker.js` | Web Worker script. Runs Pyodide + dicompare Python package in a background thread. Loaded automatically by the controller via fetch + blob URL (no cross-origin issues). |
+| `dicompare-embed.css` | Optional stylesheet for the report renderer. Uses CSS custom properties with fallback defaults — override `--color-primary`, `--color-border`, etc. to match your app's theme. |
+
+### Available schemas
+
+Schemas from the [dicompare schema library](https://dicompare.neurodesk.org) are served at `https://dicompare.neurodesk.org/schemas/`. See [`public/schemas/index.json`](public/schemas/index.json) for the full list. Examples:
+
+- `https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json`
+- `https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json`
+- `https://dicompare.neurodesk.org/schemas/hcp_schema.json`
+
+### CSS theming
+
+The embed CSS uses CSS custom properties. Define these in your app to match your theme:
+
+```css
+:root {
+  --color-primary: #2563eb;
+  --color-border: #e5e7eb;
+  --color-text: #1a1a1a;
+  --color-text-muted: #6b7280;
+  --color-text-dim: #9ca3af;
+  --color-surface: #f9fafb;
+  --color-surface-elevated: #f3f4f6;
+  --color-success: #16a34a;
+  --color-success-bg: #dff0d8;
+  --color-error: #dc2626;
+  --color-error-bg: #f2dede;
+  --color-warning: #ca8a04;
+  --color-warning-bg: #fcf8e3;
+}
+```
+
+If you don't define these, sensible defaults are used.
+
+### Examples
+
+Tools using dicompare embed:
+
+- [SeedSeg](https://seedseg.neurodesk.org) — Prostate fiducial marker segmentation (validates against SeedSeg T1w protocol)
+- [qsmbly](https://qsmbly.neurodesk.org) — Quantitative susceptibility mapping (validates against QSM consensus guidelines)
+
+---
+
 ## Contributing
 
 ### Prerequisites
