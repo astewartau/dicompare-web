@@ -1,9 +1,12 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+test('renders the landing page', async () => {
+  await act(async () => {
+    render(<App />);
+  });
+
+  expect(screen.getByRole('heading', { name: /dicompare/i })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /open workspace/i })).toBeInTheDocument();
 });
