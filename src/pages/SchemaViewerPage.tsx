@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ShieldCheck, Github, BookOpen, Check, Square, ArrowLeft,
-  Download, Link2, Layers, Quote, Shield, AlertTriangle, Loader, CheckSquare, Printer, Brain,
+  Download, Link2, Layers, Quote, Shield, AlertTriangle, Loader, CheckSquare, Printer, Brain, LayoutGrid,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -328,6 +328,16 @@ const SchemaViewerPage: React.FC = () => {
               <Quote className="h-5 w-5" />
               <span className="hidden sm:inline">Cite</span>
             </button>
+            <a
+              href="https://neurodesk.org/getting-started/hosted/webapps/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+              title="More Neurodesk web apps"
+            >
+              <LayoutGrid className="h-5 w-5" />
+              <span className="hidden sm:inline">More Apps</span>
+            </a>
             <a
               href="https://github.com/astewartau/dicompare-web"
               target="_blank"

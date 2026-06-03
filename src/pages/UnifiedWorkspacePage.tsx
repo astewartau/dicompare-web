@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, Github, Layers, Quote, Shield } from 'lucide-react';
+import { ShieldCheck, Github, Layers, Quote, Shield, LayoutGrid } from 'lucide-react';
 import { WorkspaceProviders } from '../contexts/WorkspaceProviders';
 import { PyodideProvider } from '../contexts/PyodideContext';
 import ThemeToggle from '../components/common/ThemeToggle';
@@ -48,6 +48,16 @@ const UnifiedWorkspacePage: React.FC = () => {
                   <Quote className="h-5 w-5" />
                   <span>Cite</span>
                 </button>
+                <a
+                  href="https://neurodesk.org/getting-started/hosted/webapps/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+                  title="More Neurodesk web apps"
+                >
+                  <LayoutGrid className="h-5 w-5" />
+                  <span>More Apps</span>
+                </a>
                 <a
                   href="https://github.com/astewartau/dicompare-web"
                   target="_blank"

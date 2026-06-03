@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Github, ShieldCheck, Layers, Upload, FileCheck, Printer, Lock, ArrowRight, Quote, Shield, BookOpen } from 'lucide-react';
+import { Github, ShieldCheck, Layers, Upload, FileCheck, Printer, Lock, ArrowRight, Quote, Shield, BookOpen, LayoutGrid } from 'lucide-react';
 import ThemeToggle from '../components/common/ThemeToggle';
 import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
@@ -37,6 +37,16 @@ const LandingPage: React.FC = () => {
               <Quote className="h-5 w-5" />
               <span>Cite</span>
             </button>
+            <a
+              href="https://neurodesk.org/getting-started/hosted/webapps/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+              title="More Neurodesk web apps"
+            >
+              <LayoutGrid className="h-5 w-5" />
+              <span>More Apps</span>
+            </a>
             <a
               href="https://github.com/astewartau/dicompare-web"
               target="_blank"
