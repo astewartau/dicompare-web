@@ -96,7 +96,6 @@ const SchemaViewerPage: React.FC = () => {
   const [selectedNavItem, setSelectedNavItem] = useState<'schema' | number>(
     acqParam !== null ? parseInt(acqParam, 10) : 'schema'
   );
-  const [copiedLink, setCopiedLink] = useState(false);
   const [copiedDoi, setCopiedDoi] = useState(false);
   const [doi, setDoi] = useState<SchemaDoiEntry | null>(null);
   const [showCitation, setShowCitation] = useState(false);
@@ -252,12 +251,6 @@ const SchemaViewerPage: React.FC = () => {
     a.download = `${schemaData.name || 'schema'}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleCopyDoi = () => {
@@ -480,28 +473,18 @@ const SchemaViewerPage: React.FC = () => {
                     <span>{Object.keys(schemaData.acquisitions || {}).length} acquisitions</span>
                   </div>
                   {doi && doi.concept_doi && (
-                    <div className="mt-2 flex items-center gap-2 text-xs">
-                      <span className="text-content-tertiary">DOI</span>
+                    <div className="mt-2 text-xs text-content-tertiary">
+                      <span>DOI: </span>
                       <a
                         href={doiUrl(doi.concept_doi) || undefined}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 truncate"
-                        title={`Concept DOI (resolves to latest version) — view on Zenodo`}
+                        className="font-mono text-brand-600 hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300"
+                        title="Concept DOI — always resolves to the latest version on Zenodo"
                       >
                         {doi.concept_doi}
+                        <ExternalLink className="inline-block h-3 w-3 ml-1 align-middle" />
                       </a>
-                      {doi.zenodo_url && (
-                        <a
-                          href={doi.zenodo_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-content-tertiary hover:text-content-primary flex-shrink-0"
-                          title="View record on Zenodo"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      )}
                     </div>
                   )}
                 </div>
@@ -509,20 +492,13 @@ const SchemaViewerPage: React.FC = () => {
                 {/* Action buttons */}
                 <div className="px-4 py-3 border-b border-border flex-shrink-0">
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={handleCopyLink}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
-                    >
-                      <Link2 className="h-3.5 w-3.5" />
-                      {copiedLink ? 'Copied!' : 'Copy link'}
-                    </button>
                     {doi && doi.concept_doi && (
                       <button
                         onClick={handleCopyDoi}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
                         title="Copy the schema's DOI (https://doi.org/…)"
                       >
-                        <Quote className="h-3.5 w-3.5" />
+                        <Link2 className="h-3.5 w-3.5" />
                         {copiedDoi ? 'Copied!' : 'Copy DOI'}
                       </button>
                     )}

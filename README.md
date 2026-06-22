@@ -142,14 +142,22 @@ citation dialog.
 - **`.github/scripts/publish-zenodo.py`** — stdlib-only Python script that walks
   [`public/schemas/index.json`](public/schemas/index.json), checksums each schema, and
   creates a Zenodo deposition (or a *new version* of an existing record when the content
-  changed, preserving a stable **concept DOI**). It writes the results to
-  [`public/schemas/doi-mapping.json`](public/schemas/doi-mapping.json), keyed by schema slug.
-- **`.github/workflows/publish-dois.yml`** — runs the script on pushes that touch
-  `public/schemas/**` (and via manual `workflow_dispatch`), commits the updated
-  `doi-mapping.json` back to `main`, and redeploys the site.
-- **Frontend** reads `doi-mapping.json` at runtime ([`src/utils/schemaDoi.ts`](src/utils/schemaDoi.ts))
-  and displays the DOI in [`SchemaViewerPage`](src/pages/SchemaViewerPage.tsx). Schemas
-  without a published DOI simply omit the DOI UI.
+  changed, preserving a stable **concept DOI**). It writes the results to a mapping file
+  (`--mapping`), keyed by schema slug.
+- **`.github/workflows/publish-dois.yml`** — runs on the same cadence as the deploy: when a
+  release triggers the **Version Bump** workflow (automatic runs publish to **production**),
+  or on demand via `workflow_dispatch` (default **sandbox**). It commits the updated mapping
+  back to `main` and, for production runs, redeploys the site.
+- **Two mapping files** keep sandbox and production records (whose IDs are incompatible)
+  apart:
+  - [`public/schemas/doi-mapping.json`](public/schemas/doi-mapping.json) — **production**,
+    read by the site.
+  - [`public/schemas/doi-mapping.sandbox.json`](public/schemas/doi-mapping.sandbox.json) —
+    **sandbox**, testing only.
+- **Frontend** reads the production `doi-mapping.json` at runtime
+  ([`src/utils/schemaDoi.ts`](src/utils/schemaDoi.ts)) and displays the DOI in
+  [`SchemaViewerPage`](src/pages/SchemaViewerPage.tsx). Schemas without a published DOI
+  simply omit the DOI UI. (Sandbox DOIs are never shown — they don't resolve on `doi.org`.)
 
 ### Setup
 
@@ -158,13 +166,16 @@ citation dialog.
    testing — its DOIs are not citable but the workflow is identical.
 2. Add the token as a repository secret: `ZENODO_SANDBOX_TOKEN` (sandbox) and/or
    `ZENODO_TOKEN` (production).
-3. Run the workflow manually the first time
-   (**Actions → Publish Schema DOIs → Run workflow**), choosing `sandbox` or `production`.
+3. Test against sandbox first via **Actions → Publish Schema DOIs → Run workflow → sandbox**.
+   Production DOIs are then minted automatically on each new release, or on demand by running
+   the workflow with the `production` target.
 
-You can also dry-run locally without a token:
+You can also dry-run locally without a token (defaults to the production mapping):
 
 ```bash
 python3 .github/scripts/publish-zenodo.py --dry-run
+# or preview against the sandbox mapping:
+python3 .github/scripts/publish-zenodo.py --dry-run --mapping public/schemas/doi-mapping.sandbox.json
 ```
 
 ---
