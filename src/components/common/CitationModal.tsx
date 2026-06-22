@@ -5,32 +5,46 @@ import { VERSION } from '../../version';
 interface CitationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Optional schema citation block (shown when viewing a schema with a DOI). */
+  schema?: {
+    name: string;
+    version?: string;
+    authors?: string[];
+    conceptDoi: string;
+  };
 }
 
 const CITATION_TEXT = `Ashley Wilton Stewart, Gabriele Amorosino, Jelle Veraart, Anibal S. Heinsfeld, Steffen Bollmann, Franco Pestilli. dicompare v${VERSION} [Computer software]. https://github.com/astewartau/dicompare-web`;
 
-const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose }) => {
+const copyText = async (text: string, setCopied: (v: boolean) => void) => {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }
+  setCopied(true);
+  setTimeout(() => setCopied(false), 2000);
+};
+
+const buildSchemaCitation = (schema: NonNullable<CitationModalProps['schema']>): string => {
+  const authors = schema.authors && schema.authors.length > 0 ? schema.authors.join(', ') : 'dicompare';
+  const version = schema.version ? ` v${schema.version}` : '';
+  return `${authors}. ${schema.name}${version} [Data set]. Zenodo. https://doi.org/${schema.conceptDoi}`;
+};
+
+const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose, schema }) => {
   const [copied, setCopied] = React.useState(false);
+  const [copiedSchema, setCopiedSchema] = React.useState(false);
 
   if (!isOpen) return null;
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(CITATION_TEXT);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // fallback
-      const textarea = document.createElement('textarea');
-      textarea.value = CITATION_TEXT;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+  const handleCopy = () => copyText(CITATION_TEXT, setCopied);
+  const schemaCitation = schema ? buildSchemaCitation(schema) : null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
@@ -67,6 +81,25 @@ const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose }) => {
               {CITATION_TEXT}
             </div>
           </div>
+
+          {/* Schema citation (when viewing a schema with a published DOI) */}
+          {schemaCitation && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Cite this schema</span>
+                <button
+                  onClick={() => copyText(schemaCitation, setCopiedSchema)}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs text-content-secondary hover:text-content-primary hover:bg-surface-secondary rounded transition-colors"
+                >
+                  {copiedSchema ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                  {copiedSchema ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <div className="bg-surface-secondary border border-border rounded-md p-4 text-sm text-content-secondary leading-relaxed font-mono">
+                {schemaCitation}
+              </div>
+            </div>
+          )}
 
           {/* Authors */}
           <div>
