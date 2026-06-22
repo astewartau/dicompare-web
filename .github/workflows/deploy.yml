@@ -22,6 +22,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Build the tip of main at job runtime, not the SHA pinned when the
+          # deploy was dispatched. Ensures a freshly-committed doi-mapping.json
+          # (pushed by publish-dois.yml just before it triggers this deploy) is
+          # included rather than racing against it.
+          ref: main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
