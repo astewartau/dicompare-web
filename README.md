@@ -129,6 +129,46 @@ Tools using dicompare embed:
 
 ---
 
+## Schema DOIs (Zenodo)
+
+Each library schema can be assigned a citable [Zenodo](https://zenodo.org/) DOI. The DOI
+record hosts the schema's JSON file and links back to its dicompare page
+(e.g. `https://dicompare.neurodesk.org/schema/MS_CMSC_Guidelines_v1.0`). When a DOI exists,
+the schema viewer shows it with a **Copy DOI** button and a "Cite this schema" entry in the
+citation dialog.
+
+### How it works
+
+- **`.github/scripts/publish-zenodo.py`** — stdlib-only Python script that walks
+  [`public/schemas/index.json`](public/schemas/index.json), checksums each schema, and
+  creates a Zenodo deposition (or a *new version* of an existing record when the content
+  changed, preserving a stable **concept DOI**). It writes the results to
+  [`public/schemas/doi-mapping.json`](public/schemas/doi-mapping.json), keyed by schema slug.
+- **`.github/workflows/publish-dois.yml`** — runs the script on pushes that touch
+  `public/schemas/**` (and via manual `workflow_dispatch`), commits the updated
+  `doi-mapping.json` back to `main`, and redeploys the site.
+- **Frontend** reads `doi-mapping.json` at runtime ([`src/utils/schemaDoi.ts`](src/utils/schemaDoi.ts))
+  and displays the DOI in [`SchemaViewerPage`](src/pages/SchemaViewerPage.tsx). Schemas
+  without a published DOI simply omit the DOI UI.
+
+### Setup
+
+1. Create a Zenodo account and a personal access token with the `deposit:write` and
+   `deposit:actions` scopes. Use [sandbox.zenodo.org](https://sandbox.zenodo.org) for
+   testing — its DOIs are not citable but the workflow is identical.
+2. Add the token as a repository secret: `ZENODO_SANDBOX_TOKEN` (sandbox) and/or
+   `ZENODO_TOKEN` (production).
+3. Run the workflow manually the first time
+   (**Actions → Publish Schema DOIs → Run workflow**), choosing `sandbox` or `production`.
+
+You can also dry-run locally without a token:
+
+```bash
+python3 .github/scripts/publish-zenodo.py --dry-run
+```
+
+---
+
 ## Contributing
 
 ### Prerequisites

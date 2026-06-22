@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ShieldCheck, Github, BookOpen, Check, Square, ArrowLeft,
-  Download, Link2, Layers, Quote, Shield, AlertTriangle, Loader, CheckSquare, Printer, Brain, LayoutGrid,
+  Download, Link2, Layers, Quote, Shield, AlertTriangle, Loader, CheckSquare, Printer, Brain, LayoutGrid, ExternalLink,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -20,6 +20,7 @@ import { fetchExternalSchema, validateSchemaStructure } from '../utils/externalS
 import { generateSchemaViewerPrintHtml, openPrintWindow, exportToPdf, isElectron, PrintSectionOptions } from '../utils/printReportGenerator';
 import PrintOptionsModal from '../components/common/PrintOptionsModal';
 import { isVolumeUrl, isFlatImageUrl } from '../utils/imageHelpers';
+import { getSchemaDoi, doiUrl, SchemaDoiEntry } from '../utils/schemaDoi';
 import ImageManagerModal from '../components/schema/ImageManagerModal';
 import VolumeThumbnail from '../components/common/VolumeThumbnail';
 
@@ -96,6 +97,8 @@ const SchemaViewerPage: React.FC = () => {
     acqParam !== null ? parseInt(acqParam, 10) : 'schema'
   );
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedDoi, setCopiedDoi] = useState(false);
+  const [doi, setDoi] = useState<SchemaDoiEntry | null>(null);
   const [showCitation, setShowCitation] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
@@ -174,6 +177,18 @@ const SchemaViewerPage: React.FC = () => {
     return () => { cancelled = true; };
   }, [id, externalUrl, isCatalogMode, getUniversalSchemaContent]);
 
+  // Load the Zenodo DOI for library schemas (keyed by slug == route id)
+  useEffect(() => {
+    let cancelled = false;
+    setDoi(null);
+    if (id) {
+      getSchemaDoi(id).then((entry) => {
+        if (!cancelled) setDoi(entry);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [id]);
+
   // Selection handlers
   const toggleSelection = (index: number) => {
     setSelectedIndices(prev => {
@@ -243,6 +258,14 @@ const SchemaViewerPage: React.FC = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyDoi = () => {
+    const url = doiUrl(doi?.concept_doi);
+    if (!url) return;
+    navigator.clipboard.writeText(url);
+    setCopiedDoi(true);
+    setTimeout(() => setCopiedDoi(false), 2000);
   };
 
   const handlePrint = async (sections?: PrintSectionOptions) => {
@@ -351,7 +374,16 @@ const SchemaViewerPage: React.FC = () => {
           </div>
         </div>
       </header>
-      <CitationModal isOpen={showCitation} onClose={() => setShowCitation(false)} />
+      <CitationModal
+        isOpen={showCitation}
+        onClose={() => setShowCitation(false)}
+        schema={doi && doi.concept_doi && schemaData ? {
+          name: schemaData.name || 'Untitled Schema',
+          version: schemaData.version,
+          authors: schemaData.authors,
+          conceptDoi: doi.concept_doi,
+        } : undefined}
+      />
       <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <ImageManagerModal
         isOpen={imageModalAcq !== null}
@@ -447,6 +479,31 @@ const SchemaViewerPage: React.FC = () => {
                     )}
                     <span>{Object.keys(schemaData.acquisitions || {}).length} acquisitions</span>
                   </div>
+                  {doi && doi.concept_doi && (
+                    <div className="mt-2 flex items-center gap-2 text-xs">
+                      <span className="text-content-tertiary">DOI</span>
+                      <a
+                        href={doiUrl(doi.concept_doi) || undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 truncate"
+                        title={`Concept DOI (resolves to latest version) — view on Zenodo`}
+                      >
+                        {doi.concept_doi}
+                      </a>
+                      {doi.zenodo_url && (
+                        <a
+                          href={doi.zenodo_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-content-tertiary hover:text-content-primary flex-shrink-0"
+                          title="View record on Zenodo"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Action buttons */}
@@ -459,6 +516,16 @@ const SchemaViewerPage: React.FC = () => {
                       <Link2 className="h-3.5 w-3.5" />
                       {copiedLink ? 'Copied!' : 'Copy link'}
                     </button>
+                    {doi && doi.concept_doi && (
+                      <button
+                        onClick={handleCopyDoi}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+                        title="Copy the schema's DOI (https://doi.org/…)"
+                      >
+                        <Quote className="h-3.5 w-3.5" />
+                        {copiedDoi ? 'Copied!' : 'Copy DOI'}
+                      </button>
+                    )}
                     <button
                       onClick={handleDownload}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
