@@ -52,9 +52,9 @@ const DropZone: React.FC<DropZoneProps> = ({
   showLibraryButton = false,
   showBlankButton = false,
   emptyLabel = 'No data',
-  emptyDescription = 'Drop DICOMs or protocols (.pro, .exar1, ExamCard)',
+  emptyDescription = 'Drop DICOMs or protocols (.pro, .exar1, ExamCard, Siemens print protocol .xml/.txt)',
   fileInputId,
-  acceptedFiles = '.dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol',
+  acceptedFiles = '.dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol,.xml,.txt',
 }) => {
   // Determine if this zone is disabled (other zone is processing)
   const isDisabled = isProcessing && processingTarget !== variant;

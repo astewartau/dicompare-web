@@ -32,15 +32,51 @@ export interface UseFileProcessingReturn {
   clearError: () => void;
 }
 
+export type ProtocolFileType = 'pro' | 'exar1' | 'examcard' | 'lxprotocol' | 'printprot';
+
 /**
  * Detect protocol file type from filename.
+ *
+ * Note: `.xml` and `.txt` are treated as Siemens "MR print protocol" candidates
+ * here (they are never DICOM). The actual format is confirmed by sniffing the
+ * file content in `refineProtocolFileType`, which also re-routes an ExamCard
+ * that happens to carry an `.xml` extension.
  */
-export function getProtocolFileType(fileName: string): 'pro' | 'exar1' | 'examcard' | 'lxprotocol' | null {
+export function getProtocolFileType(fileName: string): ProtocolFileType | null {
   const lowerName = fileName.toLowerCase();
   if (lowerName.endsWith('.pro')) return 'pro';
   if (lowerName.endsWith('.exar1')) return 'exar1';
   if (lowerName.endsWith('.examcard')) return 'examcard';
   if (lowerName === 'lxprotocol') return 'lxprotocol';
+  if (lowerName.endsWith('.xml') || lowerName.endsWith('.txt')) return 'printprot';
+  return null;
+}
+
+/**
+ * Refine a name-based protocol type using the file's content. Disambiguates the
+ * XML formats: a Philips ExamCard is SOAP-enveloped, a Siemens print protocol
+ * has a <PrintProtocol>/<PrintOut> root. Returns null if the content does not
+ * look like a recognised protocol (so a stray .xml/.txt is ignored).
+ */
+function refineProtocolFileType(
+  fileType: ProtocolFileType,
+  content: Uint8Array
+): ProtocolFileType | null {
+  if (fileType !== 'printprot') return fileType;
+
+  const head = new TextDecoder('utf-8', { fatal: false })
+    .decode(content.subarray(0, 2048));
+
+  if (head.includes('SOAP-ENV:Envelope') || head.includes('ExamCards.ECModel')) {
+    return 'examcard';
+  }
+  if (head.includes('<PrintProtocol') || head.includes('<PrintOut')) {
+    return 'printprot'; // Siemens print-protocol XML
+  }
+  // TXT print protocol: scanner header + Siemens protocol path line.
+  if (head.includes('MAGNETOM') || /\\\\USER\\/.test(head)) {
+    return 'printprot';
+  }
   return null;
 }
 
@@ -98,9 +134,17 @@ export function useFileProcessing(): UseFileProcessingReturn {
         }));
 
         for (const file of protocolFiles) {
-          const fileType = getProtocolFileType(file.name)!;
+          const nameType = getProtocolFileType(file.name)!;
           const fileContent = await file.arrayBuffer();
           const uint8Content = new Uint8Array(fileContent);
+
+          // Confirm/disambiguate the format from content (e.g. .xml could be an
+          // ExamCard or a Siemens print protocol). Skip unrecognised .xml/.txt.
+          const fileType = refineProtocolFileType(nameType, uint8Content);
+          if (fileType === null) {
+            console.warn(`[useFileProcessing] Skipping unrecognised protocol file: ${file.name}`);
+            continue;
+          }
 
           let result: Acquisition[] = [];
           if (fileType === 'pro') {
@@ -112,6 +156,8 @@ export function useFileProcessing(): UseFileProcessingReturn {
             result = await dicompareAPI.loadExamCardFile(uint8Content, file.name);
           } else if (fileType === 'lxprotocol') {
             result = await dicompareAPI.loadLxProtocolFile(uint8Content, file.name);
+          } else if (fileType === 'printprot') {
+            result = await dicompareAPI.loadPrintProtFile(uint8Content, file.name);
           }
 
           acquisitions.push(...result);

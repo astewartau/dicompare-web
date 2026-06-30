@@ -436,6 +436,10 @@ class DicompareWorkerAPI {
     return this._loadProtocolFile(fileContent, fileName, 'lxprotocol');
   }
 
+  async loadPrintProtFile(fileContent: Uint8Array, fileName: string): Promise<UIAcquisition[]> {
+    return this._loadProtocolFile(fileContent, fileName, 'printprot');
+  }
+
   private async _loadProtocolFile(
     fileContent: Uint8Array,
     fileName: string,
