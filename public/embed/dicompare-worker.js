@@ -12,7 +12,7 @@
 
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/';
 // Version updated automatically by the version-bump GitHub Action on release
-const DICOMPARE_PACKAGE = 'dicompare==0.3.0';
+const DICOMPARE_PACKAGE = 'dicompare==0.4.0';
 
 let pyodide = null;
 
