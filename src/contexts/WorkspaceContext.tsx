@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useCallback, ReactNode, useRef, useState } from 'react';
+import { Waypoints, X } from 'lucide-react';
 import { Acquisition, DicomField, Series, SeriesField, SelectedValidationFunction, AcquisitionSelection } from '../types';
 import { SchemaBinding, UnifiedSchema } from '../hooks/useSchemaService';
 import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
@@ -6,6 +7,7 @@ import { generateDicomsFromAcquisition } from '../utils/testDataGeneration';
 import { convertSchemaToAcquisition } from '../utils/schemaToAcquisition';
 import { createEmptyAcquisition } from '../utils/workspaceHelpers';
 import { processUploadedFiles } from '../utils/fileUploadUtils';
+import { getGradientFileType, computeGradientBindings } from '../hooks/useFileProcessing';
 import { dicomFileCache } from '../utils/dicomFileCache';
 
 // Import from new contexts
@@ -131,7 +133,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   // Consume the new contexts
   const { isProcessing, processingTarget, processingProgress, processingError, processFiles, processFileHandles } = useProcessing();
   const { schemaMetadata, setSchemaMetadata, resetMetadata } = useSchemaMetadata();
-  const { items, selectedId, setItems, selectItem, removeItem, reorderItems, clearItems } = useItemManagement();
+  const { items, selectedId, setItems, selectItem, removeItem, reorderItems, clearItems, flashItems } = useItemManagement();
   const editing = useSchemaEditing();
 
   // Local state for attachment selection modal
@@ -139,6 +141,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   // Local state for multi-acquisition matching modal
   const [pendingMatchingOperation, setPendingMatchingOperation] = useState<PendingMatchingOperation | null>(null);
+
+  // Transient notice shown when a dropped gradient file couldn't be matched.
+  const [gradientNotice, setGradientNotice] = useState<string | null>(null);
 
   // Cache for schema acquisitions
   const schemaAcquisitionsRef = useRef<Map<string, Acquisition>>(new Map());
@@ -240,6 +245,51 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   // Add items from DICOM files or protocol files
   const addFromData = useCallback(async (files: FileList, mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
+    const fileArray = Array.from(files);
+
+    // Gradient-only drop: don't create new items — bind the descriptors to the
+    // matching diffusion acquisitions already in the workspace. Scope the match
+    // to the side the file was dropped on: a gradient dropped on the Reference
+    // area only attaches to reference acquisitions, and one dropped on the Test
+    // data area only to test-data acquisitions.
+    if (fileArray.length > 0 && fileArray.every(f => getGradientFileType(f.name) !== null)) {
+      const wantTestData = mode === 'validation-subject';
+      const acqIsTestData = (it: WorkspaceItem) =>
+        it.source === 'data' && it.dataUsageMode === 'validation-subject';
+      const acqIsReference = (it: WorkspaceItem) =>
+        it.source === 'schema' ||
+        (it.source === 'data' && it.dataUsageMode !== 'validation-subject') ||
+        (it.source === 'empty' && !!it.hasCreatedSchema);
+      const candidates = items.filter(it =>
+        it.acquisition && (wantTestData ? acqIsTestData(it) : acqIsReference(it))
+      );
+      const existingAcqs = candidates.map(it => it.acquisition) as Acquisition[];
+      const bindings = await computeGradientBindings(existingAcqs, fileArray);
+      if (bindings.length === 0) {
+        const names = fileArray.map(f => f.name).join(', ');
+        setGradientNotice(
+          `Read the gradient file (${names}), but found no matching diffusion acquisition to attach it to. ` +
+          `Load the corresponding protocol or DICOMs first — the file binds to the acquisition whose direction set it names.`
+        );
+        return;
+      }
+      const fieldsById = new Map(bindings.map(b => [b.acquisition.id, b.fields]));
+      const matchedIds = items
+        .filter(it => it.acquisition && fieldsById.has(it.acquisition.id))
+        .map(it => it.id);
+      setItems(prev => prev.map(it =>
+        it.acquisition && fieldsById.has(it.acquisition.id)
+          ? { ...it, acquisition: { ...it.acquisition, acquisitionFields: fieldsById.get(it.acquisition.id)! } }
+          : it
+      ));
+      // Navigate to one matched acquisition and flash all that were updated.
+      if (matchedIds.length > 0) {
+        selectItem(matchedIds[0]);
+        flashItems(matchedIds);
+      }
+      return;
+    }
+
     const target = mode === 'validation-subject' ? 'data' : 'schema';
     const { acquisitions: newAcquisitions, dicomFileBatchId } = await processFiles(files, target);
 
@@ -272,8 +322,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         }
       }
 
-      // Default: select the first new item
-      selectItem(newItems[0].id);
+      // Only navigate into an acquisition when a single one was added; for
+      // multiple, stay on the From data page so the user keeps their overview.
+      if (newItems.length === 1) {
+        selectItem(newItems[0].id);
+      }
     }
   }, [processFiles, setItems, selectItem, items]);
 
@@ -312,8 +365,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         }
       }
 
-      // Default: select the first new item
-      selectItem(newItems[0].id);
+      // Only navigate into an acquisition when a single one was added; for
+      // multiple, stay on the From data page so the user keeps their overview.
+      if (newItems.length === 1) {
+        selectItem(newItems[0].id);
+      }
     }
   }, [processFileHandles, setItems, selectItem, items]);
 
@@ -1100,6 +1156,41 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   return (
     <WorkspaceContext.Provider value={value}>
       {children}
+      {gradientNotice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setGradientNotice(null)}
+        >
+          <div
+            className="bg-surface-primary rounded-lg shadow-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-full flex-shrink-0">
+                <Waypoints className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-content-primary">Gradient file not attached</h3>
+                <p className="text-sm text-content-secondary mt-1">{gradientNotice}</p>
+              </div>
+              <button
+                onClick={() => setGradientNotice(null)}
+                className="p-1 rounded text-content-tertiary hover:text-content-primary hover:bg-surface-secondary flex-shrink-0"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setGradientNotice(null)}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-brand-600 text-white hover:bg-brand-700"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </WorkspaceContext.Provider>
   );
 };

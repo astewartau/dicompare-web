@@ -36,6 +36,8 @@ export interface DropZoneProps {
   fileInputId: string;
   /** Accepted file types */
   acceptedFiles?: string;
+  /** Extra classes for the drop container (e.g. to fill available height) */
+  className?: string;
 }
 
 const DropZone: React.FC<DropZoneProps> = ({
@@ -52,16 +54,17 @@ const DropZone: React.FC<DropZoneProps> = ({
   showLibraryButton = false,
   showBlankButton = false,
   emptyLabel = 'No data',
-  emptyDescription = 'Drop DICOMs or protocols (.pro, .exar1, ExamCard, Siemens print protocol .xml/.txt)',
+  emptyDescription = 'Drop DICOMs or protocols (.pro, .exar1, ExamCard, Siemens print protocol .xml/.txt), plus diffusion gradients (.dvs/.bvec/.bval)',
   fileInputId,
-  acceptedFiles = '.dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol,.xml,.txt',
+  acceptedFiles = '.dcm,.dicom,.zip,.pro,.exar1,.ExamCard,.examcard,LxProtocol,.xml,.txt,.dvs,.bvec,.bval',
+  className = '',
 }) => {
   // Determine if this zone is disabled (other zone is processing)
   const isDisabled = isProcessing && processingTarget !== variant;
   // Determine if this zone is actively processing
   const isActivelyProcessing = isProcessing && processingTarget === variant;
 
-  const containerClasses = `border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+  const containerClasses = `border-2 border-dashed rounded-lg p-4 text-center transition-colors ${className} ${
     isDisabled
       ? 'border-border-secondary bg-surface-tertiary/50 opacity-50 cursor-not-allowed'
       : dropZone.isDragOver

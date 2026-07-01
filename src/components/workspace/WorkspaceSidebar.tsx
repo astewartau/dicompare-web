@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, FileText, FlaskConical, X, GripVertical, Save, Trash2, Home, Link2 } from 'lucide-react';
+import { Plus, FileText, FlaskConical, X, GripVertical, UploadCloud, Trash2, Home, Link2 } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { WorkspaceItem, SchemaMetadata } from '../../contexts/WorkspaceContext';
+import { useItemManagement } from '../../contexts/ItemManagementContext';
 import { getItemFlags } from '../../utils/workspaceHelpers';
 
 interface WorkspaceSidebarProps {
@@ -48,6 +49,8 @@ const SortableWorkspaceItem: React.FC<{
 
   const { hasSchema, hasData } = getItemFlags(item);
   const isMatched = hasSchema && hasData;
+  const { flashItemIds } = useItemManagement();
+  const isFlashing = flashItemIds.has(item.id);
 
   return (
     <div
@@ -55,7 +58,7 @@ const SortableWorkspaceItem: React.FC<{
       style={style}
       onClick={onSelect}
       data-tutorial={isMatched ? 'matched-item' : undefined}
-      className={`border rounded-lg p-3 cursor-pointer transition-all ${
+      className={`border rounded-lg p-3 cursor-pointer transition-all ${isFlashing ? 'animate-flash-green' : ''} ${
         isSelected
           ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 shadow-md'
           : 'border-border hover:border-brand-300 dark:hover:border-brand-700 hover:bg-surface-secondary'
@@ -235,7 +238,7 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               }`}
               title="Save schema"
             >
-              <Save className="h-4 w-4" />
+              <UploadCloud className="h-4 w-4" />
             </button>
             <button
               onClick={(e) => {

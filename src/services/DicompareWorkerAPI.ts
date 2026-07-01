@@ -5,7 +5,7 @@
 
 import type { WorkerRequest, WorkerResponse, PendingRequest, ProgressPayload } from '../workers/workerTypes';
 import { SchemaTemplate } from '../types/schema';
-import { Acquisition as UIAcquisition } from '../types';
+import { Acquisition as UIAcquisition, DicomField } from '../types';
 import { FileObject } from '../utils/fileUploadUtils';
 import { fieldToSchemaField } from '../utils/schemaFieldConverters';
 
@@ -438,6 +438,22 @@ class DicompareWorkerAPI {
 
   async loadPrintProtFile(fileContent: Uint8Array, fileName: string): Promise<UIAcquisition[]> {
     return this._loadProtocolFile(fileContent, fileName, 'printprot');
+  }
+
+  /**
+   * Derive diffusion descriptor fields from a gradient file (.dvs) or an FSL
+   * bvec/bval pair. Returns UI-ready derived fields to merge into an
+   * acquisition. `bMax` (the acquisition's DiffusionBValue) is required for
+   * .dvs and ignored for bvec/bval.
+   */
+  async loadGradientFile(
+    files: Record<string, string>,
+    bMax: number | null
+  ): Promise<{ fields: DicomField[] }> {
+    await this.ensureInitialized();
+    return this.sendRequest<{ fields: DicomField[] }>(
+      { type: 'loadGradientFile', payload: { files, bMax } }
+    );
   }
 
   private async _loadProtocolFile(

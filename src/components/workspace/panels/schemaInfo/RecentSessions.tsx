@@ -9,6 +9,7 @@ interface RecentSessionsProps {
   onLoadSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onCreateNew: () => void;
+  onClearAll: () => void;
 }
 
 function formatStorageSize(bytes: number): string {
@@ -37,8 +38,8 @@ const RecentSessions: React.FC<RecentSessionsProps> = ({
   onLoadSession,
   onDeleteSession,
   onCreateNew,
+  onClearAll,
 }) => {
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
 
   const handleLoad = async (sessionId: string) => {
@@ -48,11 +49,6 @@ const RecentSessions: React.FC<RecentSessionsProps> = ({
     } finally {
       setLoadingSessionId(null);
     }
-  };
-
-  const handleDelete = async (sessionId: string) => {
-    await onDeleteSession(sessionId);
-    setConfirmDeleteId(null);
   };
 
   if (isLoading) {
@@ -75,13 +71,22 @@ const RecentSessions: React.FC<RecentSessionsProps> = ({
     <div className="mt-8">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-content-tertiary uppercase tracking-wider">Recent Sessions</h3>
-        <button
-          onClick={onCreateNew}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          New session
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onCreateNew}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New session
+          </button>
+          <button
+            onClick={onClearAll}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-border text-content-secondary hover:text-status-error hover:border-status-error hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Clear all
+          </button>
+        </div>
       </div>
       <p className="text-sm text-content-secondary mb-4">
         Your workspace is saved automatically. Open a previous session to continue where you left off.
@@ -89,7 +94,6 @@ const RecentSessions: React.FC<RecentSessionsProps> = ({
       <div className="space-y-2">
         {sessions.map((session) => {
           const isActive = session.id === activeSessionId;
-          const isDeleting = confirmDeleteId === session.id;
           const isLoadingThis = loadingSessionId === session.id;
 
           return (
@@ -116,7 +120,7 @@ const RecentSessions: React.FC<RecentSessionsProps> = ({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setConfirmDeleteId(isDeleting ? null : session.id);
+                    onDeleteSession(session.id);
                   }}
                   className="p-1 rounded text-content-tertiary hover:text-status-error hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
                   title="Delete session"
@@ -137,25 +141,7 @@ const RecentSessions: React.FC<RecentSessionsProps> = ({
                 </span>
               </div>
 
-              {isDeleting && (
-                <div className="mt-2 ml-6 flex items-center gap-2">
-                  <span className="text-xs text-status-error">Delete this session?</span>
-                  <button
-                    onClick={() => handleDelete(session.id)}
-                    className="text-xs px-2 py-0.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    onClick={() => setConfirmDeleteId(null)}
-                    className="text-xs px-2 py-0.5 rounded border border-border text-content-secondary hover:bg-surface-secondary transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {!isActive && !isDeleting && (
+              {!isActive && (
                 <div className="mt-2 ml-6">
                   <button
                     onClick={() => handleLoad(session.id)}

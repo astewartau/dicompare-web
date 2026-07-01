@@ -21,6 +21,7 @@ import { dicomFileCache } from '../../utils/dicomFileCache';
 import { generatePrintReportHtml, openPrintWindow, isElectron, exportToPdf, PrintSectionOptions } from '../../utils/printReportGenerator';
 import PrintOptionsModal from '../common/PrintOptionsModal';
 import { useDropZone } from '../../hooks/useDropZone';
+import GradientDropZone from './GradientDropZone';
 import DropZone from '../common/DropZone';
 import { SchemaLibraryPanel, AddFromDataPanel, SchemaInfoPanel, MatchingPanel } from './panels';
 import type { SchemaInfoTab } from './panels';
@@ -449,6 +450,19 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             />
           </div>
         )}
+        {/* Supplementary diffusion gradient files - shown for diffusion
+            acquisitions on both the Reference and Test data sides. */}
+        {!hasAttachedData && !hasAttachedSchema &&
+          (selectedItem.acquisition.acquisitionFields || []).some(
+            f => (f.keyword || f.name) === 'DiffusionBValue' || (f.keyword || f.name) === 'DiffusionDirectionSet'
+          ) && (
+          <div className="mt-3 pl-12">
+            <GradientDropZone
+              acquisition={selectedItem.acquisition}
+              onUpdateAcquisition={onUpdateAcquisition}
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -513,6 +527,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             showBlankButton={!hasAttachedData && isEmptyItem}
             emptyLabel="No reference"
             fileInputId={`load-schema-ref-${selectedItem.id}`}
+            className="h-full flex flex-col items-center justify-center"
           />
         </div>
       );
@@ -553,6 +568,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             dropZone={mainDropZone}
             emptyLabel="No test data"
             fileInputId={`load-data-${selectedItem.id}`}
+            className="h-full flex flex-col items-center justify-center"
           />
         </div>
       );
@@ -577,7 +593,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         {/* Split layout: Schema (left) | Data (right) */}
         <div className="grid grid-cols-2 gap-6">
           {/* Left side - Schema */}
-          <div className="border-r border-border pr-6">
+          <div className="border-r border-border pr-6 flex flex-col">
             <div className="flex items-center justify-between mb-3">
               {/* Left: label */}
               <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Reference</div>
@@ -667,7 +683,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
           </div>
 
           {/* Right side - Data */}
-          <div className="pl-0">
+          <div className="pl-0 flex flex-col">
             <div className="flex items-center justify-between mb-3">
               {/* Left: label */}
               <div className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Test data</div>

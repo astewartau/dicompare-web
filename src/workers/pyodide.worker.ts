@@ -444,6 +444,31 @@ json.dumps(acquisitions, default=str)
   sendSuccess(id, JSON.parse(result as string));
 }
 
+async function handleLoadGradientFile(
+  id: string,
+  payload: { files: Record<string, string>; bMax: number | null }
+): Promise<void> {
+  if (!pyodide) throw new Error('Pyodide not initialized');
+
+  const { files, bMax } = payload;
+  console.log(`[Worker] Deriving diffusion descriptors from gradient file(s): ${Object.keys(files).join(', ')}`);
+
+  pyodide.globals.set('_gradient_files_json', JSON.stringify(files));
+  pyodide.globals.set('_gradient_bmax', bMax);
+
+  const result = await pyodide.runPython(`
+import json
+from dicompare.interface import load_gradient_file_for_ui
+
+_files = json.loads(_gradient_files_json)
+_bmax = _gradient_bmax
+descriptors = load_gradient_file_for_ui(_files, _bmax)
+json.dumps(descriptors, default=str)
+  `);
+
+  sendSuccess(id, JSON.parse(result as string));
+}
+
 async function handleSearchFields(
   id: string,
   payload: { query: string; limit: number }
@@ -653,6 +678,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break;
       case 'loadProtocolFile':
         await handleLoadProtocolFile(id, request.payload);
+        break;
+      case 'loadGradientFile':
+        await handleLoadGradientFile(id, request.payload);
         break;
       case 'searchFields':
         await handleSearchFields(id, request.payload);

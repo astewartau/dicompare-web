@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader, X, Book, Edit2, Eye, Download, Code, Check, AlertTriangle, Layers, Save, Copy, ExternalLink } from 'lucide-react';
+import { Loader, X, Book, Edit2, Eye, Download, Code, Check, AlertTriangle, Layers, UploadCloud, Copy, ExternalLink, Github } from 'lucide-react';
 import { SchemaMetadata } from '../../../contexts/WorkspaceContext';
 import { useWorkspace } from '../../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../../contexts/SchemaContext';
@@ -45,6 +45,8 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
   const [pendingSaveJson, setPendingSaveJson] = useState<string | null>(null);
   const [existingSchemaId, setExistingSchemaId] = useState<string | null>(null);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishJson, setPublishJson] = useState<string | null>(null);
 
   // Sync editedReadme with schemaMetadata
   useEffect(() => {
@@ -296,7 +298,8 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
     setExistingSchemaId(null);
   };
 
-  // Publish to GitHub - copies JSON to clipboard and opens a pre-filled GitHub issue
+  // Publish to GitHub - validates, generates the JSON, then explains the next
+  // steps in a modal before handing off to GitHub.
   const handlePublish = async () => {
     if (!isMetadataValid) {
       setShowValidationErrors(true);
@@ -310,12 +313,20 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
       return;
     }
 
+    setPublishJson(jsonToPublish);
+    setShowPublishModal(true);
+  };
+
+  // Continue from the publish modal: copy the schema (on this user gesture so
+  // clipboard permission is granted) and open the pre-filled GitHub issue.
+  const handleConfirmPublish = async () => {
+    if (!publishJson) return;
+
     try {
-      await copyToClipboard(jsonToPublish);
+      await copyToClipboard(publishJson);
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
       setSaveMessage({ type: 'error', text: 'Failed to copy schema to clipboard.' });
-      return;
     }
 
     const name = schemaMetadata?.name || 'Untitled';
@@ -348,7 +359,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
       `&labels=${encodeURIComponent('schema-submission')}`;
 
     window.open(url, '_blank');
-    setSaveMessage({ type: 'success', text: 'Schema JSON copied to clipboard. Paste it into the GitHub issue.' });
+    setShowPublishModal(false);
   };
 
   return (
@@ -375,7 +386,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                 : 'text-content-tertiary hover:text-content-secondary'
             }`}
           >
-            <Save className="h-4 w-4 inline mr-1.5" />
+            <UploadCloud className="h-4 w-4 inline mr-1.5" />
             Save schema
           </button>
           <button
@@ -439,7 +450,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                   </>
                 ) : (
                   <>
-                    <Save className="h-4 w-4 mr-1.5" />
+                    <UploadCloud className="h-4 w-4 mr-1.5" />
                     Save to Library
                   </>
                 )}
@@ -447,11 +458,12 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
               <button
                 onClick={handlePublish}
                 disabled={isGeneratingPreview || isSavingToLibrary}
-                className="flex items-center px-3 py-2 text-sm border border-border-secondary rounded-lg hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed text-content-secondary"
+                className="flex items-center px-3 py-2 text-sm font-medium text-white rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Submit this schema for inclusion in the public dicompare schema library"
               >
-                <ExternalLink className="h-4 w-4 mr-1.5" />
+                <UploadCloud className="h-4 w-4 mr-1.5" />
                 Publish to dicompare
+                <ExternalLink className="h-3.5 w-3.5 ml-1.5 opacity-80" />
               </button>
             </div>
           </div>
@@ -779,6 +791,70 @@ Any additional technical details or vendor-specific information."
           </div>
         )}
       </div>
+      )}
+
+      {/* Publish-to-dicompare next-steps modal */}
+      {showPublishModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowPublishModal(false)}
+        >
+          <div
+            className="bg-surface-primary rounded-xl shadow-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex-shrink-0">
+                <Github className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-content-primary">Publish to dicompare</h3>
+                <p className="text-sm text-content-secondary mt-1">
+                  You're about to submit this schema to the public dicompare library on GitHub. Here's what happens when you continue:
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPublishModal(false)}
+                className="p-1 rounded text-content-tertiary hover:text-content-primary hover:bg-surface-secondary flex-shrink-0"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <ol className="mt-4 space-y-2.5">
+              {[
+                <>The schema JSON is <strong className="text-content-primary">copied to your clipboard</strong>.</>,
+                <>A pre-filled GitHub issue opens in a <strong className="text-content-primary">new tab</strong>.</>,
+                <>Log in to GitHub if you aren't already.</>,
+                <>Paste (<span className="font-mono text-xs">Ctrl/Cmd + V</span>) the schema into the <span className="font-mono text-xs">```json</span> code block.</>,
+                <>Click <strong className="text-content-primary">Submit new issue</strong> — that's it!</>,
+              ].map((step, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold flex items-center justify-center mt-0.5">
+                    {i + 1}
+                  </span>
+                  <span className="text-sm text-content-secondary">{step}</span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setShowPublishModal(false)}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-border-secondary text-content-secondary hover:bg-surface-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmPublish}
+                className="flex items-center px-4 py-2 text-sm font-medium text-white rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-sm transition-colors"
+              >
+                Continue to GitHub
+                <ExternalLink className="h-3.5 w-3.5 ml-1.5 opacity-80" />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

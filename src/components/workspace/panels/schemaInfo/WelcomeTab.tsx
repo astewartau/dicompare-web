@@ -26,6 +26,12 @@ const WelcomeTab: React.FC = () => {
     endSession();
   };
 
+  const handleClearAllSessions = async () => {
+    for (const session of sessions) {
+      await deleteSession(session.id);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6 min-h-0">
       {/* Getting Started */}
@@ -109,6 +115,7 @@ const WelcomeTab: React.FC = () => {
         onLoadSession={loadSession}
         onDeleteSession={deleteSession}
         onCreateNew={handleCreateNew}
+        onClearAll={handleClearAllSessions}
       />
     </div>
   );

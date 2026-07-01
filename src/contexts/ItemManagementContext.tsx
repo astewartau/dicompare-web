@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, Dispatch, SetStateAction } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, ReactNode, Dispatch, SetStateAction } from 'react';
 import { WorkspaceItem } from './workspace/types';
 import { dicomFileCache } from '../utils/dicomFileCache';
 
@@ -13,6 +13,10 @@ interface ItemManagementContextType {
   reorderItems: (fromIndex: number, toIndex: number) => void;
   clearItems: () => void;
   getSelectedItem: () => WorkspaceItem | undefined;
+  /** Item ids currently flashing (transient highlight in the list). */
+  flashItemIds: Set<string>;
+  /** Briefly flash the given item ids in the acquisitions list. */
+  flashItems: (ids: string[]) => void;
 }
 
 const ItemManagementContext = createContext<ItemManagementContextType | undefined>(undefined);
@@ -24,9 +28,18 @@ interface ItemManagementProviderProps {
 export const ItemManagementProvider: React.FC<ItemManagementProviderProps> = ({ children }) => {
   const [items, setItems] = useState<WorkspaceItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [flashItemIds, setFlashItemIds] = useState<Set<string>>(new Set());
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectItem = useCallback((id: string | null) => {
     setSelectedId(id);
+  }, []);
+
+  const flashItems = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    setFlashItemIds(new Set(ids));
+    flashTimeoutRef.current = setTimeout(() => setFlashItemIds(new Set()), 1600);
   }, []);
 
   const removeItem = useCallback((id: string) => {
@@ -84,6 +97,8 @@ export const ItemManagementProvider: React.FC<ItemManagementProviderProps> = ({ 
       reorderItems,
       clearItems,
       getSelectedItem,
+      flashItemIds,
+      flashItems,
     }}>
       {children}
     </ItemManagementContext.Provider>

@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* One-shot green flash to highlight items that were just updated
+   (e.g. an acquisition that received diffusion gradient descriptors). */
+@keyframes flash-green {
+  0%   { background-color: rgb(34 197 94 / 0.30); box-shadow: 0 0 0 2px rgb(34 197 94 / 0.70); }
+  100% { background-color: transparent;           box-shadow: 0 0 0 2px transparent; }
+}
+.animate-flash-green {
+  animation: flash-green 1.5s ease-out;
+}
+
 /* Theme color variables */
 :root {
   /* Surfaces */

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Loader2, Zap, FlaskConical, FileText, GripVertical, ArrowRight, Check, X } from 'lucide-react';
+import { Loader2, Zap, FlaskConical, FileText, GripVertical, ArrowRight, Check, X, Waypoints } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -20,6 +20,29 @@ import {
   suggestMatches,
   getScoreForPair
 } from '../../../utils/acquisitionMatching';
+
+// Summary of derived diffusion gradient descriptors on an acquisition, if any.
+function gradientSummary(acq: Acquisition): { shells: number; volumes?: number } | null {
+  const get = (name: string) => acq.acquisitionFields?.find(f => (f.keyword || f.name) === name)?.value;
+  const shells = get('NumberOfDiffusionShells');
+  if (shells === undefined) return null;
+  return { shells: shells as number, volumes: get('NumberOfDiffusionVolumes') as number | undefined };
+}
+
+// Small chip indicating diffusion gradient descriptors are attached.
+const GradientChip: React.FC<{ acquisition: Acquisition }> = ({ acquisition }) => {
+  const summary = gradientSummary(acquisition);
+  if (!summary) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+      title={`Diffusion gradient attached · ${summary.shells} shell${summary.shells === 1 ? '' : 's'}${summary.volumes !== undefined ? ` · ${summary.volumes} volumes` : ''}`}
+    >
+      <Waypoints className="h-3 w-3" />
+      {summary.shells} shell{summary.shells === 1 ? '' : 's'}
+    </span>
+  );
+};
 
 // Helper to get color classes based on compliance score
 function getScoreConfig(score: number | undefined): {
@@ -131,6 +154,9 @@ const DraggableDataCard: React.FC<{
               {acquisition.seriesDescription}
             </div>
           )}
+          {gradientSummary(acquisition) && (
+            <div className="mt-1"><GradientChip acquisition={acquisition} /></div>
+          )}
         </div>
         {score !== undefined && (
           <div className={`flex-shrink-0 px-2 py-1 rounded-full text-xs font-semibold ${colors.badge}`}>
@@ -209,7 +235,17 @@ const UnmatchedZone: React.FC<{
           }
         `}
       >
-        {unmatchedIndices.length === 0 ? (
+        {uploadedAcquisitions.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-4">
+            <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-3">
+              <FlaskConical className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">No test data yet</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Add test data in the <span className="font-medium text-brand-600 dark:text-brand-400">From data</span> area, then it'll appear here to match.
+            </p>
+          </div>
+        ) : unmatchedIndices.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-4">
             <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
               <Check className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
@@ -285,6 +321,9 @@ const ReferenceSlot: React.FC<{
           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
             {slot.item.acquisition.protocolName || 'Reference'}
           </div>
+          {gradientSummary(slot.item.acquisition) && (
+            <div className="mt-0.5"><GradientChip acquisition={slot.item.acquisition} /></div>
+          )}
         </div>
         {matchedData && matchScore !== undefined && (
           <div className="flex items-center gap-1.5">
