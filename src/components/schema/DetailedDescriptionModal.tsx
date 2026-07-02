@@ -2,6 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Edit2, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import MarkdownToolbar from '../common/MarkdownToolbar';
+import { markdownComponents } from '../../utils/markdownRenderers';
+import { handleMarkdownListContinuation } from '../../utils/markdownEditor';
+import { handleTableTab } from '../../utils/tableEditor';
 
 interface DetailedDescriptionModalProps {
   isOpen: boolean;
@@ -10,6 +14,10 @@ interface DetailedDescriptionModalProps {
   description: string;
   onSave?: (description: string) => void;
   isReadOnly?: boolean;
+  /** Other acquisition names in this schema, for the "Link to acquisition" tool. */
+  acquisitionNames?: string[];
+  /** Called when an internal #acq link is clicked in the preview. */
+  onNavigateToAcquisition?: (name: string) => void;
 }
 
 const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
@@ -19,10 +27,14 @@ const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
   description,
   onSave,
   isReadOnly = false,
+  acquisitionNames = [],
+  onNavigateToAcquisition,
 }) => {
   const [activeTab, setActiveTab] = useState<'preview' | 'edit'>('preview');
   const [editedDescription, setEditedDescription] = useState(description);
   const lastSavedRef = useRef(description);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const otherAcquisitions = acquisitionNames.filter((n) => n !== title);
 
   useEffect(() => {
     setEditedDescription(description);
@@ -109,10 +121,22 @@ const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
               <div className="text-xs text-content-tertiary mb-2">
                 Supports GitHub-flavored Markdown (headings, lists, tables, code blocks, etc.)
               </div>
+              <MarkdownToolbar
+                textareaRef={textareaRef}
+                value={editedDescription}
+                onChange={setEditedDescription}
+                acquisitionNames={otherAcquisitions}
+              />
               <textarea
+                ref={textareaRef}
                 value={editedDescription}
                 onChange={(e) => setEditedDescription(e.target.value)}
-                className="flex-1 w-full min-h-[400px] p-4 border border-border-secondary rounded-lg font-mono text-sm bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
+                onKeyDown={(e) => {
+                  if (!handleTableTab(e, editedDescription, setEditedDescription)) {
+                    handleMarkdownListContinuation(e, editedDescription, setEditedDescription);
+                  }
+                }}
+                className="flex-1 w-full min-h-[400px] p-4 border border-border-secondary rounded-b-lg font-mono text-sm bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
                 placeholder="Enter a detailed description using Markdown...
 
 ## Overview
@@ -173,11 +197,7 @@ Add any technical details or vendor-specific information."
                     th: ({ children }) => <th className="px-4 py-2 text-left text-xs font-semibold text-content-secondary uppercase tracking-wider">{children}</th>,
                     td: ({ children }) => <td className="px-4 py-2 text-sm text-content-secondary border-t border-border">{children}</td>,
                     hr: () => <hr className="my-6 border-border" />,
-                    a: ({ href, children }) => (
-                      <a href={href} className="text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 underline" target="_blank" rel="noopener noreferrer">
-                        {children}
-                      </a>
-                    ),
+                    a: markdownComponents(onNavigateToAcquisition).a,
                   }}
                 >
                   {editedDescription}

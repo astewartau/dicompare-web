@@ -11,12 +11,13 @@ import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
 import AcquisitionTable from '../components/schema/AcquisitionTable';
 import UnifiedSchemaSelector from '../components/schema/UnifiedSchemaSelector';
-import { VERSION } from '../version';
+import VersionBadge from '../components/common/VersionBadge';
 import { Acquisition } from '../types';
 import { useSchemaService, UnifiedSchema } from '../hooks/useSchemaService';
 import { useSchemaContext } from '../contexts/SchemaContext';
 import { convertSchemaToAcquisitions } from '../utils/schemaToAcquisition';
 import { fetchExternalSchema, validateSchemaStructure } from '../utils/externalSchemaFetch';
+import { markdownComponents as acqLinkComponents } from '../utils/markdownRenderers';
 import { generateSchemaViewerPrintHtml, openPrintWindow, exportToPdf, isElectron, PrintSectionOptions } from '../utils/printReportGenerator';
 import PrintOptionsModal from '../components/common/PrintOptionsModal';
 import { isVolumeUrl, isFlatImageUrl } from '../utils/imageHelpers';
@@ -98,6 +99,18 @@ const SchemaViewerPage: React.FC = () => {
   );
   const [copiedDoi, setCopiedDoi] = useState(false);
   const [doi, setDoi] = useState<SchemaDoiEntry | null>(null);
+
+  // Resolve internal #acq links (in READMEs) to the matching acquisition in this
+  // schema. Navigate via the URL param (same as the sidebar) so nav state stays
+  // in sync — setting selectedNavItem directly desyncs the Schema README button.
+  const handleAcqNavigate = (name: string) => {
+    const idx = acquisitions.findIndex(a => a.protocolName === name);
+    if (idx >= 0) {
+      setSearchParams(prev => { prev.set('acq', String(idx)); return prev; }, { replace: true });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+  const mdComponents = { ...markdownComponents, a: acqLinkComponents(handleAcqNavigate).a };
   const [showCitation, setShowCitation] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
@@ -363,7 +376,7 @@ const SchemaViewerPage: React.FC = () => {
               <Github className="h-5 w-5" />
               <span className="hidden sm:inline">GitHub</span>
             </a>
-            <span className="text-xs font-medium text-content-tertiary opacity-60 ml-1">v{VERSION}</span>
+            <VersionBadge />
           </div>
         </div>
       </header>
@@ -635,7 +648,7 @@ const SchemaViewerPage: React.FC = () => {
                   /* Schema README view */
                   schemaData.description ? (
                     <div className="prose prose-sm max-w-none dark:prose-invert">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                         {schemaData.description}
                       </ReactMarkdown>
                     </div>
@@ -684,7 +697,7 @@ const SchemaViewerPage: React.FC = () => {
                         {acq.detailedDescription && (
                           <div className="mb-6 pb-6 border-b border-border">
                             <div className="prose prose-sm max-w-none dark:prose-invert">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                                 {acq.detailedDescription}
                               </ReactMarkdown>
                             </div>

@@ -4,7 +4,7 @@ import { Github, ShieldCheck, Layers, Upload, FileCheck, Printer, Lock, ArrowRig
 import ThemeToggle from '../components/common/ThemeToggle';
 import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
-import { VERSION } from '../version';
+import VersionBadge from '../components/common/VersionBadge';
 
 const LandingPage: React.FC = () => {
   const [showCitation, setShowCitation] = useState(false);
@@ -56,7 +56,7 @@ const LandingPage: React.FC = () => {
               <Github className="h-5 w-5" />
               <span>GitHub</span>
             </a>
-            <span className="text-xs font-medium text-content-tertiary opacity-60 ml-1">v{VERSION}</span>
+            <VersionBadge />
           </div>
         </div>
       </header>

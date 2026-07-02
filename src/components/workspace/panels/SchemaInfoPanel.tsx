@@ -1,5 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Loader, X, Book, Edit2, Eye, Download, Code, Check, AlertTriangle, Layers, UploadCloud, Copy, ExternalLink, Github } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import MarkdownToolbar from '../../common/MarkdownToolbar';
+import { markdownComponents } from '../../../utils/markdownRenderers';
+import { handleMarkdownListContinuation } from '../../../utils/markdownEditor';
+import { handleTableTab } from '../../../utils/tableEditor';
+import { Loader, X, Book, Edit2, Eye, Download, Code, Check, AlertTriangle, Layers, UploadCloud, Copy, ExternalLink, Github, Globe, Quote, GitBranch } from 'lucide-react';
 import { SchemaMetadata } from '../../../contexts/WorkspaceContext';
 import { useWorkspace } from '../../../contexts/WorkspaceContext';
 import { useSchemaContext } from '../../../contexts/SchemaContext';
@@ -47,6 +51,17 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishJson, setPublishJson] = useState<string | null>(null);
+  const readmeTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Acquisition names in the workspace, for the "Link to acquisition" tool and
+  // for resolving internal #acq links from the schema README.
+  const workspaceAcquisitionNames = workspace.items
+    .map(it => it.acquisition?.protocolName)
+    .filter((n): n is string => !!n);
+  const navigateToAcquisition = (name: string) => {
+    const target = workspace.items.find(it => it.acquisition?.protocolName === name);
+    if (target) workspace.selectItem(target.id);
+  };
 
   // Sync editedReadme with schemaMetadata
   useEffect(() => {
@@ -688,9 +703,22 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
 
           {/* Tab Content */}
           {isEditingReadme ? (
+            <>
+            <MarkdownToolbar
+              textareaRef={readmeTextareaRef}
+              value={editedReadme}
+              onChange={setEditedReadme}
+              acquisitionNames={workspaceAcquisitionNames}
+            />
             <textarea
+              ref={readmeTextareaRef}
               value={editedReadme}
               onChange={(e) => setEditedReadme(e.target.value)}
+              onKeyDown={(e) => {
+                if (!handleTableTab(e, editedReadme, setEditedReadme)) {
+                  handleMarkdownListContinuation(e, editedReadme, setEditedReadme);
+                }
+              }}
               className="flex-1 w-full min-h-[350px] p-4 border border-t-0 border-border rounded-b-lg font-mono text-sm bg-surface-secondary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
               placeholder="# My Schema
 
@@ -709,6 +737,7 @@ Explain the clinical use case.
 ## Notes
 Any additional technical details or vendor-specific information."
             />
+            </>
           ) : (
             <div className="flex-1 border border-t-0 border-border rounded-b-lg bg-surface-secondary min-h-[200px] overflow-auto">
               {schemaMetadata?.description ? (
@@ -742,6 +771,7 @@ Any additional technical details or vendor-specific information."
                           {children}
                         </blockquote>
                       ),
+                      a: markdownComponents(navigateToAcquisition).a,
                     }}
                   >
                     {schemaMetadata.description}
@@ -800,7 +830,7 @@ Any additional technical details or vendor-specific information."
           onClick={() => setShowPublishModal(false)}
         >
           <div
-            className="bg-surface-primary rounded-xl shadow-xl max-w-md w-full p-6"
+            className="bg-surface-primary rounded-xl shadow-xl max-w-md w-full p-6 max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">
@@ -810,7 +840,7 @@ Any additional technical details or vendor-specific information."
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-semibold text-content-primary">Publish to dicompare</h3>
                 <p className="text-sm text-content-secondary mt-1">
-                  You're about to submit this schema to the public dicompare library on GitHub. Here's what happens when you continue:
+                  Contribute your schema to the public dicompare library so the community can find, reuse, and cite your protocol.
                 </p>
               </div>
               <button
@@ -821,7 +851,30 @@ Any additional technical details or vendor-specific information."
               </button>
             </div>
 
-            <ol className="mt-4 space-y-2.5">
+            {/* What publishing gives you */}
+            <div className="mt-4 rounded-lg border border-indigo-200/60 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-900/10 p-3 space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <Globe className="h-4 w-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-content-secondary">
+                  <strong className="text-content-primary">Discoverable.</strong> It joins the public schema library, searchable and usable by anyone validating against your protocol.
+                </p>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Quote className="h-4 w-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-content-secondary">
+                  <strong className="text-content-primary">Citable.</strong> It's archived on Zenodo with a permanent <strong className="text-content-primary">DOI</strong>, so others can cite your protocol in papers.
+                </p>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <GitBranch className="h-4 w-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-content-secondary">
+                  <strong className="text-content-primary">Versioned.</strong> Updates get a new version under one stable concept DOI, so links to your work never break.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs font-medium text-content-tertiary uppercase tracking-wider mt-4 mb-1">How it works</p>
+            <ol className="space-y-2.5">
               {[
                 <>The schema JSON is <strong className="text-content-primary">copied to your clipboard</strong>.</>,
                 <>A pre-filled GitHub issue opens in a <strong className="text-content-primary">new tab</strong>.</>,

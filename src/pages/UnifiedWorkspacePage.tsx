@@ -6,7 +6,7 @@ import { PyodideProvider } from '../contexts/PyodideContext';
 import ThemeToggle from '../components/common/ThemeToggle';
 import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
-import { VERSION } from '../version';
+import VersionBadge from '../components/common/VersionBadge';
 import UnifiedWorkspace from '../components/workspace/UnifiedWorkspace';
 import PyodideLoadingNotification from '../components/common/PyodideLoadingNotification';
 
@@ -67,7 +67,7 @@ const UnifiedWorkspacePage: React.FC = () => {
                   <Github className="h-5 w-5" />
                   <span>GitHub</span>
                 </a>
-                <span className="text-xs font-medium text-content-tertiary opacity-60 ml-1">v{VERSION}</span>
+                <VersionBadge />
               </div>
             </div>
           </header>

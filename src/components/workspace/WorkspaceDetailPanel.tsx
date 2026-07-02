@@ -882,6 +882,16 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
           ''
         }
         onSave={(description) => onUpdateAcquisition({ detailedDescription: description })}
+        acquisitionNames={workspace.items
+          .map(it => it.acquisition?.protocolName)
+          .filter((n): n is string => !!n)}
+        onNavigateToAcquisition={(name) => {
+          const target = workspace.items.find(it => it.acquisition?.protocolName === name);
+          if (target) {
+            setShowDetailedDescription(false);
+            workspace.selectItem(target.id);
+          }
+        }}
       />
 
       {/* Image Manager Modal */}

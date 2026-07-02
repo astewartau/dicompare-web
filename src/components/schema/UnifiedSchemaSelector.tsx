@@ -6,6 +6,7 @@ import { Acquisition, AcquisitionSelection } from '../../types';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import { DraggableSchema, DraggableAcquisition } from './DraggableComponents';
 import { isAnalysisTag, getAnalysisTagDisplayName, splitTagsWithCounts } from '../../utils/tagUtils';
+import { fetchExternalSchema } from '../../utils/externalSchemaFetch';
 
 interface AcquisitionScore {
   schemaId: string;
@@ -98,6 +99,27 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [dragActive, setDragActive] = useState(false);
   const [loadingSchemas, setLoadingSchemas] = useState<Set<string>>(new Set());
+  const [urlInput, setUrlInput] = useState('');
+  const [urlImporting, setUrlImporting] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  const handleUrlImport = async () => {
+    const url = urlInput.trim();
+    if (!url || !onSchemaUpload) return;
+    setUrlImporting(true);
+    setUrlError(null);
+    try {
+      const text = await fetchExternalSchema(url);
+      const base = url.split('/').pop()?.split('?')[0] || 'schema.json';
+      const filename = base.endsWith('.json') ? base : `${base}.json`;
+      await onSchemaUpload(new File([text], filename, { type: 'application/json' }));
+      setUrlInput('');
+    } catch (e) {
+      setUrlError(e instanceof Error ? e.message : 'Failed to import schema from URL');
+    } finally {
+      setUrlImporting(false);
+    }
+  };
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; schemaId: string; schemaName: string }>({
     isOpen: false,
     schemaId: '',
@@ -1288,6 +1310,32 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                     Supports .json files
                   </p>
                 </div>
+
+                {/* Import from URL */}
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-content-muted" />
+                    <input
+                      type="url"
+                      value={urlInput}
+                      onChange={(e) => { setUrlInput(e.target.value); setUrlError(null); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUrlImport(); } }}
+                      placeholder="…or paste a schema URL (e.g. GitHub raw / gist)"
+                      className="w-full pl-8 pr-2 py-1.5 text-xs border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleUrlImport}
+                    disabled={!urlInput.trim() || urlImporting}
+                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    {urlImporting ? 'Importing…' : 'Import'}
+                  </button>
+                </div>
+                {urlError && (
+                  <p className="mt-1 text-xs text-status-error">{urlError}</p>
+                )}
               </div>
             )}
 
