@@ -456,6 +456,24 @@ class DicompareWorkerAPI {
     );
   }
 
+  /**
+   * Bind diffusion gradient files (.dvs / .bvec+.bval) to the candidate
+   * acquisitions they describe, deriving and merging shell/direction
+   * descriptors. Returns the updated acquisitions plus which were bound and
+   * which gradient files matched nothing.
+   */
+  async attachGradientFiles(
+    acquisitions: UIAcquisition[],
+    files: Array<{ name: string; content: string }>
+  ): Promise<{
+    acquisitions: UIAcquisition[];
+    bound: Array<{ protocolName: string; id: any; descriptors: string[] }>;
+    unmatched: string[];
+  }> {
+    await this.ensureInitialized();
+    return this.sendRequest({ type: 'attachGradientFiles', payload: { acquisitions, files } });
+  }
+
   private async _loadProtocolFile(
     fileContent: Uint8Array,
     fileName: string,

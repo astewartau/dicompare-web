@@ -48,6 +48,9 @@ export class DicompareController {
     // Retained DICOM files for validation
     this.dicomFiles = []; // Array of { name: string, data: ArrayBuffer }
 
+    // Retained diffusion gradient files (.dvs / .bvec / .bval), optional
+    this.gradientFiles = []; // Array of { name: string, content: string }
+
     // Cached results
     this.acquisitions = null;
     this.complianceResults = null;
@@ -74,6 +77,24 @@ export class DicompareController {
       });
     }
     this.updateOutput(`Retained ${this.dicomFiles.length} DICOM files for validation.`);
+  }
+
+  /**
+   * (Optional) Store diffusion gradient files to attach to the acquisitions
+   * before validation. Accepts Siemens .dvs files and/or FSL .bvec/.bval pairs.
+   * Diffusion schemas that constrain shell/direction descriptors need these,
+   * since the descriptors cannot be recovered from DICOM headers alone.
+   * @param {File[]} files - .dvs / .bvec / .bval File objects
+   */
+  async retainGradientFiles(files) {
+    this.gradientFiles = [];
+    for (const file of files) {
+      const name = file.name || '';
+      const lower = name.toLowerCase();
+      if (!(lower.endsWith('.dvs') || lower.endsWith('.bvec') || lower.endsWith('.bval'))) continue;
+      this.gradientFiles.push({ name, content: await file.text() });
+    }
+    this.updateOutput(`Retained ${this.gradientFiles.length} diffusion gradient file(s).`);
   }
 
   /**
@@ -177,9 +198,21 @@ export class DicompareController {
 
   async _loadSchema() {
     if (this.schemaContent) return this.schemaContent;
-    const response = await fetch(this.schemaUrl);
-    if (!response.ok) throw new Error(`Failed to load schema from ${this.schemaUrl}`);
-    this.schemaContent = await response.text();
+    const response = await fetch(this.schemaUrl, { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      throw new Error(`Failed to load schema from ${this.schemaUrl} (HTTP ${response.status})`);
+    }
+    const text = await response.text();
+    const head = text.trimStart();
+    if (!head.startsWith('{') && !head.startsWith('[')) {
+      // A 200 that isn't JSON usually means the URL 404'd to an SPA/HTML fallback.
+      throw new Error(
+        `Schema URL "${this.schemaUrl}" did not return JSON ` +
+        `(content-type ${response.headers.get('content-type') || 'unknown'}, ` +
+        `starts with ${JSON.stringify(head.slice(0, 20))}). Check the schema URL.`
+      );
+    }
+    this.schemaContent = text;
     return this.schemaContent;
   }
 
@@ -229,6 +262,22 @@ export class DicompareController {
       : Array.isArray(acquisitions) ? acquisitions : [];
 
     this.acquisitions = acquisitionList;
+
+    // Attach diffusion gradient files (if provided) so shell/direction
+    // descriptors are present before validation.
+    if (this.gradientFiles.length > 0 && this.acquisitions.length > 0) {
+      this.updateOutput(`Attaching ${this.gradientFiles.length} diffusion gradient file(s)...`);
+      const gradResult = await this._sendRequest({
+        type: 'attachGradientFiles',
+        payload: { acquisitions: this.acquisitions, files: this.gradientFiles }
+      });
+      if (gradResult && Array.isArray(gradResult.acquisitions)) {
+        this.acquisitions = gradResult.acquisitions;
+      }
+      if (gradResult && gradResult.unmatched && gradResult.unmatched.length > 0) {
+        this.updateOutput(`Note: gradient file(s) not matched to an acquisition: ${gradResult.unmatched.join(', ')}`);
+      }
+    }
 
     // Phase 3: Validate against schema (70-100%)
     const schemaContent = await this._loadSchema();
@@ -285,6 +334,7 @@ export class DicompareController {
    */
   clearFiles() {
     this.dicomFiles = [];
+    this.gradientFiles = [];
     this.acquisitions = null;
     this.complianceResults = null;
   }

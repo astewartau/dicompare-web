@@ -12,7 +12,7 @@
 
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/';
 // Version updated automatically by the version-bump GitHub Action on release
-const DICOMPARE_PACKAGE = 'dicompare==0.5.0';
+const DICOMPARE_PACKAGE = 'dicompare==0.6.0';
 
 let pyodide = null;
 
@@ -164,6 +164,33 @@ json.dumps(results, default=str)
   sendSuccess(id, JSON.parse(result));
 }
 
+// --- Diffusion gradient binding ---
+
+async function handleAttachGradientFiles(id, payload) {
+  if (!pyodide) throw new Error('Pyodide not initialized');
+
+  const { acquisitions, files } = payload;
+  console.log(`[dicompare Worker] Binding ${files.length} gradient file(s) to ${acquisitions.length} acquisition(s)`);
+
+  pyodide.globals.set('grad_acquisitions_json', JSON.stringify(acquisitions));
+  pyodide.globals.set('grad_files_json', JSON.stringify(files));
+
+  await pyodide.runPython(`
+import json
+from dicompare.interface import attach_gradient_files_to_acquisitions
+
+_aj = grad_acquisitions_json if isinstance(grad_acquisitions_json, str) else grad_acquisitions_json.to_py()
+_fj = grad_files_json if isinstance(grad_files_json, str) else grad_files_json.to_py()
+_grad_result_json = json.dumps(
+    attach_gradient_files_to_acquisitions(json.loads(_aj), json.loads(_fj)),
+    default=str,
+)
+  `);
+
+  const result = pyodide.globals.get('_grad_result_json');
+  sendSuccess(id, JSON.parse(result));
+}
+
 // --- Message Router ---
 
 self.onmessage = async (event) => {
@@ -179,6 +206,9 @@ self.onmessage = async (event) => {
         break;
       case 'validateAcquisition':
         await handleValidateAcquisition(id, payload);
+        break;
+      case 'attachGradientFiles':
+        await handleAttachGradientFiles(id, payload);
         break;
       default:
         sendError(id, new Error(`Unknown message type: ${type}`));

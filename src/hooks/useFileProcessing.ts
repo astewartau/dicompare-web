@@ -91,94 +91,43 @@ export function getGradientFileType(fileName: string): GradientFileType | null {
   return null;
 }
 
-/** Strip directory and extension, e.g. "a/b/Foo.dvs" -> "Foo". */
-function fileBaseName(name: string): string {
-  const base = name.split('/').pop()!.split('\\').pop()!;
-  const dot = base.lastIndexOf('.');
-  return dot > 0 ? base.slice(0, dot) : base;
-}
-
-/** Read an acquisition field value by keyword/name. */
-function getFieldValue(acq: Acquisition, name: string): any {
-  const f = acq.acquisitionFields?.find(x => (x.keyword || x.name) === name);
-  return f?.value;
-}
-
-/** Does this acquisition look like a diffusion scan we can bind gradients to? */
-function isDiffusionAcquisition(acq: Acquisition): boolean {
-  return getFieldValue(acq, 'DiffusionBValue') !== undefined
-    || getFieldValue(acq, 'DiffusionDirectionSet') !== undefined;
+/** Read gradient files into {name, content} for the pip binder. */
+async function gradientFilesToPayload(files: File[]): Promise<Array<{ name: string; content: string }>> {
+  return Promise.all(files.map(async (f) => ({ name: f.name, content: await f.text() })));
 }
 
 /**
- * Compute diffusion descriptor bindings for gradient files (.dvs / .bvec+.bval)
- * against a set of acquisitions, WITHOUT mutating them. Returns one entry per
- * successfully matched acquisition with its new merged field list. Gradient
- * files are consumed for their descriptors only and not retained. Unmatched
- * files are logged and skipped.
+ * Bind diffusion gradient files (.dvs / .bvec+.bval) to the acquisitions they
+ * describe, deriving and merging shell/direction descriptors. All matching and
+ * derivation happens in the dicompare pip package (attach_gradient_files_to_
+ * acquisitions), so the web app, embed, and CLI share one implementation.
+ *
+ * Returns one entry per successfully bound acquisition with its updated field
+ * list (the caller applies it). Does not mutate the inputs.
  */
 export async function computeGradientBindings(
   acquisitions: Acquisition[],
   gradientFiles: File[]
 ): Promise<Array<{ acquisition: Acquisition; fields: DicomField[] }>> {
+  if (gradientFiles.length === 0 || acquisitions.length === 0) return [];
+
+  const files = await gradientFilesToPayload(gradientFiles);
+  const { acquisitions: updated, bound, unmatched } = await dicompareAPI.attachGradientFiles(acquisitions, files);
+
+  if (unmatched.length > 0) {
+    console.warn(`[useFileProcessing] Gradient file(s) matched no acquisition: ${unmatched.join(', ')}`);
+  }
+
+  const fieldsById = new Map(updated.map((a) => [a.id, a.acquisitionFields as DicomField[]]));
+  const seen = new Set<any>();
   const results: Array<{ acquisition: Acquisition; fields: DicomField[] }> = [];
-
-  // Group by basename so a .bvec and its .bval pair up; a .dvs stands alone.
-  const groups = new Map<string, File[]>();
-  for (const f of gradientFiles) {
-    const key = fileBaseName(f.name);
-    (groups.get(key) || groups.set(key, []).get(key)!).push(f);
+  for (const b of bound) {
+    if (seen.has(b.id)) continue;
+    seen.add(b.id);
+    const original = acquisitions.find((a) => a.id === b.id);
+    const fields = fieldsById.get(b.id);
+    if (original && fields) results.push({ acquisition: original, fields });
   }
-
-  const diffusionAcqs = acquisitions.filter(isDiffusionAcquisition);
-
-  for (const [baseName, groupFiles] of groups) {
-    const filesByType: Record<string, string> = {};
-    for (const f of groupFiles) {
-      const t = getGradientFileType(f.name);
-      if (t) filesByType[t] = await f.text();
-    }
-
-    // Determine the target acquisition(s). A .dvs binds to every acquisition
-    // whose DiffusionDirectionSet names it (there may be more than one, e.g. a
-    // scan and its repetition).
-    let targets: Acquisition[];
-    if ('dvs' in filesByType) {
-      targets = acquisitions.filter(a => getFieldValue(a, 'DiffusionDirectionSet') === baseName);
-      if (targets.length === 0 && diffusionAcqs.length === 1) targets = [diffusionAcqs[0]];
-    } else if ('bvec' in filesByType && 'bval' in filesByType) {
-      // bvec/bval carry absolute b-values; bind to the sole diffusion scan.
-      targets = diffusionAcqs.length === 1 ? [diffusionAcqs[0]] : [];
-    } else {
-      console.warn(`[useFileProcessing] Incomplete gradient set for "${baseName}" (need .bvec + .bval)`);
-      continue;
-    }
-
-    if (targets.length === 0) {
-      console.warn(`[useFileProcessing] Could not match gradient file(s) "${baseName}" to a diffusion acquisition; skipping`);
-      continue;
-    }
-
-    for (const target of targets) {
-      // For a .dvs, b-values are magnitude-modulated by this acquisition's b_max.
-      let bMax: number | null = null;
-      if ('dvs' in filesByType) {
-        const b = getFieldValue(target, 'DiffusionBValue');
-        bMax = typeof b === 'number' ? b : (typeof b === 'string' ? parseFloat(b) : null);
-        if (bMax === null || Number.isNaN(bMax)) {
-          console.warn(`[useFileProcessing] Acquisition "${target.protocolName}" has no DiffusionBValue; cannot interpret "${baseName}.dvs"`);
-          continue;
-        }
-      }
-      try {
-        const { fields } = await dicompareAPI.loadGradientFile(filesByType, bMax);
-        results.push({ acquisition: target, fields: mergeDescriptorFields(target.acquisitionFields, fields) });
-      } catch (e) {
-        console.error(`[useFileProcessing] Failed to derive descriptors from "${baseName}":`, e);
-      }
-    }
-  }
-
   return results;
 }
 
@@ -196,45 +145,31 @@ async function bindGradientFiles(
   }
 }
 
-/** Merge derived descriptor fields into an acquisition's fields, replacing any
- * existing same-named ones. Returns a new array. */
-export function mergeDescriptorFields(
-  existing: DicomField[] | undefined,
-  incoming: DicomField[]
-): DicomField[] {
-  const names = new Set(incoming.map(f => f.keyword || f.name));
-  return [...(existing || []).filter(f => !names.has(f.keyword || f.name)), ...incoming];
-}
-
 /**
- * Derive diffusion descriptor fields for a SINGLE, known acquisition from a set
- * of picked gradient files (a .dvs, or a .bvec + .bval pair). Used by the
- * per-acquisition "attach gradient file" control in the editor. Throws with a
- * user-facing message on invalid input. The files are consumed, not retained.
+ * Derive descriptors for a SINGLE, known acquisition from picked gradient files
+ * (a .dvs, or a .bvec + .bval pair). Returns the acquisition's updated field
+ * list (descriptors merged in). Used by the per-acquisition drop zone; throws a
+ * user-facing message when nothing could be bound.
  */
 export async function deriveGradientDescriptorFields(
   acquisition: Acquisition,
   gradientFiles: File[]
 ): Promise<DicomField[]> {
-  const filesByType: Record<string, string> = {};
-  for (const f of gradientFiles) {
-    const t = getGradientFileType(f.name);
-    if (t) filesByType[t] = await f.text();
+  const files = await gradientFilesToPayload(gradientFiles);
+  const { acquisitions: updated, bound } = await dicompareAPI.attachGradientFiles([acquisition], files);
+  if (bound.length > 0 && updated[0]?.acquisitionFields) {
+    return updated[0].acquisitionFields as DicomField[];
   }
-
-  let bMax: number | null = null;
-  if ('dvs' in filesByType) {
-    const b = getFieldValue(acquisition, 'DiffusionBValue');
-    bMax = typeof b === 'number' ? b : (typeof b === 'string' ? parseFloat(b) : NaN);
-    if (bMax === null || Number.isNaN(bMax)) {
-      throw new Error('This acquisition has no DiffusionBValue, so a .dvs cannot be interpreted. Attach a .bvec/.bval pair instead.');
-    }
-  } else if (!('bvec' in filesByType && 'bval' in filesByType)) {
-    throw new Error('Provide a .dvs file, or a matching .bvec and .bval pair.');
+  const hasDvs = gradientFiles.some((f) => getGradientFileType(f.name) === 'dvs');
+  const hasBvec = gradientFiles.some((f) => getGradientFileType(f.name) === 'bvec');
+  const hasBval = gradientFiles.some((f) => getGradientFileType(f.name) === 'bval');
+  if (hasDvs) {
+    throw new Error('Could not interpret the .dvs file. This acquisition needs a DiffusionBValue; attach a .bvec/.bval pair instead.');
   }
-
-  const { fields } = await dicompareAPI.loadGradientFile(filesByType, bMax);
-  return fields;
+  if (hasBvec !== hasBval) {
+    throw new Error('Provide a matching .bvec and .bval pair.');
+  }
+  throw new Error('Provide a .dvs file, or a matching .bvec and .bval pair.');
 }
 
 /**

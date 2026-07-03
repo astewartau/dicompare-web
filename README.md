@@ -62,6 +62,10 @@ const controller = new DicompareController({
 // 2. Retain DICOM files (e.g. from a file input)
 await controller.retainDicomFiles(fileInput.files);
 
+// 2b. (Diffusion, optional) Retain gradient files so shell/direction
+//     descriptors can be validated — a .dvs, or an FSL .bvec + .bval pair.
+await controller.retainGradientFiles(gradientInput.files);
+
 // 3. Run validation
 const { acquisitions, complianceResults, schema } = await controller.runValidation((progress) => {
   console.log(`${progress.percentage}% — ${progress.currentOperation}`);
@@ -83,7 +87,7 @@ All files are served from `https://dicompare.neurodesk.org/embed/`:
 
 | File | Description |
 |------|-------------|
-| `DicompareController.js` | ES module. Manages Pyodide worker lifecycle, DICOM analysis, and schema validation. |
+| `DicompareController.js` | ES module. Manages Pyodide worker lifecycle, DICOM analysis, and schema validation. Optionally accepts diffusion gradient files (`.dvs` / FSL `.bvec`+`.bval`) via `retainGradientFiles()`, deriving shell/direction descriptors and attaching them to the acquisitions before validation. |
 | `DicompareReportRenderer.js` | ES module. Renders compliance results into DOM elements and generates printable HTML reports. |
 | `dicompare-worker.js` | Web Worker script. Runs Pyodide + dicompare Python package in a background thread. Loaded automatically by the controller via fetch + blob URL (no cross-origin issues). |
 | `dicompare-embed.css` | Optional stylesheet for the report renderer. Uses CSS custom properties with fallback defaults — override `--color-primary`, `--color-border`, etc. to match your app's theme. |

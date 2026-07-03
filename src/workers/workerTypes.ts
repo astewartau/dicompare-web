@@ -21,6 +21,7 @@ export type WorkerRequest =
   | { id: RequestId; type: 'validateAcquisition'; payload: { acquisition: any; schemaContent: string; acquisitionIndex?: number } }
   | { id: RequestId; type: 'loadProtocolFile'; payload: { fileContent: ArrayBuffer; fileName: string; fileType: string } }
   | { id: RequestId; type: 'loadGradientFile'; payload: { files: Record<string, string>; bMax: number | null } }
+  | { id: RequestId; type: 'attachGradientFiles'; payload: { acquisitions: any[]; files: Array<{ name: string; content: string }> } }
   | { id: RequestId; type: 'searchFields'; payload: { query: string; limit: number } }
   | { id: RequestId; type: 'getFieldInfo'; payload: { fieldOrTag: string } }
   | { id: RequestId; type: 'generateSchema'; payload: { acquisitions: any[]; metadata: any } }

@@ -469,6 +469,34 @@ json.dumps(descriptors, default=str)
   sendSuccess(id, JSON.parse(result as string));
 }
 
+async function handleAttachGradientFiles(
+  id: string,
+  payload: { acquisitions: any[]; files: Array<{ name: string; content: string }> }
+): Promise<void> {
+  if (!pyodide) throw new Error('Pyodide not initialized');
+
+  const { acquisitions, files } = payload;
+  console.log(`[Worker] Binding ${files.length} gradient file(s) to ${acquisitions.length} acquisition(s)`);
+
+  pyodide.globals.set('_grad_acquisitions_json', JSON.stringify(acquisitions));
+  pyodide.globals.set('_grad_files_json', JSON.stringify(files));
+
+  await pyodide.runPython(`
+import json
+from dicompare.interface import attach_gradient_files_to_acquisitions
+
+_aj = _grad_acquisitions_json if isinstance(_grad_acquisitions_json, str) else _grad_acquisitions_json.to_py()
+_fj = _grad_files_json if isinstance(_grad_files_json, str) else _grad_files_json.to_py()
+_grad_result_json = json.dumps(
+    attach_gradient_files_to_acquisitions(json.loads(_aj), json.loads(_fj)),
+    default=str,
+)
+  `);
+
+  const result = pyodide.globals.get('_grad_result_json');
+  sendSuccess(id, JSON.parse(result as string));
+}
+
 async function handleSearchFields(
   id: string,
   payload: { query: string; limit: number }
@@ -681,6 +709,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break;
       case 'loadGradientFile':
         await handleLoadGradientFile(id, request.payload);
+        break;
+      case 'attachGradientFiles':
+        await handleAttachGradientFiles(id, request.payload);
         break;
       case 'searchFields':
         await handleSearchFields(id, request.payload);
