@@ -6,6 +6,7 @@ import { linter, lintGutter } from '@codemirror/lint';
 import { SelectedFunction, TestCase, TestCaseExpectation } from './ValidationFunctionLibraryModal';
 import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import { useTheme } from '../../contexts/ThemeContext';
+import DicomFieldAutocompleteInput from '../common/DicomFieldAutocompleteInput';
 
 interface ValidationFunctionEditorModalProps {
   isOpen: boolean;
@@ -817,11 +818,10 @@ json.dumps({
                 <div className="space-y-2">
                   {(editedFunc.customFields || editedFunc.fields).map((field, fieldIndex) => (
                     <div key={fieldIndex} className="flex items-center space-x-2">
-                      <input
-                        type="text"
+                      <DicomFieldAutocompleteInput
                         value={field}
-                        onChange={(e) => updateFieldInFunction(fieldIndex, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        onChange={(newValue) => updateFieldInFunction(fieldIndex, newValue)}
+                        className="w-full px-3 py-2 border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
                         placeholder="Field name"
                       />
                       <button
