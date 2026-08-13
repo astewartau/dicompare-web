@@ -19,6 +19,16 @@
     "version_doi": "10.5281/zenodo.20805054",
     "zenodo_url": "https://zenodo.org/record/20805054"
   },
+  "HC-ChiSep_Validation_v1.0": {
+    "checksum": "sha256:0e5af6f8366e79203870be29eda835928a91a9a5c6d1b4e417375f23f595c765",
+    "concept_doi": "10.5281/zenodo.21921349",
+    "concept_recid": "21921349",
+    "record_id": "21921350",
+    "updated_at": "2026-08-13T14:46:03Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.21921350",
+    "zenodo_url": "https://zenodo.org/record/21921350"
+  },
   "MS_CMSC_Guidelines_v1.0": {
     "checksum": "sha256:f80cff5375b577bbebc25b6c3bd9ac0c0d89f495b4a1f6dbb12fa00c8c9dd19e",
     "concept_doi": "10.5281/zenodo.20805040",
