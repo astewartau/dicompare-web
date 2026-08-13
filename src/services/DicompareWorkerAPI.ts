@@ -663,7 +663,7 @@ class DicompareWorkerAPI {
   async generateTestDicomsFromSchema(
     acquisition: UIAcquisition,
     testData: Array<Record<string, any>>,
-    fields: Array<{ name: string; tag: string; level: string; dataType?: string; vr?: string }>
+    fields: Array<{ name: string; tag: string | null; level: string; dataType?: string; vr?: string }>
   ): Promise<Blob> {
     await this.ensureInitialized();
 
@@ -677,7 +677,7 @@ class DicompareWorkerAPI {
   }
 
   async categorizeFields(
-    fields: Array<{ name: string; tag: string; level?: string; dataType?: string; vr?: string }>,
+    fields: Array<{ name: string; tag: string | null; level?: string; dataType?: string; vr?: string }>,
     testData: Array<Record<string, any>>
   ): Promise<{
     standardFields: number;

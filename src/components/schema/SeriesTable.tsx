@@ -95,7 +95,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   const allFieldTags = new Set<string>();
   series.forEach(s => {
     const fieldsArray = getFieldsArray(s.fields);
-    fieldsArray.forEach(f => allFieldTags.add(f.tag));
+    fieldsArray.forEach(f => allFieldTags.add(f.tag ?? f.name));
   });
 
   if (allFieldTags.size === 0) {
@@ -110,7 +110,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   }
 
   // Display all existing series (no minimum requirement)
-  const displaySeries = [];
+  const displaySeries: Series[] = [];
   for (let i = 0; i < series.length; i++) {
     if (series[i]) {
       displaySeries.push(series[i]);
@@ -397,9 +397,13 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
             ? getFieldsArray(displaySeries[editingCell.seriesIndex].fields)[editingCell.fieldIndex].value
             : ''}
           onSave={(updates) => {
-            const fieldTag = editingCell.fieldIndex >= 0
-              ? getFieldsArray(displaySeries[editingCell.seriesIndex].fields)[editingCell.fieldIndex].tag
-              : editingCell.fieldTag || '';
+            const targetField = editingCell.fieldIndex >= 0
+              ? getFieldsArray(displaySeries[editingCell.seriesIndex].fields)[editingCell.fieldIndex]
+              : undefined;
+            // Custom/derived fields have no tag, so fall back to the name identifier.
+            const fieldTag = targetField
+              ? (targetField.tag ?? targetField.name)
+              : (editingCell.fieldTag || '');
 
             const fieldUpdate: Partial<SeriesField> = {
               name: editingCell.fieldName || editingCell.fieldTag || '',

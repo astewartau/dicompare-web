@@ -355,6 +355,12 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     );
   }
 
+  // Every mode-specific view above has returned; the remainder of this panel
+  // renders a concrete selected item, so there is nothing to show without one.
+  if (!selectedItem) {
+    return null;
+  }
+
   // Use shared helper for derived state
   const {
     isEmptyItem,

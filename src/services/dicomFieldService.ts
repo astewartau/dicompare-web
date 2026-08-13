@@ -161,7 +161,7 @@ export const searchDicomFields = async (query: string, limit: number = 50): Prom
   for (const field of fieldList) {
     const name = field.name.toLowerCase();
     const tag = field.tag.toLowerCase();
-    const keyword = field.keyword.toLowerCase();
+    const keyword = (field.keyword || '').toLowerCase();
     
     // Exact matches (highest priority)
     if (name === lowercaseQuery || tag === lowercaseQuery || keyword === lowercaseQuery) {

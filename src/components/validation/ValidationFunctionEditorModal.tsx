@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Play, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Play, Loader2 } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
-import { linter, lintGutter } from '@codemirror/lint';
+import { linter, lintGutter, Diagnostic } from '@codemirror/lint';
+import Modal from '../common/Modal';
 import { SelectedFunction, TestCase, TestCaseExpectation } from './ValidationFunctionLibraryModal';
 import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -116,7 +117,7 @@ return test_data`;
 
   // Simple Python linter for basic syntax checking
   const pythonLinter = linter((view) => {
-    const diagnostics = [];
+    const diagnostics: Diagnostic[] = [];
     const code = view.state.doc.toString();
     
     // Basic Python syntax checks
@@ -300,7 +301,7 @@ output
     } catch (error) {
       setCodeExecutionResults(prev => ({
         ...prev,
-        [testCaseId]: { error: `Execution failed: ${error.message}` }
+        [testCaseId]: { error: `Execution failed: ${error instanceof Error ? error.message : String(error)}` }
       }));
     }
   };
@@ -761,7 +762,7 @@ json.dumps({
     } catch (error) {
       setTestResults(prev => ({
         ...prev,
-        [testCase.id]: { passed: false, error: `Test execution failed: ${error.message}`, loading: false }
+        [testCase.id]: { passed: false, error: `Test execution failed: ${error instanceof Error ? error.message : String(error)}`, loading: false }
       }));
     }
   };
@@ -775,20 +776,13 @@ json.dumps({
   if (!isOpen || !editedFunc) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface-primary rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
-        <div className="px-6 py-4 border-b border-border">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-content-primary">Edit Validation Function</h3>
-            <button
-              onClick={onClose}
-              className="text-content-tertiary hover:text-content-secondary"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-        
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Edit Validation Function"
+      size="3xl"
+      closeOnBackdrop={false}
+    >
         <div className="flex-1 p-6 min-h-0 overflow-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-full">
             {/* Left Panel - Function Details */}
@@ -1330,8 +1324,7 @@ json.dumps({
             Save Changes
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

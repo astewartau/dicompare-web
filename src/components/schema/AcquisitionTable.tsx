@@ -429,8 +429,9 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const handleConversionChoice = (mode: 'separate-series' | 'single-series') => {
     if (!conversionField) return;
     
-    // Pass the mode to the parent component - we'll need to update the interface
-    onFieldConvert(conversionField.tag, 'series', mode);
+    // Pass the mode to the parent component - we'll need to update the interface.
+    // Custom/derived fields have no tag, so fall back to the keyword/name identifier.
+    onFieldConvert(conversionField.tag ?? (conversionField.keyword || conversionField.name), 'series', mode);
   };
 
   return (
@@ -710,7 +711,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                     ) : (
                                       <div className={`flex items-center gap-2 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
                                         <CustomTooltip
-                                          content={ruleResult.message}
+                                          content={ruleResult.message || ''}
                                           position="top"
                                           delay={100}
                                         >

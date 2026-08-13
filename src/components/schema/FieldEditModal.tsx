@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
+import Modal from '../common/Modal';
 import { DicomField, FieldDataType, ValidationConstraint, ValidationRule } from '../../types';
 import { inferDataTypeFromValue, convertValueToDataType } from '../../utils/datatypeInference';
 
@@ -38,11 +39,14 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   isSeriesValue = false,
 }) => {
   const [formData, setFormData] = useState(() => {
+    // Fields may arrive without a validation rule; normalize to a concrete rule
+    // so the rest of the component can treat validationRule as always present.
+    const rule: ValidationRule = field.validationRule ?? { type: 'exact' };
     let initialValue: any;
-    if (field.validationRule.type === 'contains_any' && field.validationRule.contains_any) {
-      initialValue = field.validationRule.contains_any;
-    } else if (field.validationRule.type === 'contains_all' && field.validationRule.contains_all) {
-      initialValue = field.validationRule.contains_all;
+    if (rule.type === 'contains_any' && rule.contains_any) {
+      initialValue = rule.contains_any;
+    } else if (rule.type === 'contains_all' && rule.contains_all) {
+      initialValue = rule.contains_all;
     } else if (isSeriesValue) {
       initialValue = typeof value === 'object' && value?.value !== undefined ? value.value : (value ?? '');
     } else {
@@ -51,34 +55,23 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
     return {
       name: field.name,
-      dataType: isSeriesValue ?
+      dataType: (isSeriesValue ?
         inferDataTypeFromValue(typeof value === 'object' && value?.value !== undefined ? value.value : value) :
-        ((field as any).dataType || inferDataTypeFromValue(field.value)) as FieldDataType,
+        inferDataTypeFromValue(field.value)) as FieldDataType,
       value: initialValue,
-      validationRule: field.validationRule,
+      validationRule: rule,
     };
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [listInput, setListInput] = useState(() => {
+  const [listInput, setListInput] = useState<string>(() => {
     const val = formData.value;
     return Array.isArray(val) ? val.join(', ') : (val?.toString() || '');
   });
-  const [toleranceValueInput, setToleranceValueInput] = useState(() => {
+  const [toleranceValueInput, setToleranceValueInput] = useState<string>(() => {
     const val = formData.validationRule.value;
     return Array.isArray(val) ? val.join(', ') : (val?.toString() || '');
   });
-
-  useEffect(() => {
-    const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleEscKey);
-    return () => document.removeEventListener('keydown', handleEscKey);
-  }, [onClose]);
 
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
@@ -312,11 +305,14 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
     formData.dataType === 'list_string' || formData.dataType === 'list_number';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div
-        className="bg-surface-primary rounded-xl shadow-2xl w-full max-w-md overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      ariaLabel={`Edit field ${field.name}`}
+      size="sm"
+      closeOnBackdrop={false}
+      panelClassName="rounded-xl shadow-2xl"
+    >
         {/* Compact Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface-secondary">
           <div className="flex items-center gap-2 min-w-0">
@@ -577,8 +573,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             Save
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

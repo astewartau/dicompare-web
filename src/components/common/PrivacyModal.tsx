@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Shield } from 'lucide-react';
+import { Shield } from 'lucide-react';
+import Modal from './Modal';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -7,25 +8,8 @@ interface PrivacyModalProps {
 }
 
 const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="bg-surface-primary rounded-lg shadow-xl max-w-lg w-full overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-content-primary">Privacy</h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-content-tertiary hover:text-content-primary hover:bg-surface-secondary rounded-lg transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal isOpen={isOpen} onClose={onClose} title="Privacy" size="md">
         {/* Body */}
         <div className="px-6 py-5 space-y-5">
           {/* Highlight box */}
@@ -66,8 +50,7 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
             </p>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

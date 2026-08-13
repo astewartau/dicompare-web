@@ -71,7 +71,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
     });
 
     return result || {
-      fieldPath: field.tag,
+      fieldPath: field.tag ?? '',
       fieldName: field.keyword || field.name,
       status: 'unknown',
       message: 'No validation result available',
@@ -147,7 +147,8 @@ const FieldTable: React.FC<FieldTableProps> = ({
               // For unique identification: use tag for standard DICOM fields, name/keyword for derived fields
               // Note: some derived fields have tag="derived" which is not unique
               const isDerivedTag = !field.tag || field.tag === 'derived' || field.tag === null;
-              const fieldIdentifier = isDerivedTag ? (field.keyword || field.name) : field.tag;
+              // When not a derived tag, field.tag is guaranteed non-null by isDerivedTag above.
+              const fieldIdentifier: string = isDerivedTag ? (field.keyword || field.name) : field.tag!;
               const fieldKey = `${acquisitionId}-${fieldIdentifier}`;
               const isIncomplete = incompleteFields.has(fieldKey);
 
@@ -203,7 +204,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                   <td className="px-2 py-1.5">
                     <div className={`flex items-center gap-2 ${showStatusMessages ? 'justify-start' : 'justify-center'}`}>
                       <CustomTooltip
-                        content={complianceResult.message}
+                        content={complianceResult.message || ''}
                         position="top"
                         delay={100}
                       >
