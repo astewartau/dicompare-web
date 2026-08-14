@@ -657,15 +657,11 @@ json.dumps({
 async function handleClearCache(id: string): Promise<void> {
   if (!pyodide) throw new Error('Pyodide not initialized');
 
-  // Clear validation cache
+  // Clear validation cache. There is no longer a persistent Python-side session
+  // cache to clear — the parsed session DataFrame is now returned directly from
+  // analysis rather than stashed in a module global.
   validationCache.clear();
   console.log('[Worker] Validation cache cleared');
-
-  await pyodide.runPython(`
-from dicompare.interface.web_utils import _cache_session
-_cache_session(None, {}, {})
-print("[Worker] Session cache cleared")
-  `);
 
   sendSuccess(id, { cleared: true });
 }

@@ -9,6 +9,15 @@ import { Acquisition as UIAcquisition, DicomField } from '../types';
 import { FileObject } from '../utils/fileUploadUtils';
 import { fieldToSchemaField } from '../utils/schemaFieldConverters';
 
+// Reject a request if the worker goes completely silent this long — no
+// progress, no completion. This is an *inactivity* window, not a wall-clock
+// deadline: the worker streams progress messages throughout long jobs (parsing
+// hundreds of MB can legitimately take many minutes), and each message resets
+// the timer. Only a genuinely wedged or dead worker stays silent this long.
+// Sized to comfortably exceed the largest expected gap *between* progress
+// updates, not the total job duration.
+const DEFAULT_INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes of silence
+
 class DicompareWorkerAPI {
   private worker: Worker | null = null;
   private pendingRequests: Map<string, PendingRequest> = new Map();
@@ -28,9 +37,62 @@ class DicompareWorkerAPI {
     );
 
     this.worker.onmessage = this.handleMessage.bind(this);
-    this.worker.onerror = (error) => {
-      console.error('[DicompareWorkerAPI] Worker error:', error);
+    // A fatal worker error (crash, OOM, script load failure) never surfaces as a
+    // normal 'error' message, so without this every in-flight request would hang
+    // forever. Reject them all and rebuild the worker so the app can recover.
+    this.worker.onerror = (event) => {
+      console.error('[DicompareWorkerAPI] Worker error:', event);
+      this.handleWorkerCrash(
+        new Error(`Worker crashed: ${event.message || 'unknown fatal error'}`)
+      );
     };
+    this.worker.onmessageerror = (event) => {
+      console.error('[DicompareWorkerAPI] Worker message error:', event);
+      this.handleWorkerCrash(
+        new Error('Worker received an undeserializable message')
+      );
+    };
+  }
+
+  /**
+   * (Re)start the inactivity timer for a pending request. Called when the
+   * request is sent and again on every message received for it, so an actively
+   * progressing job never trips it — only sustained silence does.
+   */
+  private armInactivityTimer(id: string): void {
+    const pending = this.pendingRequests.get(id);
+    if (!pending) return;
+    if (pending.timer) clearTimeout(pending.timer);
+    const timeoutMs = pending.inactivityTimeoutMs ?? DEFAULT_INACTIVITY_TIMEOUT_MS;
+    pending.timer = setTimeout(() => {
+      this.pendingRequests.delete(id);
+      pending.reject(
+        new Error(
+          `Worker request "${id}" timed out after ${Math.round(timeoutMs / 1000)}s ` +
+            `of inactivity (no progress or response). The worker may be stuck or have crashed.`
+        )
+      );
+    }, timeoutMs);
+  }
+
+  /**
+   * Reject every in-flight request and tear down the (presumed dead) worker,
+   * then spin up a fresh one so the next request re-initializes cleanly instead
+   * of hanging on a corpse.
+   */
+  private handleWorkerCrash(error: Error): void {
+    for (const pending of this.pendingRequests.values()) {
+      if (pending.timer) clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.pendingRequests.clear();
+    this.initialized = false;
+    this.initializationPromise = null;
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
+    }
+    this.createWorker();
   }
 
   private handleMessage(event: MessageEvent<WorkerResponse>): void {
@@ -52,10 +114,17 @@ class DicompareWorkerAPI {
       return;
     }
 
-    if (type === 'progress' && pending.onProgress) {
-      pending.onProgress((response as any).payload);
+    if (type === 'progress') {
+      // Activity — reset the inactivity timer, then forward progress.
+      this.armInactivityTimer(id);
+      if (pending.onProgress) {
+        pending.onProgress((response as any).payload);
+      }
       return; // Don't resolve yet, wait for success/error
     }
+
+    // Terminal message: stop the inactivity timer before settling.
+    if (pending.timer) clearTimeout(pending.timer);
 
     if (type === 'success') {
       pending.resolve((response as any).payload);
@@ -72,12 +141,14 @@ class DicompareWorkerAPI {
   private sendRequest<T>(
     request: Omit<WorkerRequest, 'id'>,
     onProgress?: (progress: ProgressPayload) => void,
-    transferables?: Transferable[]
+    transferables?: Transferable[],
+    inactivityTimeoutMs?: number
   ): Promise<T> {
     const id = `req_${++this.requestId}_${Date.now()}`;
 
     return new Promise<T>((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject, onProgress });
+      this.pendingRequests.set(id, { resolve, reject, onProgress, inactivityTimeoutMs });
+      this.armInactivityTimer(id);
 
       const fullRequest = { ...request, id } as WorkerRequest;
 
@@ -104,10 +175,15 @@ class DicompareWorkerAPI {
     }
 
     if (!this.initializationPromise) {
+      // Clear the cached promise on failure (crash/timeout) so a later call can
+      // retry init instead of forever awaiting the same rejected promise.
       this.initializationPromise = this.sendRequest<void>(
         { type: 'initialize' },
         onProgress
-      );
+      ).catch((err) => {
+        this.initializationPromise = null;
+        throw err;
+      });
     } else if (onProgress) {
       // If already initializing but caller wants progress, we can't provide it
       // for the in-flight request, but we can at least await it
@@ -715,6 +791,9 @@ class DicompareWorkerAPI {
       this.worker = null;
       this.initialized = false;
       this.initializationPromise = null;
+      for (const pending of this.pendingRequests.values()) {
+        if (pending.timer) clearTimeout(pending.timer);
+      }
       this.pendingRequests.clear();
     }
   }
