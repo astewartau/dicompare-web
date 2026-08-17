@@ -8,6 +8,7 @@ import { SelectedFunction, TestCase, TestCaseExpectation } from './ValidationFun
 import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import { useTheme } from '../../contexts/ThemeContext';
 import DicomFieldAutocompleteInput from '../common/DicomFieldAutocompleteInput';
+import { parseCellInput, formatCellValue } from '../../utils/testCaseCells';
 
 interface ValidationFunctionEditorModalProps {
   isOpen: boolean;
@@ -38,6 +39,10 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
   const [testResults, setTestResults] = useState<Record<string, { passed: boolean; error?: string; warning?: string; stdout?: string; loading?: boolean }>>({});
   const [activeTestDataTabs, setActiveTestDataTabs] = useState<Record<string, 'table' | 'code'>>({});
   const [testDataCode, setTestDataCode] = useState<Record<string, string>>({});
+  // Raw in-progress text per test-data cell (keyed by testCaseId:field:row). While
+  // a cell is being edited we show this verbatim so the field never reformats
+  // mid-keystroke; on blur we drop it and fall back to the formatted stored value.
+  const [cellDrafts, setCellDrafts] = useState<Record<string, string>>({});
   const [codeExecutionResults, setCodeExecutionResults] = useState<Record<string, { loading?: boolean; error?: string; data?: any }>>({});
 
   const getDefaultCodeTemplate = (fields: string[]) => {
@@ -980,58 +985,44 @@ json.dumps(_out)
                                 const isExtraField = extraFields.includes(field);
                                 return (
                                 <div key={field} className={`flex-1 border-r border-border-secondary last:border-r-0 ${isSystemField ? 'bg-purple-500/5' : ''} ${isExtraField ? 'bg-orange-500/5' : ''}`}>
+                                  {(() => {
+                                    const cellKey = `${testCase.id}:${field}:${rowIndex}`;
+                                    const draft = cellDrafts[cellKey];
+                                    const displayValue = draft !== undefined
+                                      ? draft
+                                      : formatCellValue(testCase.data[field]?.[rowIndex]);
+                                    return (
                                   <input
                                     type="text"
-                                    value={(() => {
-                                      const value = testCase.data[field]?.[rowIndex];
-                                      if (Array.isArray(value)) {
-                                        // Render a list-valued cell explicitly with brackets
-                                        return `[${value.join(', ')}]`;
-                                      }
-                                      // Convert scalar values to strings for editing
-                                      return value != null ? String(value) : '';
-                                    })()}
+                                    value={displayValue}
                                     onChange={(e) => {
+                                      const inputValue = e.target.value;
+                                      // Keep the raw text for display so the field doesn't reformat
+                                      // (e.g. re-add brackets) while the user is mid-edit.
+                                      setCellDrafts(prev => ({ ...prev, [cellKey]: inputValue }));
+
                                       const newData = { ...testCase.data };
                                       if (!newData[field]) newData[field] = [];
-
-                                      // Ensure array is long enough
                                       while (newData[field].length <= rowIndex) {
                                         newData[field].push('');
                                       }
-
-                                      // Parse a single token into a number when it looks numeric,
-                                      // otherwise keep it as a trimmed string.
-                                      const parseScalar = (token: string): number | string => {
-                                        const t = token.trim();
-                                        if (t === '') return '';
-                                        const n = Number(t);
-                                        return t !== '' && !isNaN(n) ? n : t;
-                                      };
-
-                                      const inputValue = e.target.value;
-                                      const trimmed = inputValue.trim();
-                                      let parsedValue: number | string | Array<number | string>;
-
-                                      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-                                        // Explicit list-valued cell, e.g. "[0, 6000, 30000]".
-                                        // Stored as a real array so it round-trips to a tuple in
-                                        // dicompare (matching real validation) instead of a string.
-                                        const inner = trimmed.slice(1, -1).trim();
-                                        parsedValue = inner === '' ? [] : inner.split(',').map(parseScalar);
-                                      } else if (inputValue.includes(',')) {
-                                        // Bare comma-separated input also denotes a list cell (e.g. "1,1")
-                                        parsedValue = inputValue.split(',').map(parseScalar);
-                                      } else {
-                                        parsedValue = parseScalar(inputValue);
-                                      }
-
-                                      newData[field][rowIndex] = parsedValue;
+                                      newData[field][rowIndex] = parseCellInput(inputValue);
                                       updateTestCase(testIndex, { data: newData });
+                                    }}
+                                    onBlur={() => {
+                                      // Drop the draft so the cell shows the canonical formatted value.
+                                      setCellDrafts(prev => {
+                                        if (prev[cellKey] === undefined) return prev;
+                                        const next = { ...prev };
+                                        delete next[cellKey];
+                                        return next;
+                                      });
                                     }}
                                     className={`w-full px-2 py-1 text-xs border-none bg-transparent text-content-primary focus:outline-none ${isSystemField ? 'focus:bg-purple-500/10' : 'focus:bg-blue-500/10'}`}
                                     placeholder={`${field} value (e.g. 3 or [0, 1000, 3000])`}
                                   />
+                                    );
+                                  })()}
                                 </div>
                                 );
                               })}
