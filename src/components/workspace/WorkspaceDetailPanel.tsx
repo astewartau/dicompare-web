@@ -236,12 +236,15 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     await workspace.loadSchema(schemaId, getSchemaContent, getUnifiedSchema);
   }, [workspace, getSchemaContent, getUnifiedSchema]);
 
-  // Handle schema upload from the schema selector
-  const handleSchemaUpload = useCallback(async (file: File) => {
+  // Handle schema upload from the schema selector.
+  // Returns the new schema's id so the selector can highlight/surface it.
+  const handleSchemaUpload = useCallback(async (file: File): Promise<string | null> => {
     try {
-      await uploadSchema(file);
+      const metadata = await uploadSchema(file);
+      return metadata.id;
     } catch (error) {
       console.error('Failed to upload schema:', error);
+      return null;
     }
   }, [uploadSchema]);
 

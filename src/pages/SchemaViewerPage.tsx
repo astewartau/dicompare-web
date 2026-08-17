@@ -418,7 +418,7 @@ const SchemaViewerPage: React.FC = () => {
                 expandable={true}
                 onAcquisitionSelect={(selectedId, acqIndex) => navigate(`/schema/${selectedId}?acq=${acqIndex}`)}
                 onOpenSchema={(selectedId) => navigate(`/schema/${selectedId}`)}
-                onSchemaUpload={(file) => uploadSchema(file)}
+                onSchemaUpload={async (file) => (await uploadSchema(file)).id}
                 getSchemaContent={schemaService.getSchemaContent}
                 maxHeight="calc(100vh - 150px)"
               />
