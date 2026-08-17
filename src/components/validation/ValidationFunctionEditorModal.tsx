@@ -563,142 +563,55 @@ output
         }
       }
       
-      // Properly indent the implementation - only add base indentation if not present
-      let indentedImplementation = implementation.split('\n').map(line => {
-        // If line is empty or already has indentation, keep it as is
-        if (line.trim() === '' || line.startsWith(' ') || line.startsWith('\t')) {
-          return '    ' + line;
-        }
-        // Otherwise add 4 spaces for function body indentation
-        return '    ' + line;
-      }).join('\n');
-      
-      // Check if the implementation is effectively empty (only comments/whitespace)
-      const hasNonCommentCode = implementation.split('\n').some(line => {
-        const trimmed = line.trim();
-        return trimmed.length > 0 && !trimmed.startsWith('#');
-      });
-      
-      // If there's no actual code, add a pass statement to avoid syntax errors
-      if (!hasNonCommentCode) {
-        indentedImplementation += '\n    pass';
-      }
-      
-      // Create DataFrame-like structure for the test
+      // Route the test through the SAME pip execution path as real validation
+      // (dicompare.interface.run_rule_test_case). This guarantees the sandbox,
+      // allowed imports, and list-cell types (tuples) match production, so a
+      // passing test means the rule actually works on real data. The payload is
+      // base64-encoded JSON to avoid any Python string-escaping issues.
+      const rulePayload = {
+        rule: {
+          id: editedFunc.id,
+          name: editedFunc.customName || editedFunc.name || editedFunc.id,
+          fields,
+          implementation,
+        },
+        test_data: testCase.data,
+        expected_result: testCase.expectedResult,
+      };
+      const payloadB64 = btoa(unescape(encodeURIComponent(JSON.stringify(rulePayload))));
+
       const testData = `
-import pandas as pd
-import math
-import sys
-from io import StringIO
-from dicompare.validation import ValidationError, ValidationWarning, BaseValidationModel, validator
-
-# Capture stdout
-captured_output = StringIO()
-sys.stdout = captured_output
-
-# Create test data
-test_data = {${Object.entries(testCase.data).map(([field, values]) => 
-  `"${field}": [${values.filter(v => v !== '' && v != null).map(v => {
-    if (Array.isArray(v)) {
-      // Handle arrays - automatically detected from comma-separated input
-      return `[${v.map(item => typeof item === 'string' ? `"${item}"` : item).join(', ')}]`;
-    } else if (typeof v === 'string') {
-      return `"${v}"`;
-    } else {
-      // Numbers are already parsed
-      return v;
-    }
-  }).join(', ')}]`
-).join(', ')}}
-
-# Try to create DataFrame with better error handling
-try:
-    value = pd.DataFrame(test_data)
-    # Compute smart Count if not already provided
-    # Count = actual slice count (handles mosaic/enhanced DICOM)
-    if "Count" not in value.columns:
-        if "SliceLocation" in value.columns:
-            value["Count"] = value["SliceLocation"].nunique()
-        else:
-            value["Count"] = len(value)
-except ValueError as e:
-    if "All arrays must be of the same length" in str(e):
-        # Provide more helpful error message
-        field_lengths = {${Object.entries(testCase.data).map(([field, values]) => 
-          `"${field}": ${values.filter(v => v !== '' && v != null).length}`
-        ).join(', ')}}
-        error_msg = f"Test data error: All fields must have the same number of values. Found: {field_lengths}"
-        raise ValueError(error_msg)
-    else:
-        raise
-
-# Initialize test results
-test_passed = False
-error_message = None
-
-# Try to compile the function first to catch syntax errors
-function_code = '''def ${editedFunc.id}(cls, value):
-${indentedImplementation}
-'''
+import json, base64
 
 try:
-    # First compile the function
-    compiled_code = compile(function_code, '<string>', 'exec')
-    
-    # Create a namespace for execution
-    exec_namespace = {
-        'pd': pd,
-        'math': math,
-        'ValidationError': ValidationError,
-        'ValidationWarning': ValidationWarning,
-        'value': value
+    from dicompare.interface import run_rule_test_case
+except ImportError:
+    run_rule_test_case = None
+
+_payload = json.loads(base64.b64decode("${payloadB64}").decode("utf-8"))
+
+if run_rule_test_case is None:
+    _out = {
+        "passed": False,
+        "error": "This dicompare build is out of date — please update it to test validation functions (run_rule_test_case is unavailable).",
+        "warning": None,
+        "result": "fail",
+        "expected_result": _payload.get("expected_result"),
+        "stdout": "",
     }
-    
-    # Execute the function definition
-    exec(compiled_code, exec_namespace)
-    
-    # Now try to call the function
-    exec_namespace['${editedFunc.id}'](None, value)
-    
-    # If we reach here without exception, the function passed
-    test_passed = True
-    error_message = None
-    warning_message = None
+else:
+    _res = run_rule_test_case(_payload["rule"], _payload["test_data"])
+    _result = _res.get("result")
+    _out = {
+        "passed": _result != "fail",
+        "error": _res.get("message") if _result == "fail" else None,
+        "warning": _res.get("message") if _result == "warning" else None,
+        "result": _result,
+        "expected_result": _payload.get("expected_result"),
+        "stdout": "",
+    }
 
-except SyntaxError as e:
-    test_passed = False
-    error_message = f"Syntax error in function: {str(e)}"
-    warning_message = None
-except ValidationError as e:
-    test_passed = False
-    error_message = str(e)
-    warning_message = None
-except ValidationWarning as e:
-    test_passed = True  # Warning means it passed but with issues
-    error_message = None
-    warning_message = str(e)
-except Exception as e:
-    test_passed = False
-    error_message = f"Unexpected error: {str(e)}"
-    warning_message = None
-
-# Get captured output
-stdout_content = captured_output.getvalue()
-
-# Restore stdout
-sys.stdout = sys.__stdout__
-
-# Return result
-import json
-
-# Return result as JSON
-json.dumps({
-    "passed": test_passed,
-    "error": error_message,
-    "warning": warning_message,
-    "expected_result": "${testCase.expectedResult}",
-    "stdout": stdout_content
-})
+json.dumps(_out)
 `;
 
       let result;
@@ -1072,10 +985,10 @@ json.dumps({
                                     value={(() => {
                                       const value = testCase.data[field]?.[rowIndex];
                                       if (Array.isArray(value)) {
-                                        // Convert array back to comma-separated string for editing
-                                        return value.join(',');
+                                        // Render a list-valued cell explicitly with brackets
+                                        return `[${value.join(', ')}]`;
                                       }
-                                      // Convert all values to strings for editing
+                                      // Convert scalar values to strings for editing
                                       return value != null ? String(value) : '';
                                     })()}
                                     onChange={(e) => {
@@ -1087,38 +1000,37 @@ json.dumps({
                                         newData[field].push('');
                                       }
 
-                                      const inputValue = e.target.value;
-                                      console.log(`Input for ${field}: "${inputValue}"`);
+                                      // Parse a single token into a number when it looks numeric,
+                                      // otherwise keep it as a trimmed string.
+                                      const parseScalar = (token: string): number | string => {
+                                        const t = token.trim();
+                                        if (t === '') return '';
+                                        const n = Number(t);
+                                        return t !== '' && !isNaN(n) ? n : t;
+                                      };
 
-                                      // Smart value parsing - automatically detect type
-                                      let parsedValue;
-                                      if (inputValue.trim() === '') {
-                                        parsedValue = '';
+                                      const inputValue = e.target.value;
+                                      const trimmed = inputValue.trim();
+                                      let parsedValue: number | string | Array<number | string>;
+
+                                      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                                        // Explicit list-valued cell, e.g. "[0, 6000, 30000]".
+                                        // Stored as a real array so it round-trips to a tuple in
+                                        // dicompare (matching real validation) instead of a string.
+                                        const inner = trimmed.slice(1, -1).trim();
+                                        parsedValue = inner === '' ? [] : inner.split(',').map(parseScalar);
                                       } else if (inputValue.includes(',')) {
-                                        // Comma-separated values - parse as array
-                                        const arrayValues = inputValue.split(',').map(v => {
-                                          // Only trim for number parsing, preserve original value
-                                          const trimmed = v.trim();
-                                          if (trimmed === '') return ''; // Keep empty strings for incomplete arrays
-                                          const num = parseFloat(trimmed);
-                                          // Return number if it's a valid number, otherwise return original (with spaces)
-                                          return isNaN(num) ? v : num;
-                                        });
-                                        parsedValue = arrayValues;
+                                        // Bare comma-separated input also denotes a list cell (e.g. "1,1")
+                                        parsedValue = inputValue.split(',').map(parseScalar);
                                       } else {
-                                        // Single value - try to parse as number
-                                        const trimmed = inputValue.trim();
-                                        const num = parseFloat(trimmed);
-                                        // Return number if it's a valid number, otherwise return original (with spaces)
-                                        parsedValue = isNaN(num) ? inputValue : num;
+                                        parsedValue = parseScalar(inputValue);
                                       }
 
-                                      console.log(`Parsed value for ${field}:`, parsedValue);
                                       newData[field][rowIndex] = parsedValue;
                                       updateTestCase(testIndex, { data: newData });
                                     }}
                                     className={`w-full px-2 py-1 text-xs border-none bg-transparent text-content-primary focus:outline-none ${isSystemField ? 'focus:bg-purple-500/10' : 'focus:bg-blue-500/10'}`}
-                                    placeholder={`${field} value (e.g., "1,1" for lists)`}
+                                    placeholder={`${field} value (e.g. 3 or [0, 1000, 3000])`}
                                   />
                                 </div>
                                 );

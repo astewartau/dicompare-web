@@ -3,6 +3,7 @@ import { X, Check } from 'lucide-react';
 import Modal from '../common/Modal';
 import { DicomField, FieldDataType, ValidationConstraint, ValidationRule } from '../../types';
 import { inferDataTypeFromValue, convertValueToDataType } from '../../utils/datatypeInference';
+import { lintField } from '../../utils/schemaLint';
 
 interface FieldEditModalProps {
   field: DicomField;
@@ -304,6 +305,14 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   const needsListInput = ['contains_any', 'contains_all'].includes(formData.validationRule.type) ||
     formData.dataType === 'list_string' || formData.dataType === 'list_number';
 
+  // Non-blocking authoring hints (brittle exact matches, non-enumerated values, …)
+  const lintWarnings = lintField({
+    keyword: field.keyword,
+    name: field.name,
+    value: formData.value,
+    validationRule: formData.validationRule,
+  });
+
   return (
     <Modal
       isOpen={true}
@@ -553,6 +562,18 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                 </div>
               )}
               {errors.constraint && <p className="text-red-500 text-xs mt-1">{errors.constraint}</p>}
+            </div>
+          )}
+
+          {/* Authoring hints (non-blocking) */}
+          {lintWarnings.length > 0 && (
+            <div className="rounded-lg border border-amber-300 dark:border-amber-800/70 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-1">
+              {lintWarnings.map((w) => (
+                <p key={w.code} className="text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                  <span aria-hidden="true">⚠</span>
+                  <span>{w.message}</span>
+                </p>
+              ))}
             </div>
           )}
         </div>

@@ -60,6 +60,41 @@ export function inferDataTypeFromValue(value: any): FieldDataType {
 }
 
 /**
+ * Infers the data type for a schema field, considering its constraint keys when
+ * no concrete `value` is present (constraint-only fields such as those using
+ * `contains_any` / `contains_all` / `contains` / `min` / `max`).
+ *
+ * This is why `vr` and `dataType` are optional in schema files: when a `value`
+ * exists the type is inferred from it, and when only constraints exist the type
+ * is inferred from the constraint shape instead.
+ */
+export function inferDataTypeFromField(schemaField: any): FieldDataType {
+  const hasValue = schemaField.value !== null
+    && schemaField.value !== undefined
+    && schemaField.value !== '';
+  if (hasValue) {
+    return inferDataTypeFromValue(schemaField.value);
+  }
+
+  // Constraint-only fields: infer from the constraint keys.
+  const listConstraint = schemaField.contains_all ?? schemaField.contains_any;
+  if (listConstraint !== undefined) {
+    const allNumbers = Array.isArray(listConstraint)
+      && listConstraint.length > 0
+      && listConstraint.every((item: any) => typeof item === 'number' && !isNaN(item));
+    return allNumbers ? 'list_number' : 'list_string';
+  }
+  if (schemaField.contains !== undefined) {
+    return 'string';
+  }
+  if (schemaField.min !== undefined || schemaField.max !== undefined) {
+    return 'number';
+  }
+
+  return inferDataTypeFromValue(schemaField.value);
+}
+
+/**
  * Converts a value to match the specified data type
  * Used when changing data types in the UI
  */
@@ -153,12 +188,12 @@ export function processSchemaFieldForUI(schemaField: any): any {
     } else if (knownListStringFields.includes(normalizedTag)) {
       dataType = 'list_string';
     } else {
-      // Fallback to value-based inference
-      dataType = inferDataTypeFromValue(schemaField.value);
+      // Fallback to value/constraint-based inference
+      dataType = inferDataTypeFromField(schemaField);
     }
   } else {
-    // Fallback to value-based inference
-    dataType = inferDataTypeFromValue(schemaField.value);
+    // Fallback to value/constraint-based inference
+    dataType = inferDataTypeFromField(schemaField);
   }
 
   const validationRule = buildValidationRuleFromSchema(schemaField);
@@ -194,7 +229,7 @@ export function processSchemaFieldForUI(schemaField: any): any {
  * Process series field value for schema data
  */
 export function processSchemaSeriesFieldValue(schemaField: any, fieldName?: string, tag?: string): any {
-  const dataType = inferDataTypeFromValue(schemaField.value);
+  const dataType = inferDataTypeFromField(schemaField);
   const validationRule = buildValidationRuleFromSchema(schemaField);
 
   return {
