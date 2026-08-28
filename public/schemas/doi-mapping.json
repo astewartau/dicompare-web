@@ -9,6 +9,16 @@
     "version_doi": "10.5281/zenodo.20805043",
     "zenodo_url": "https://zenodo.org/record/20805043"
   },
+  "Axon_diameter_mapping_v1.1": {
+    "checksum": "sha256:86630425523108010b26841d73b0f7dbbc7f965dcb4b8932bfaac818205a8429",
+    "concept_doi": "10.5281/zenodo.22143660",
+    "concept_recid": "22143660",
+    "record_id": "22143661",
+    "updated_at": "2026-08-28T11:40:44Z",
+    "version": "1.1",
+    "version_doi": "10.5281/zenodo.22143661",
+    "zenodo_url": "https://zenodo.org/record/22143661"
+  },
   "Generic_Spine_v1.0": {
     "checksum": "sha256:e164d3eb9a42292b8c77fd65fcfa67477ca4082e80b07959a6719e637940d625",
     "concept_doi": "10.5281/zenodo.20805053",
@@ -48,6 +58,16 @@
     "version": "1.0",
     "version_doi": "10.5281/zenodo.20805047",
     "zenodo_url": "https://zenodo.org/record/20805047"
+  },
+  "Protocols_for_DWI_analysis_v1.0": {
+    "checksum": "sha256:d5a8204ddda5ee8659e6baa2eafa00248e44a8b50e813e89183829d22f153d56",
+    "concept_doi": "10.5281/zenodo.22143662",
+    "concept_recid": "22143662",
+    "record_id": "22143663",
+    "updated_at": "2026-08-28T11:40:44Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.22143663",
+    "zenodo_url": "https://zenodo.org/record/22143663"
   },
   "QSM_Consensus_Guidelines_v1.0": {
     "checksum": "sha256:151070e92963a19ff2e7ce022d13a710ba0378cfee0b2804d79c6ee78435967a",
