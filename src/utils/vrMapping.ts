@@ -1,4 +1,5 @@
 import { FieldDataType } from '../types';
+import fieldRegistry from '../data/fieldRegistry.json';
 
 // Comprehensive VR (Value Representation) to JSON-serializable data type mapping
 // Based on DICOM standard and dicom-parser documentation
@@ -240,23 +241,20 @@ export function getSuggestedConstraintForVR(vr: string, fieldName?: string, tag?
 }
 
 /**
- * Get suggested tolerance value for fields that use tolerance validation
+ * Get suggested tolerance value for fields that use tolerance validation.
+ * Tolerances come from the canonical field registry (dicompare-pip
+ * dicompare/fields.py, exported to src/data/fieldRegistry.json).
  */
 export function getSuggestedToleranceValue(fieldName?: string, tag?: string): number | undefined {
-  // Special case for MagneticFieldStrength - tolerance of 0.3
-  if (fieldName === 'Magnetic Field Strength' || tag === '0018,0087') {
-    return 0.3;
-  }
-  
-  // Special case for ImagingFrequency - tolerance of 1
-  if (fieldName === 'Imaging Frequency' || tag === '0018,0084') {
-    return 1;
-  }
-  
-  // Special case for PixelBandwidth - tolerance of 1
-  if (fieldName === 'Pixel Bandwidth' || tag === '0018,0095') {
-    return 1;
-  }
-  
-  return undefined;
+  const registry: Record<string, { valueType: string; tag?: string; suggestedTolerance?: number }> = fieldRegistry;
+
+  // Match by keyword ("MagneticFieldStrength"), display name with spaces
+  // ("Magnetic Field Strength"), or DICOM tag.
+  const keyword = fieldName?.replace(/\s+/g, '');
+  const entry =
+    (keyword && registry[keyword]) ||
+    (tag && Object.values(registry).find(e => e.tag === tag)) ||
+    undefined;
+
+  return entry ? entry.suggestedTolerance : undefined;
 }

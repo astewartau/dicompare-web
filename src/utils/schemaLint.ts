@@ -1,10 +1,16 @@
 import { ValidationRule } from '../types';
+import fieldRegistry from '../data/fieldRegistry.json';
 
 /**
  * Lightweight, high-signal "linting" for schema field constraints, surfaced in
  * the schema builder to catch constraints that look fine but will not match real
  * DICOM data (e.g. an exact match on a floating-point field, or a console
  * display string like "A >> P" where DICOM stores "COL").
+ *
+ * Field vocabularies and continuous-field classification come from the
+ * canonical field registry in dicompare-pip (dicompare/fields.py) — the same
+ * source of truth the protocol importers use. Regenerate with:
+ *   python -m dicompare.fields > src/data/fieldRegistry.json
  */
 export interface FieldLintWarning {
   code: 'exact-float' | 'enum-mismatch' | 'display-string';
@@ -19,33 +25,33 @@ export interface LintableField {
   validationRule?: ValidationRule;
 }
 
+interface RegistryEntry {
+  valueType: string;
+  tag?: string;
+  vr?: string;
+  unit?: string;
+  vocabulary?: (string | number)[];
+  continuous?: boolean;
+  suggestedTolerance?: number;
+}
+
+const REGISTRY: Record<string, RegistryEntry> = fieldRegistry;
+
 // Continuous physical parameters where an exact match is brittle even when the
 // authored value happens to be an integer (e.g. EchoTime 66).
-const CONTINUOUS_FIELDS = new Set<string>([
-  'RepetitionTime', 'EchoTime', 'InversionTime', 'SliceThickness',
-  'SpacingBetweenSlices', 'PixelBandwidth', 'FlipAngle', 'ImagingFrequency',
-  'MagneticFieldStrength', 'PixelSpacing', 'EchoSpacing', 'SAR', 'dBdt',
-  'PercentPhaseFieldOfView', 'PercentSampling',
-]);
+const CONTINUOUS_FIELDS = new Set<string>(
+  Object.entries(REGISTRY)
+    .filter(([, entry]) => entry.continuous)
+    .map(([keyword]) => keyword)
+);
 
-// A curated set of enumerated CS fields with their DICOM defined terms. A value
-// outside the set will never match real data.
-const ENUMERATED_CS_FIELDS: Record<string, string[]> = {
-  InPlanePhaseEncodingDirection: ['ROW', 'COL'],
-  MRAcquisitionType: ['1D', '2D', '3D'],
-  ComplexImageComponent: ['MAGNITUDE', 'PHASE', 'REAL', 'IMAGINARY', 'MIXED'],
-  PhotometricInterpretation: [
-    'MONOCHROME1', 'MONOCHROME2', 'PALETTE COLOR', 'RGB',
-    'YBR_FULL', 'YBR_FULL_422', 'YBR_PARTIAL_422', 'YBR_ICT', 'YBR_RCT',
-  ],
-  PatientPosition: [
-    'HFS', 'HFP', 'FFS', 'FFP', 'HFDR', 'HFDL', 'FFDR', 'FFDL',
-    'LFP', 'LFS', 'RFP', 'RFS', 'AFDR', 'AFDL', 'PFDR', 'PFDL',
-  ],
-  // Derived (not DICOM CS): dicompare maps Siemens ucCoilCombineMode to these
-  // strings when reading DICOMs, so a raw code like 2 never matches.
-  CoilCombinationMethod: ['Sum of Squares', 'Adaptive Combine'],
-};
+// Enumerated fields with their canonical vocabularies. A value outside the
+// set will never match real data.
+const ENUMERATED_CS_FIELDS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(REGISTRY)
+    .filter(([, entry]) => entry.vocabulary !== undefined)
+    .map(([keyword, entry]) => [keyword, entry.vocabulary!.map(v => String(v))])
+);
 
 const DISPLAY_STRING_PATTERN = /(>>|<<|→|←|->|<-)/;
 
