@@ -50,7 +50,8 @@
     "download:pyodide": "bash scripts/download-pyodide.sh",
     "type-check": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "sync:registry": "python3 -m dicompare.fields > src/data/fieldRegistry.json"
   },
   "eslintConfig": {
     "extends": [

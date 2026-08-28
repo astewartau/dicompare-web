@@ -39,5 +39,29 @@ jobs:
       - name: Test
         run: npx vitest run
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # src/data/fieldRegistry.json must match the canonical field registry of
+      # the dicompare version the app pins (src/version.ts) — the same source
+      # of truth the protocol importers use. Regenerate with:
+      #   npm run sync:registry
+      - name: Field registry drift check
+        run: |
+          VERSION=$(sed -n "s/.*DICOMPARE_VERSION = '\(.*\)'.*/\1/p" src/version.ts)
+          echo "Pinned dicompare version: $VERSION"
+          pip install --quiet "dicompare==$VERSION"
+          if python -c "import dicompare.fields" 2>/dev/null; then
+            python -m dicompare.fields > /tmp/fieldRegistry.json
+            if ! diff -u src/data/fieldRegistry.json /tmp/fieldRegistry.json; then
+              echo "::error::src/data/fieldRegistry.json is out of sync with dicompare==$VERSION. Regenerate with 'npm run sync:registry' and commit."
+              exit 1
+            fi
+          else
+            echo "dicompare==$VERSION predates the field registry; skipping drift check."
+          fi
+
       - name: Build
         run: npm run build
