@@ -51,54 +51,36 @@ interface ValidationFunctionLibraryModalProps {
   onCreateNewFunction: () => void;
 }
 
-// Dynamic validation function loading (extracted from PythonSchemaBuilder)
+// Dynamic validation function loading. The file list lives in
+// public/validation-functions/index.json, which includes every reusable
+// function plus the rules harvested from the schema library.
 const loadValidationFunctions = async (): Promise<ValidationFunction[]> => {
-  const functionFiles = [
-    // Echo Timing
-    'validate_echo_count.json',
-    'validate_exact_echo_count.json',
-    'uniform_echo_spacing.json',
-    'validate_first_echo.json',
-    'validate_echo_times.json',
-    // Image Type
-    'validate_image_type.json',
-    'validate_image_slices.json',
-    'validate_magnitude_phase_pairs.json',
-    // RF
-    'validate_repetition_time.json',
-    'validate_flip_angle.json',
-    // Geometry
-    'validate_voxel_shape.json',
-    'validate_pixel_spacing.json',
-    'validate_pixel_bandwidth.json',
-    'validate_slice_count.json',
-    'validate_phase_encoding_polarity.json',
-    // Diffusion
-    'validate_diffusion_directions.json',
-    'validate_bvalue_shells.json',
-    // fMRI
-    'validate_temporal_positions.json',
-    // MRA
-    'validate_mra_type.json'
-  ];
+  let functionFiles: string[] = [];
+  try {
+    const indexResponse = await fetch('/validation-functions/index.json');
+    if (indexResponse.ok) {
+      functionFiles = await indexResponse.json();
+    } else {
+      console.warn('Failed to load validation function index');
+    }
+  } catch (error) {
+    console.error('Error loading validation function index:', error);
+  }
 
-  const functions: ValidationFunction[] = [];
-  
-  for (const fileName of functionFiles) {
+  const results = await Promise.all(functionFiles.map(async fileName => {
     try {
       const response = await fetch(`/validation-functions/${fileName}`);
       if (response.ok) {
-        const functionData = await response.json();
-        functions.push(functionData);
-      } else {
-        console.warn(`Failed to load validation function: ${fileName}`);
+        return await response.json() as ValidationFunction;
       }
+      console.warn(`Failed to load validation function: ${fileName}`);
     } catch (error) {
       console.error(`Error loading validation function ${fileName}:`, error);
     }
-  }
-  
-  return functions;
+    return null;
+  }));
+
+  return results.filter((f): f is ValidationFunction => f !== null);
 };
 
 const ValidationFunctionLibraryModal: React.FC<ValidationFunctionLibraryModalProps> = ({

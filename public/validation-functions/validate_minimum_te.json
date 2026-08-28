@@ -1,0 +1,25 @@
+{
+  "id": "validate_minimum_te",
+  "name": "Verify Minimum TE",
+  "description": "MY-RADS specifies minimum TE for DWI to maximize SNR. Ultra-high b-values require longer TE which degrades image quality. (From the MY-RADS Myeloma Whole-Body MRI Guidelines schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "te = value[\"EchoTime\"].dropna()\nif len(te) > 0:\n    te_val = te.iloc[0]\n    raise ValidationWarning(f\"Echo Time is {te_val} ms. MY-RADS specifies minimum TE should be used for DWI. Verify this is the minimum TE available for your sequence - longer TE results in T2 decay and reduced SNR.\")",
+  "testCases": [
+    {
+      "id": "test_te_warning",
+      "name": "TE always warns",
+      "data": {
+        "EchoTime": [
+          80
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "Always warns to verify minimum TE"
+    }
+  ]
+}

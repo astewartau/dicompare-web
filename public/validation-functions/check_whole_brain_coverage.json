@@ -1,0 +1,44 @@
+{
+  "id": "check_whole_brain_coverage",
+  "name": "Whole Brain Coverage",
+  "description": "MS brain imaging requires whole-brain coverage (typically >140mm in z-direction). (From the MS CMSC MRI Guidelines schema.)",
+  "category": "Geometry",
+  "fields": [
+    "SliceThickness"
+  ],
+  "requiredSystemFields": [
+    "Count"
+  ],
+  "parameters": null,
+  "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nnum_slices = value[\"Count\"].iloc[0]\ncoverage = slice_thickness * num_slices\n\nif coverage < 140:\n    raise ValidationWarning(f\"Brain coverage ({coverage:.0f} mm) may be insufficient for whole-brain MS imaging. Typical coverage is >140mm.\")",
+  "testCases": [
+    {
+      "id": "test_good_coverage",
+      "name": "Good coverage",
+      "data": {
+        "SliceThickness": [
+          1.0
+        ],
+        "Count": [
+          180
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "180 slices x 1mm = 180mm coverage"
+    },
+    {
+      "id": "test_insufficient_coverage",
+      "name": "Insufficient coverage",
+      "data": {
+        "SliceThickness": [
+          1.0
+        ],
+        "Count": [
+          120
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "120 slices x 1mm = 120mm may be insufficient"
+    }
+  ]
+}

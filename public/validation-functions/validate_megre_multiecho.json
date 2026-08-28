@@ -1,0 +1,40 @@
+{
+  "id": "validate_megre_multiecho",
+  "name": "Multi-Echo Validation",
+  "description": "The ME-GRE sequence should be a multi-echo acquisition (3+ echoes) for robust T2* fitting. (From the Generic Spine Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "echo_times = value['EchoTime'].dropna().unique() if 'EchoTime' in value.columns else []\nif len(echo_times) < 3:\n    raise ValidationError(f\"ME-GRE should have 3+ echoes for T2* mapping. Found {len(echo_times)} echo(es).\")",
+  "testCases": [
+    {
+      "id": "test_megre_multiecho_pass",
+      "name": "3+ echoes present",
+      "data": {
+        "EchoTime": [
+          5,
+          10,
+          15,
+          20,
+          25
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_megre_multiecho_warning",
+      "name": "Single echo",
+      "data": {
+        "EchoTime": [
+          10
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

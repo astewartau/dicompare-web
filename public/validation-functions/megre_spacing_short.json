@@ -1,0 +1,56 @@
+{
+  "id": "megre_spacing_short",
+  "name": "Short Echo Spacing (<=4 ms)",
+  "description": "dTE should be short (~3-4 ms) so the fast myelin-water decay is sampled. (From the HC-ChiSep Validation Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "te = value[\"EchoTime\"].dropna().sort_values()\ndte = te.diff().iloc[1:].mean()\nif dte > 6:\n    raise ValidationError(f\"Mean dTE {dte:.1f} ms too long to sample the myelin beat; aim <=4 ms.\")\nif dte > 4:\n    raise ValidationWarning(f\"Mean dTE {dte:.1f} ms; <=4 ms preferred for the beat.\")",
+  "testCases": [
+    {
+      "id": "tc_Pass",
+      "name": "Pass",
+      "data": {
+        "EchoTime": [
+          3,
+          6,
+          9,
+          12
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "tc_Warn",
+      "name": "Warn",
+      "data": {
+        "EchoTime": [
+          3,
+          8,
+          13,
+          18
+        ]
+      },
+      "expectedResult": "warning",
+      "description": ""
+    },
+    {
+      "id": "tc_Fail",
+      "name": "Fail",
+      "data": {
+        "EchoTime": [
+          3,
+          10,
+          17,
+          24
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

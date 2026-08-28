@@ -1,0 +1,54 @@
+{
+  "id": "dti_bvalues",
+  "name": "b=0 and b~1000 Shell",
+  "description": "Need at least one b=0 and a diffusion-weighted shell around b=1000 s/mm^2 for tensor fitting. (From the HC-ChiSep Validation Protocol schema.)",
+  "category": "Diffusion",
+  "fields": [
+    "DiffusionBValue"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "b = value[\"DiffusionBValue\"].dropna().astype(float)\nif len(b) == 0:\n    raise ValidationError(\"No DiffusionBValue found — is this a diffusion series?\")\nhas_b0 = (b < 50).any()\nshell = b[b >= 50]\nif not has_b0:\n    raise ValidationWarning(\"No b=0 volume found; needed as tensor baseline and for distortion correction.\")\nif len(shell) == 0 or shell.max() < 700 or shell.min() > 1300:\n    raise ValidationError(f\"Expected a shell near b=1000. Found b-values up to {b.max():.0f}.\")",
+  "testCases": [
+    {
+      "id": "tc_Pass",
+      "name": "Pass",
+      "data": {
+        "DiffusionBValue": [
+          0,
+          1000,
+          1000,
+          1000
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "tc_Warn_no_b0",
+      "name": "Warn_no_b0",
+      "data": {
+        "DiffusionBValue": [
+          1000,
+          1000,
+          1000
+        ]
+      },
+      "expectedResult": "warning",
+      "description": ""
+    },
+    {
+      "id": "tc_Fail_no_shell",
+      "name": "Fail_no_shell",
+      "data": {
+        "DiffusionBValue": [
+          0,
+          300,
+          300
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "validate_megre_echo_spacing",
+  "name": "ME-GRE Echo Spacing",
+  "description": "Echo spacing should be uniform for proper T2* fitting. (From the Generic Spine Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "import numpy as np\necho_times = sorted(value['EchoTime'].dropna().unique()) if 'EchoTime' in value.columns else []\nif len(echo_times) >= 3:\n    spacings = np.diff(echo_times)\n    if not np.allclose(spacings, spacings[0], rtol=0.1):\n        raise ValidationError(f\"Echo spacing is not uniform. Spacings: {spacings}ms\")",
+  "testCases": [
+    {
+      "id": "test_megre_spacing_pass",
+      "name": "Uniform echo spacing",
+      "data": {
+        "EchoTime": [
+          5,
+          10,
+          15,
+          20
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_megre_spacing_warning",
+      "name": "Non-uniform spacing",
+      "data": {
+        "EchoTime": [
+          5,
+          8,
+          15,
+          20
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

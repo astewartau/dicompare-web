@@ -1,0 +1,42 @@
+{
+  "id": "mese_spacing_uniform",
+  "name": "Uniform Echo Spacing",
+  "description": "CPMG echo spacing must be uniform. (From the HC-ChiSep Validation Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "te = value[\"EchoTime\"].dropna().sort_values()\nd = te.diff().iloc[1:]\nif not all(abs(d.iloc[0] - s) < 0.2 for s in d):\n    raise ValidationError(f\"Echo spacing not uniform. Found {list(d.round(2))}.\")",
+  "testCases": [
+    {
+      "id": "tc_Pass",
+      "name": "Pass",
+      "data": {
+        "EchoTime": [
+          10,
+          20,
+          30,
+          40
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "tc_Fail",
+      "name": "Fail",
+      "data": {
+        "EchoTime": [
+          10,
+          20,
+          35,
+          40
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

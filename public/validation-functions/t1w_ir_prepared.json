@@ -1,0 +1,36 @@
+{
+  "id": "t1w_ir_prepared",
+  "name": "IR-Prepared T1w",
+  "description": "An inversion-recovery-prepared T1w (MPRAGE/BRAVO) gives the best GM/WM contrast for segmentation. (From the HC-ChiSep Validation Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "InversionTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "ti = value[\"InversionTime\"].dropna()\nif len(ti) == 0 or float(ti.iloc[0]) <= 0:\n    raise ValidationWarning(\"No InversionTime — an IR-prepared T1w (MPRAGE/BRAVO) is recommended for segmentation.\")",
+  "testCases": [
+    {
+      "id": "tc_Pass",
+      "name": "Pass",
+      "data": {
+        "InversionTime": [
+          900
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "tc_Warn",
+      "name": "Warn",
+      "data": {
+        "InversionTime": [
+          0
+        ]
+      },
+      "expectedResult": "warning",
+      "description": ""
+    }
+  ]
+}

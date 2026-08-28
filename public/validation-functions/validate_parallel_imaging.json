@@ -1,0 +1,29 @@
+{
+  "id": "validate_parallel_imaging",
+  "name": "Parallel Imaging Factor 2",
+  "description": "MY-RADS recommends parallel imaging acceleration factor of 2. (From the MY-RADS Myeloma Whole-Body MRI Guidelines schema.)",
+  "category": "Other",
+  "fields": [
+    "ParallelReductionFactorInPlane",
+    "ParallelAcquisitionTechnique"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "# Check for parallel imaging - field names vary by vendor\nparallel_factor = None\n\nif \"ParallelAcquisitionTechnique\" in value.columns:\n    pat = value[\"ParallelAcquisitionTechnique\"].dropna()\n    if len(pat) > 0 and pat.iloc[0] in [\"NONE\", \"None\", \"\"]:\n        raise ValidationWarning(\"Parallel imaging (GRAPPA/SENSE) with factor 2 is recommended.\")\n\nif \"ParallelReductionFactorInPlane\" in value.columns:\n    prf = value[\"ParallelReductionFactorInPlane\"].dropna()\n    if len(prf) > 0:\n        parallel_factor = prf.iloc[0]\n        if parallel_factor != 2:\n            raise ValidationWarning(f\"Parallel imaging factor should be 2. Found {parallel_factor}\")",
+  "testCases": [
+    {
+      "id": "test_correct_grappa",
+      "name": "Correct parallel factor",
+      "data": {
+        "ParallelReductionFactorInPlane": [
+          2
+        ],
+        "ParallelAcquisitionTechnique": [
+          "GRAPPA"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "GRAPPA factor 2"
+    }
+  ]
+}

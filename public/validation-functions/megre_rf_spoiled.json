@@ -1,0 +1,36 @@
+{
+  "id": "megre_rf_spoiled",
+  "name": "RF-Spoiled (recommended)",
+  "description": "RF-spoiled (SequenceVariant 'SP') is recommended for clean QSM phase. (From the HC-ChiSep Validation Protocol schema.)",
+  "category": "Sequence",
+  "fields": [
+    "SequenceVariant"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "var = str(value[\"SequenceVariant\"].iloc[0])\nif \"SP\" not in var:\n    raise ValidationWarning(f\"RF-spoiled (SequenceVariant 'SP') recommended for QSM phase. Found {var}.\")",
+  "testCases": [
+    {
+      "id": "tc_Pass",
+      "name": "Pass",
+      "data": {
+        "SequenceVariant": [
+          "SP"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "tc_Warn_not_spoiled",
+      "name": "Warn_not_spoiled",
+      "data": {
+        "SequenceVariant": [
+          "SS"
+        ]
+      },
+      "expectedResult": "warning",
+      "description": ""
+    }
+  ]
+}

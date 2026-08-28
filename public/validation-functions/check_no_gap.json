@@ -1,0 +1,43 @@
+{
+  "id": "check_no_gap",
+  "name": "No Gap Between Slices",
+  "description": "2D MS brain sequences should have no gap between slices. SpacingBetweenSlices should equal SliceThickness. (From the MS CMSC MRI Guidelines schema.)",
+  "category": "Geometry",
+  "fields": [
+    "SliceThickness",
+    "SpacingBetweenSlices"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nspacing = value[\"SpacingBetweenSlices\"].iloc[0] if \"SpacingBetweenSlices\" in value.columns and not pd.isna(value[\"SpacingBetweenSlices\"].iloc[0]) else slice_thickness\n\ngap = spacing - slice_thickness\nif gap > 0.5:\n    raise ValidationWarning(f\"Gap detected between slices ({gap:.1f} mm). MS protocols require no gap (SpacingBetweenSlices should equal SliceThickness).\")",
+  "testCases": [
+    {
+      "id": "test_no_gap",
+      "name": "No gap - passes",
+      "data": {
+        "SliceThickness": [
+          3.0
+        ],
+        "SpacingBetweenSlices": [
+          3.0
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "No gap between slices"
+    },
+    {
+      "id": "test_gap_present",
+      "name": "Gap present - warning",
+      "data": {
+        "SliceThickness": [
+          3.0
+        ],
+        "SpacingBetweenSlices": [
+          4.5
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "1.5mm gap detected"
+    }
+  ]
+}

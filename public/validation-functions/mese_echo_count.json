@@ -1,0 +1,96 @@
+{
+  "id": "mese_echo_count",
+  "name": "Echo Count (>=32 for MWF)",
+  "description": ">=8 echoes needed for R2; >=32 recommended so MESE also yields an MWF myelin reference. (From the HC-ChiSep Validation Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "n = value[\"EchoTime\"].dropna().nunique()\nif n < 6:\n    raise ValidationError(f\"Only {n} echoes; need >=8 for R2 fitting (>=32 for MWF).\")\nif n < 32:\n    raise ValidationWarning(f\"Found {n} echoes; >=32 recommended so MESE doubles as an MWF myelin reference. (>=8 is enough for R2' only.)\")",
+  "testCases": [
+    {
+      "id": "tc_Pass_32",
+      "name": "Pass_32",
+      "data": {
+        "EchoTime": [
+          10,
+          18,
+          26,
+          34,
+          42,
+          50,
+          58,
+          66,
+          74,
+          82,
+          90,
+          98,
+          106,
+          114,
+          122,
+          130,
+          138,
+          146,
+          154,
+          162,
+          170,
+          178,
+          186,
+          194,
+          202,
+          210,
+          218,
+          226,
+          234,
+          242,
+          250,
+          258
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "tc_Warn_16",
+      "name": "Warn_16",
+      "data": {
+        "EchoTime": [
+          10,
+          20,
+          30,
+          40,
+          50,
+          60,
+          70,
+          80,
+          90,
+          100,
+          110,
+          120,
+          130,
+          140,
+          150,
+          160
+        ]
+      },
+      "expectedResult": "warning",
+      "description": ""
+    },
+    {
+      "id": "tc_Fail_4",
+      "name": "Fail_4",
+      "data": {
+        "EchoTime": [
+          10,
+          20,
+          30,
+          40
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

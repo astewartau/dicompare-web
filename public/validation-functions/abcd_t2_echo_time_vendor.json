@@ -1,0 +1,71 @@
+{
+  "id": "abcd_t2_echo_time_vendor",
+  "name": "T2 EchoTime Vendor-Specific Validation",
+  "description": "Validates T2 echo time based on scanner manufacturer. TE varies significantly across vendors: Siemens ~565ms, Philips ~252ms, GE ~60ms. (From the ABCD Study Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "Manufacturer",
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "manufacturer = str(value['Manufacturer'].iloc[0]).upper()\nte = float(value['EchoTime'].iloc[0])\n\nif 'SIEMENS' in manufacturer:\n    if abs(te - 565) > 30:\n        raise ValidationError(f'T2 TE should be ~565ms for Siemens. Found: {te}ms')\nelif 'PHILIPS' in manufacturer:\n    if abs(te - 252) > 30:\n        raise ValidationError(f'T2 TE should be ~252ms for Philips. Found: {te}ms')\nelif 'GE' in manufacturer:\n    if abs(te - 60) > 15:\n        raise ValidationError(f'T2 TE should be ~60ms for GE. Found: {te}ms')",
+  "testCases": [
+    {
+      "id": "test_abcd_t2te_siemens_pass",
+      "name": "SIEMENS nominal",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "EchoTime": [
+          565
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_abcd_t2te_philips_pass",
+      "name": "Philips Medical Systems nominal",
+      "data": {
+        "Manufacturer": [
+          "Philips Medical Systems"
+        ],
+        "EchoTime": [
+          252
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_abcd_t2te_ge_pass",
+      "name": "GE MEDICAL SYSTEMS nominal",
+      "data": {
+        "Manufacturer": [
+          "GE MEDICAL SYSTEMS"
+        ],
+        "EchoTime": [
+          60
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_abcd_t2te_fail",
+      "name": "SIEMENS out of range",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "EchoTime": [
+          400
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

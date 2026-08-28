@@ -1,0 +1,90 @@
+{
+  "id": "validate_nsa_vendor",
+  "name": "Number of Averages (Vendor-Specific)",
+  "description": "MY-RADS specifies vendor-specific NSA values. Philips uses different NSA for low b (3) and high b (10). Siemens uses 4-5 for high b. GE uses 4 for high b. All vendors may reduce NSA for low b-value images. (From the MY-RADS Myeloma Whole-Body MRI Guidelines schema.)",
+  "category": "Diffusion",
+  "fields": [
+    "NumberOfAverages",
+    "Manufacturer",
+    "DiffusionBValue"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "nsa = value[\"NumberOfAverages\"].dropna()\nif len(nsa) > 0:\n    manufacturer = value[\"Manufacturer\"].iloc[0].upper() if \"Manufacturer\" in value.columns and not value[\"Manufacturer\"].isna().all() else \"\"\n    \n    # Get unique NSA values\n    nsa_values = sorted(nsa.unique())\n    min_nsa = min(nsa_values)\n    max_nsa = max(nsa_values)\n    \n    if \"PHILIPS\" in manufacturer:\n        # Philips: 3 for low b, 10 for high b\n        if max_nsa < 8:\n            raise ValidationWarning(f\"Philips DWI typically uses NSA=10 for high b-value images. Found max NSA={max_nsa}\")\n        elif len(nsa_values) == 1 and nsa_values[0] == 10:\n            raise ValidationWarning(f\"Philips DWI typically uses lower NSA (3) for low b-value images to save time. All images have NSA={nsa_values[0]}\")\n    elif \"SIEMENS\" in manufacturer:\n        # Siemens: 4-5 for high b\n        if max_nsa < 4 or max_nsa > 6:\n            raise ValidationWarning(f\"Siemens DWI typically uses NSA=4-5 for high b-value images. Found max NSA={max_nsa}\")\n    elif \"GE\" in manufacturer or \"GENERAL ELECTRIC\" in manufacturer:\n        # GE: 4 for high b\n        if max_nsa < 3 or max_nsa > 5:\n            raise ValidationWarning(f\"GE DWI typically uses NSA=4 for high b-value images. Found max NSA={max_nsa}\")\n    else:\n        # Unknown vendor - check reasonable range\n        if min_nsa < 2 or max_nsa > 12:\n            raise ValidationWarning(f\"NumberOfAverages ({min_nsa}-{max_nsa}) outside typical range (3-10) for WB-DWI.\")",
+  "testCases": [
+    {
+      "id": "test_philips_correct_nsa",
+      "name": "Philips correct NSA",
+      "data": {
+        "NumberOfAverages": [
+          3,
+          10
+        ],
+        "Manufacturer": [
+          "Philips"
+        ],
+        "DiffusionBValue": [
+          50,
+          900
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Philips with 3 for low b, 10 for high b"
+    },
+    {
+      "id": "test_philips_uniform_nsa",
+      "name": "Philips uniform NSA",
+      "data": {
+        "NumberOfAverages": [
+          10,
+          10
+        ],
+        "Manufacturer": [
+          "Philips"
+        ],
+        "DiffusionBValue": [
+          50,
+          900
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "Philips should use lower NSA for low b"
+    },
+    {
+      "id": "test_siemens_correct_nsa",
+      "name": "Siemens correct NSA",
+      "data": {
+        "NumberOfAverages": [
+          4
+        ],
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "DiffusionBValue": [
+          50,
+          900
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Siemens with NSA=4"
+    },
+    {
+      "id": "test_ge_correct_nsa",
+      "name": "GE correct NSA",
+      "data": {
+        "NumberOfAverages": [
+          4
+        ],
+        "Manufacturer": [
+          "GE MEDICAL SYSTEMS"
+        ],
+        "DiffusionBValue": [
+          50,
+          900
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "GE with NSA=4"
+    }
+  ]
+}

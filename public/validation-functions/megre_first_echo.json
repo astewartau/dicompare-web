@@ -1,0 +1,54 @@
+{
+  "id": "megre_first_echo",
+  "name": "Short First Echo",
+  "description": "TE1 should be as short as possible (~3 ms) to capture the fast-decaying myelin-water pool. (From the HC-ChiSep Validation Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "te1 = value[\"EchoTime\"].dropna().min()\nif te1 > 8:\n    raise ValidationError(f\"First TE too long ({te1} ms); aim for ~3 ms.\")\nif te1 > 5:\n    raise ValidationWarning(f\"First TE could be shorter ({te1} ms); ~3 ms preferred.\")",
+  "testCases": [
+    {
+      "id": "tc_Pass",
+      "name": "Pass",
+      "data": {
+        "EchoTime": [
+          3,
+          6,
+          9,
+          12
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "tc_Warn",
+      "name": "Warn",
+      "data": {
+        "EchoTime": [
+          6,
+          9,
+          12
+        ]
+      },
+      "expectedResult": "warning",
+      "description": ""
+    },
+    {
+      "id": "tc_Fail",
+      "name": "Fail",
+      "data": {
+        "EchoTime": [
+          10,
+          14,
+          18
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

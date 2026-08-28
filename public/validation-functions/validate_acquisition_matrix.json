@@ -1,0 +1,46 @@
+{
+  "id": "validate_acquisition_matrix",
+  "name": "Acquisition Matrix Size 128-152",
+  "description": "MY-RADS recommends acquired matrix size of 128-152 for DWI (before reconstruction). Siemens: 128-150, Philips: 128-152, GE: 128. (From the MY-RADS Myeloma Whole-Body MRI Guidelines schema.)",
+  "category": "Geometry",
+  "fields": [
+    "AcquisitionMatrix"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "# AcquisitionMatrix format: [freq_rows, freq_cols, phase_rows, phase_cols]\n# Non-zero values indicate the actual dimensions\nacq_matrix = value[\"AcquisitionMatrix\"].iloc[0]\n\nif acq_matrix is not None and len(acq_matrix) >= 4:\n    # Extract non-zero dimensions\n    freq_dim = acq_matrix[0] if acq_matrix[0] > 0 else acq_matrix[1]\n    phase_dim = acq_matrix[2] if acq_matrix[2] > 0 else acq_matrix[3]\n    \n    matrix_min = min(freq_dim, phase_dim)\n    matrix_max = max(freq_dim, phase_dim)\n    \n    if matrix_min < 128 or matrix_max > 160:\n        raise ValidationWarning(f\"Acquisition matrix should be 128-152. Found {freq_dim}x{phase_dim}\")",
+  "testCases": [
+    {
+      "id": "test_correct_matrix",
+      "name": "Correct acquisition matrix",
+      "data": {
+        "AcquisitionMatrix": [
+          [
+            128,
+            0,
+            0,
+            128
+          ]
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Matrix 128x128"
+    },
+    {
+      "id": "test_large_matrix",
+      "name": "Matrix too large",
+      "data": {
+        "AcquisitionMatrix": [
+          [
+            256,
+            0,
+            0,
+            256
+          ]
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "Matrix 256x256"
+    }
+  ]
+}

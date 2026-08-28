@@ -1,0 +1,57 @@
+{
+  "id": "validate_mtoff_vendor_sequence_variant",
+  "name": "MToff Vendor Sequence Variant",
+  "description": "Validates the expected SequenceVariant for each vendor (without MTC). (From the Generic Spine Protocol schema.)",
+  "category": "Contrast Preparation",
+  "fields": [
+    "Manufacturer",
+    "SequenceVariant"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "manufacturer = value['Manufacturer'].iloc[0].upper() if 'Manufacturer' in value.columns else ''\nseq_variant = str(value['SequenceVariant'].iloc[0]) if 'SequenceVariant' in value.columns else ''\n\nif 'GE' in manufacturer:\n    if 'SP' not in seq_variant:\n        raise ValidationError(f\"GE MToff should use SP (SPGR) sequence variant. Found: {seq_variant}\")\nelif 'SIEMENS' in manufacturer:\n    if 'SP' not in seq_variant:\n        raise ValidationError(f\"Siemens MToff should use SP sequence variant. Found: {seq_variant}\")\nelif 'PHILIPS' in manufacturer:\n    if 'SS' not in seq_variant or 'SP' not in seq_variant:\n        raise ValidationError(f\"Philips MToff should use SS_SP sequence variant. Found: {seq_variant}\")",
+  "testCases": [
+    {
+      "id": "test_mtoff_ge_variant_pass",
+      "name": "GE with SP",
+      "data": {
+        "Manufacturer": [
+          "GE MEDICAL SYSTEMS"
+        ],
+        "SequenceVariant": [
+          "SP"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_mtoff_siemens_variant_pass",
+      "name": "Siemens with SP",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "SequenceVariant": [
+          "SP"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_mtoff_philips_variant_pass",
+      "name": "Philips with SS_SP",
+      "data": {
+        "Manufacturer": [
+          "Philips"
+        ],
+        "SequenceVariant": [
+          "SS, SP"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    }
+  ]
+}

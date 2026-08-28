@@ -1,0 +1,71 @@
+{
+  "id": "validate_t2w_vendor_flip_angle",
+  "name": "T2w Vendor-Specific Flip Angle",
+  "description": "Validates FlipAngle matches expected value for each vendor (exact match). Siemens uses 120°, GE/Philips use 90°. (From the Generic Spine Protocol schema.)",
+  "category": "RF",
+  "fields": [
+    "Manufacturer",
+    "FlipAngle"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "manufacturer = value['Manufacturer'].iloc[0].upper() if 'Manufacturer' in value.columns else ''\nfa = value['FlipAngle'].iloc[0] if 'FlipAngle' in value.columns else None\n\nif fa is None:\n    pass\nelif 'SIEMENS' in manufacturer:\n    if fa != 120:\n        raise ValidationError(f\"Siemens T2w FlipAngle must be 120° (variable refocusing). Found: {fa}°\")\nelif 'GE' in manufacturer:\n    if fa != 90:\n        raise ValidationError(f\"GE T2w FlipAngle must be 90°. Found: {fa}°\")\nelif 'PHILIPS' in manufacturer:\n    if fa != 90:\n        raise ValidationError(f\"Philips T2w FlipAngle must be 90°. Found: {fa}°\")",
+  "testCases": [
+    {
+      "id": "test_t2w_siemens_fa_pass",
+      "name": "Siemens FA ~120°",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "FlipAngle": [
+          120
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_t2w_ge_fa_pass",
+      "name": "GE FA ~90°",
+      "data": {
+        "Manufacturer": [
+          "GE MEDICAL SYSTEMS"
+        ],
+        "FlipAngle": [
+          90
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_t2w_philips_fa_pass",
+      "name": "Philips FA ~90°",
+      "data": {
+        "Manufacturer": [
+          "Philips"
+        ],
+        "FlipAngle": [
+          90
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_t2w_siemens_fa_fail",
+      "name": "Siemens FA too low",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "FlipAngle": [
+          90
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

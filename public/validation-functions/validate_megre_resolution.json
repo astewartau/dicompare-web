@@ -1,0 +1,42 @@
+{
+  "id": "validate_megre_resolution",
+  "name": "ME-GRE High Resolution",
+  "description": "ME-GRE should have high in-plane resolution (~0.5mm) for gray matter visualization. (From the Generic Spine Protocol schema.)",
+  "category": "Geometry",
+  "fields": [
+    "PixelSpacing"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "if 'PixelSpacing' in value.columns:\n    pixel_spacing = value['PixelSpacing'].iloc[0]\n    if isinstance(pixel_spacing, (list, tuple)) and len(pixel_spacing) >= 2:\n        avg_spacing = (pixel_spacing[0] + pixel_spacing[1]) / 2\n        if avg_spacing > 0.6:\n            raise ValidationError(f\"ME-GRE in-plane resolution should be ~0.5mm. Found: {avg_spacing:.2f}mm\")",
+  "testCases": [
+    {
+      "id": "test_megre_resolution_pass",
+      "name": "0.5mm resolution",
+      "data": {
+        "PixelSpacing": [
+          [
+            0.5,
+            0.5
+          ]
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_megre_resolution_warning",
+      "name": "Low resolution",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.0,
+            1.0
+          ]
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

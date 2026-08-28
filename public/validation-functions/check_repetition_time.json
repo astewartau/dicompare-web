@@ -1,0 +1,36 @@
+{
+  "id": "check_repetition_time",
+  "name": "Repetition Time",
+  "description": "TR should be >3500ms to allow substantial relaxation of labeled spins between acquisitions. (From the ASL Clinical Guidelines schema.)",
+  "category": "Timing",
+  "fields": [
+    "RepetitionTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "tr = value[\"RepetitionTime\"].iloc[0]\n\nif tr is None or (isinstance(tr, float) and pd.isna(tr)):\n    pass  # No data available\nelse:\n    # TR may be in ms or seconds depending on vendor\n    tr_ms = tr if tr > 100 else tr * 1000\n    if tr_ms < 3500:\n        raise ValidationWarning(f\"TR is {tr_ms:.0f} ms. For ASL, TR should typically be >3500 ms to allow substantial T1 relaxation of labeled spins between acquisitions.\")",
+  "testCases": [
+    {
+      "id": "test_tr_adequate",
+      "name": "Adequate TR",
+      "data": {
+        "RepetitionTime": [
+          4500
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "4500ms TR is adequate"
+    },
+    {
+      "id": "test_tr_short",
+      "name": "Short TR",
+      "data": {
+        "RepetitionTime": [
+          2500
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "2500ms may be too short"
+    }
+  ]
+}

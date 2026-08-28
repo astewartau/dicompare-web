@@ -77,14 +77,6 @@
           "vr": "CS",
           "dataType": "string",
           "contains": "IR"
-        },
-        {
-          "field": "EchoTime",
-          "tag": "0018,0081",
-          "value": 3.5,
-          "vr": "DS",
-          "dataType": "number",
-          "tolerance": 100
         }
       ],
       "series": [],
@@ -252,6 +244,74 @@
               "description": "Philips uses different TR definition than Siemens"
             }
           ]
+        },
+        {
+          "id": "validate_t1w_vendor_te",
+          "name": "T1w vendor echo time",
+          "description": "Vendor-specific TE check for T1w, per the spine-generic protocol specs",
+          "implementation": "m = str(ctx.rows[0].get(\"Manufacturer\", \"\")).upper()\nte = ctx.rows[0].get(\"EchoTime\")\nif te is not None:\n    te = float(te)\n    if \"SIEMENS\" in m:\n        if not (2.5 <= te <= 4.5):\n            ctx.error(f\"Siemens MPRAGE TE should be 2.5-4.5 ms. Found: {te} ms\")\n    elif \"PHILIPS\" in m:\n        if not (2.5 <= te <= 4.5):\n            ctx.error(f\"Philips T1TFE TE should be 2.5-4.5 ms. Found: {te} ms\")",
+          "fields": [
+            "Manufacturer",
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "test_validate_t1w_vendor_te_siemens_pass",
+              "name": "SIEMENS in range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  3.5
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_t1w_vendor_te_siemens_fail",
+              "name": "SIEMENS out of range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  18.5
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_t1w_vendor_te_philips_pass",
+              "name": "PHILIPS in range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  3.5
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_t1w_vendor_te_philips_fail",
+              "name": "PHILIPS out of range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  18.5
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ]
         }
       ]
     },
@@ -278,14 +338,6 @@
           "vr": "DS",
           "dataType": "number",
           "tolerance": 0.1
-        },
-        {
-          "field": "EchoTime",
-          "tag": "0018,0081",
-          "value": 120,
-          "vr": "DS",
-          "dataType": "number",
-          "tolerance": 100
         },
         {
           "field": "EchoTrainLength",
@@ -456,6 +508,102 @@
               "description": ""
             }
           ]
+        },
+        {
+          "id": "validate_t2w_vendor_te",
+          "name": "T2w vendor echo time",
+          "description": "Vendor-specific TE check for T2w, per the spine-generic protocol specs",
+          "implementation": "m = str(ctx.rows[0].get(\"Manufacturer\", \"\")).upper()\nte = ctx.rows[0].get(\"EchoTime\")\nif te is not None:\n    te = float(te)\n    if \"SIEMENS\" in m:\n        if not (110 <= te <= 130):\n            ctx.error(f\"Siemens SPACE TE should be 110-130 ms. Found: {te} ms\")\n    elif \"GE\" in m:\n        if not (110 <= te <= 130):\n            ctx.error(f\"GE CUBE TE should be 110-130 ms. Found: {te} ms\")\n    elif \"PHILIPS\" in m:\n        if not (110 <= te <= 130):\n            ctx.error(f\"Philips VISTA TE should be 110-130 ms. Found: {te} ms\")",
+          "fields": [
+            "Manufacturer",
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "test_validate_t2w_vendor_te_siemens_pass",
+              "name": "SIEMENS in range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  120.0
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_t2w_vendor_te_siemens_fail",
+              "name": "SIEMENS out of range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  395
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_t2w_vendor_te_ge_pass",
+              "name": "GE in range",
+              "data": {
+                "Manufacturer": [
+                  "GE"
+                ],
+                "EchoTime": [
+                  120.0
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_t2w_vendor_te_ge_fail",
+              "name": "GE out of range",
+              "data": {
+                "Manufacturer": [
+                  "GE"
+                ],
+                "EchoTime": [
+                  395
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_t2w_vendor_te_philips_pass",
+              "name": "PHILIPS in range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  120.0
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_t2w_vendor_te_philips_fail",
+              "name": "PHILIPS out of range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  395
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ]
         }
       ]
     },
@@ -492,14 +640,6 @@
           "vr": "DS",
           "dataType": "number",
           "tolerance": 2.0
-        },
-        {
-          "field": "EchoTime",
-          "tag": "0018,0081",
-          "value": 70,
-          "vr": "DS",
-          "dataType": "number",
-          "tolerance": 100
         },
         {
           "field": "MagneticFieldStrength",
@@ -954,14 +1094,6 @@
           "tolerance": 0.5
         },
         {
-          "field": "EchoTime",
-          "tag": "0018,0081",
-          "value": 3,
-          "vr": "DS",
-          "dataType": "number",
-          "tolerance": 100
-        },
-        {
           "field": "FlipAngle",
           "tag": "0018,1314",
           "value": 9,
@@ -1171,6 +1303,102 @@
               "description": ""
             }
           ]
+        },
+        {
+          "id": "validate_mton_vendor_te",
+          "name": "MTon vendor echo time",
+          "description": "Vendor-specific TE check for MTon, per the spine-generic protocol specs",
+          "implementation": "m = str(ctx.rows[0].get(\"Manufacturer\", \"\")).upper()\nte = ctx.rows[0].get(\"EchoTime\")\nif te is not None:\n    te = float(te)\n    if \"SIEMENS\" in m:\n        if not (2.5 <= te <= 4.5):\n            ctx.error(f\"Siemens MTon TE should be 2.5-4.5 ms. Found: {te} ms\")\n    elif \"GE\" in m:\n        if not (3.0 <= te <= 5.0):\n            ctx.error(f\"GE MTon TE should be 3.0-5.0 ms. Found: {te} ms\")\n    elif \"PHILIPS\" in m:\n        if not (1.5 <= te <= 3.0):\n            ctx.error(f\"Philips MTon TE should be 1.5-3.0 ms. Found: {te} ms\")",
+          "fields": [
+            "Manufacturer",
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "test_validate_mton_vendor_te_siemens_pass",
+              "name": "SIEMENS in range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  3.5
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mton_vendor_te_siemens_fail",
+              "name": "SIEMENS out of range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  18.5
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mton_vendor_te_ge_pass",
+              "name": "GE in range",
+              "data": {
+                "Manufacturer": [
+                  "GE"
+                ],
+                "EchoTime": [
+                  4.0
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mton_vendor_te_ge_fail",
+              "name": "GE out of range",
+              "data": {
+                "Manufacturer": [
+                  "GE"
+                ],
+                "EchoTime": [
+                  20.0
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mton_vendor_te_philips_pass",
+              "name": "PHILIPS in range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  2.25
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mton_vendor_te_philips_fail",
+              "name": "PHILIPS out of range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  14.0
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ]
         }
       ]
     },
@@ -1197,14 +1425,6 @@
           "vr": "DS",
           "dataType": "number",
           "tolerance": 0.5
-        },
-        {
-          "field": "EchoTime",
-          "tag": "0018,0081",
-          "value": 3,
-          "vr": "DS",
-          "dataType": "number",
-          "tolerance": 100
         },
         {
           "field": "FlipAngle",
@@ -1363,6 +1583,102 @@
               "description": ""
             }
           ]
+        },
+        {
+          "id": "validate_mtoff_vendor_te",
+          "name": "MToff vendor echo time",
+          "description": "Vendor-specific TE check for MToff, per the spine-generic protocol specs",
+          "implementation": "m = str(ctx.rows[0].get(\"Manufacturer\", \"\")).upper()\nte = ctx.rows[0].get(\"EchoTime\")\nif te is not None:\n    te = float(te)\n    if \"SIEMENS\" in m:\n        if not (2.5 <= te <= 4.5):\n            ctx.error(f\"Siemens MToff TE should be 2.5-4.5 ms. Found: {te} ms\")\n    elif \"GE\" in m:\n        if not (3.0 <= te <= 5.0):\n            ctx.error(f\"GE MToff TE should be 3.0-5.0 ms. Found: {te} ms\")\n    elif \"PHILIPS\" in m:\n        if not (1.5 <= te <= 3.0):\n            ctx.error(f\"Philips MToff TE should be 1.5-3.0 ms. Found: {te} ms\")",
+          "fields": [
+            "Manufacturer",
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "test_validate_mtoff_vendor_te_siemens_pass",
+              "name": "SIEMENS in range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  3.5
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mtoff_vendor_te_siemens_fail",
+              "name": "SIEMENS out of range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  18.5
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mtoff_vendor_te_ge_pass",
+              "name": "GE in range",
+              "data": {
+                "Manufacturer": [
+                  "GE"
+                ],
+                "EchoTime": [
+                  4.0
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mtoff_vendor_te_ge_fail",
+              "name": "GE out of range",
+              "data": {
+                "Manufacturer": [
+                  "GE"
+                ],
+                "EchoTime": [
+                  20.0
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mtoff_vendor_te_philips_pass",
+              "name": "PHILIPS in range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  2.25
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mtoff_vendor_te_philips_fail",
+              "name": "PHILIPS out of range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  14.0
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ]
         }
       ]
     },
@@ -1390,14 +1706,6 @@
           "vr": "DS",
           "dataType": "number",
           "tolerance": 0.5
-        },
-        {
-          "field": "EchoTime",
-          "tag": "0018,0081",
-          "value": 3,
-          "vr": "DS",
-          "dataType": "number",
-          "tolerance": 100
         },
         {
           "field": "FlipAngle",
@@ -1545,6 +1853,102 @@
                 ]
               },
               "expectedResult": "pass",
+              "description": ""
+            }
+          ]
+        },
+        {
+          "id": "validate_mts_t1w_vendor_te",
+          "name": "MTS T1w vendor echo time",
+          "description": "Vendor-specific TE check for MTS T1w, per the spine-generic protocol specs",
+          "implementation": "m = str(ctx.rows[0].get(\"Manufacturer\", \"\")).upper()\nte = ctx.rows[0].get(\"EchoTime\")\nif te is not None:\n    te = float(te)\n    if \"SIEMENS\" in m:\n        if not (2.5 <= te <= 4.5):\n            ctx.error(f\"Siemens MTS T1w TE should be 2.5-4.5 ms. Found: {te} ms\")\n    elif \"GE\" in m:\n        if not (3.0 <= te <= 5.0):\n            ctx.error(f\"GE MTS T1w TE should be 3.0-5.0 ms. Found: {te} ms\")\n    elif \"PHILIPS\" in m:\n        if not (1.5 <= te <= 3.0):\n            ctx.error(f\"Philips MTS T1w TE should be 1.5-3.0 ms. Found: {te} ms\")",
+          "fields": [
+            "Manufacturer",
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "test_validate_mts_t1w_vendor_te_siemens_pass",
+              "name": "SIEMENS in range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  3.5
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mts_t1w_vendor_te_siemens_fail",
+              "name": "SIEMENS out of range",
+              "data": {
+                "Manufacturer": [
+                  "SIEMENS"
+                ],
+                "EchoTime": [
+                  18.5
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mts_t1w_vendor_te_ge_pass",
+              "name": "GE in range",
+              "data": {
+                "Manufacturer": [
+                  "GE"
+                ],
+                "EchoTime": [
+                  4.0
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mts_t1w_vendor_te_ge_fail",
+              "name": "GE out of range",
+              "data": {
+                "Manufacturer": [
+                  "GE"
+                ],
+                "EchoTime": [
+                  20.0
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mts_t1w_vendor_te_philips_pass",
+              "name": "PHILIPS in range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  2.25
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_validate_mts_t1w_vendor_te_philips_fail",
+              "name": "PHILIPS out of range",
+              "data": {
+                "Manufacturer": [
+                  "PHILIPS"
+                ],
+                "EchoTime": [
+                  14.0
+                ]
+              },
+              "expectedResult": "fail",
               "description": ""
             }
           ]

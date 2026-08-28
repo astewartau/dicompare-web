@@ -1,0 +1,57 @@
+{
+  "id": "validate_dwi_vendor_sequence",
+  "name": "DWI Vendor-Specific Sequence",
+  "description": "Validates the correct EPI sequence type for each vendor: GE uses SE, Siemens uses EP, Philips uses EP+SE combination. (From the Generic Spine Protocol schema.)",
+  "category": "Diffusion",
+  "fields": [
+    "Manufacturer",
+    "ScanningSequence"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "manufacturer = value['Manufacturer'].iloc[0].upper() if 'Manufacturer' in value.columns else ''\nscanning_seq = value['ScanningSequence'].iloc[0] if 'ScanningSequence' in value.columns else ''\n\nif 'GE' in manufacturer:\n    if 'SE' not in scanning_seq:\n        raise ValidationError(f\"GE DWI should use SE-EPI sequence. Found: {scanning_seq}\")\nelif 'SIEMENS' in manufacturer:\n    if 'EP' not in scanning_seq:\n        raise ValidationError(f\"Siemens DWI should use EP (ep2d_diff) sequence. Found: {scanning_seq}\")\nelif 'PHILIPS' in manufacturer:\n    if 'EP' not in scanning_seq and 'SE' not in scanning_seq:\n        raise ValidationError(f\"Philips DWI should use EP/SE (Zoom Diffusion) sequence. Found: {scanning_seq}\")",
+  "testCases": [
+    {
+      "id": "test_dwi_ge_pass",
+      "name": "GE with SE sequence",
+      "data": {
+        "Manufacturer": [
+          "GE MEDICAL SYSTEMS"
+        ],
+        "ScanningSequence": [
+          "SE"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_dwi_siemens_pass",
+      "name": "Siemens with EP sequence",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "ScanningSequence": [
+          "EP"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_dwi_philips_pass",
+      "name": "Philips with EP_SE sequence",
+      "data": {
+        "Manufacturer": [
+          "Philips"
+        ],
+        "ScanningSequence": [
+          "EP, SE"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    }
+  ]
+}

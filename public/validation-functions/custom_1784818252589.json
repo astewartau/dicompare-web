@@ -1,0 +1,13 @@
+{
+  "id": "custom_1784818252589",
+  "name": "Detect low b-value",
+  "description": "Detect low b-value for accurate noise mapping. (From the Axon diameter mapping schema.)",
+  "category": "Diffusion",
+  "fields": [
+    "DiffusionBValues"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "import ast\n\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    bvals = as_list(value[\"DiffusionBValues\"][i])\n    if len([b for b in bvals if 0 < b < 1100]) == 0:\n        errors.append(\"Entry \" + str(i) + \": no non-zero b-value below 1100 s/mm2 present\")\n\nif errors:\n    raise ValidationError(chr(10).join(errors))",
+  "testCases": []
+}

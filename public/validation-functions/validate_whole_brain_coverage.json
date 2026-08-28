@@ -1,0 +1,44 @@
+{
+  "id": "validate_whole_brain_coverage",
+  "name": "Whole Brain Coverage",
+  "description": "ASL should have whole-brain coverage (typically >100mm in z-direction). (From the ASL Clinical Guidelines schema.)",
+  "category": "Geometry",
+  "fields": [
+    "SliceThickness"
+  ],
+  "requiredSystemFields": [
+    "Count"
+  ],
+  "parameters": null,
+  "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nnum_slices = value[\"Count\"].iloc[0]\ncoverage = slice_thickness * num_slices\n\nif coverage < 100:\n    raise ValidationWarning(f\"Brain coverage ({coverage:.0f} mm) may be insufficient for whole-brain ASL. Consider increasing number of slices.\")",
+  "testCases": [
+    {
+      "id": "test_coverage_pass",
+      "name": "Good coverage",
+      "data": {
+        "SliceThickness": [
+          4
+        ],
+        "Count": [
+          30
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "30 slices x 4mm = 120mm coverage"
+    },
+    {
+      "id": "test_coverage_insufficient",
+      "name": "Insufficient coverage",
+      "data": {
+        "SliceThickness": [
+          4
+        ],
+        "Count": [
+          20
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "20 slices x 4mm = 80mm is insufficient"
+    }
+  ]
+}

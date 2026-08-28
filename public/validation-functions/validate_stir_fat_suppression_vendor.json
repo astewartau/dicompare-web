@@ -1,0 +1,71 @@
+{
+  "id": "validate_stir_fat_suppression_vendor",
+  "name": "STIR Fat Suppression TI (Vendor-Specific)",
+  "description": "DWI should use STIR fat suppression. MY-RADS specifies TI=180ms for Siemens/Philips and TI=170ms for GE. (From the MY-RADS Myeloma Whole-Body MRI Guidelines schema.)",
+  "category": "Contrast Preparation",
+  "fields": [
+    "InversionTime",
+    "Manufacturer"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "inversion_time = value[\"InversionTime\"].dropna()\nif len(inversion_time) == 0:\n    raise ValidationWarning(\"InversionTime not found. STIR fat suppression is required.\")\nelse:\n    ti = inversion_time.iloc[0]\n    manufacturer = value[\"Manufacturer\"].iloc[0].upper() if \"Manufacturer\" in value.columns else \"\"\n    \n    # Vendor-specific TI targets from Table E1\n    if \"GE\" in manufacturer or \"GENERAL ELECTRIC\" in manufacturer:\n        target_ti = 170\n        tolerance = 5\n    elif \"SIEMENS\" in manufacturer:\n        target_ti = 180\n        tolerance = 5\n    elif \"PHILIPS\" in manufacturer:\n        target_ti = 180\n        tolerance = 5\n    else:\n        # Unknown vendor - accept 170-180 range\n        target_ti = 175\n        tolerance = 10\n    \n    # Graded severity: far outside the fat-null regime the STIR contrast\n    # is fundamentally wrong (error); moderately off is suboptimal fat\n    # suppression (warning).\n    if abs(ti - target_ti) > 50:\n        raise ValidationError(f\"STIR InversionTime should be ~{target_ti} ms for this vendor. Found {ti} ms.\")\n    elif abs(ti - target_ti) > tolerance:\n        raise ValidationWarning(f\"STIR InversionTime should be ~{target_ti} ms for this vendor. Found {ti} ms.\")",
+  "testCases": [
+    {
+      "id": "test_siemens_ti_180",
+      "name": "Siemens TI=180",
+      "data": {
+        "InversionTime": [
+          180
+        ],
+        "Manufacturer": [
+          "SIEMENS"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Correct TI for Siemens"
+    },
+    {
+      "id": "test_ge_ti_170",
+      "name": "GE TI=170",
+      "data": {
+        "InversionTime": [
+          170
+        ],
+        "Manufacturer": [
+          "GE MEDICAL SYSTEMS"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Correct TI for GE"
+    },
+    {
+      "id": "test_ge_wrong_ti",
+      "name": "GE with wrong TI",
+      "data": {
+        "InversionTime": [
+          200
+        ],
+        "Manufacturer": [
+          "GE MEDICAL SYSTEMS"
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "GE should use TI=170, not 200"
+    },
+    {
+      "id": "test_wrong_ti",
+      "name": "Incorrect TI",
+      "data": {
+        "InversionTime": [
+          250
+        ],
+        "Manufacturer": [
+          "SIEMENS"
+        ]
+      },
+      "expectedResult": "fail",
+      "description": "TI too high"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "megre_spacing_uniform",
+  "name": "Uniform Echo Spacing",
+  "description": "Echo spacing (dTE) must be uniform for R2*/beat fitting. (From the HC-ChiSep Validation Protocol schema.)",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "te = value[\"EchoTime\"].dropna().sort_values()\nd = te.diff().iloc[1:]\nif not all(abs(d.iloc[0] - s) < 0.1 for s in d):\n    raise ValidationError(f\"Echo spacing not uniform. Found {list(d.round(2))}.\")",
+  "testCases": [
+    {
+      "id": "tc_Pass",
+      "name": "Pass",
+      "data": {
+        "EchoTime": [
+          3,
+          6,
+          9,
+          12
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "tc_Fail",
+      "name": "Fail",
+      "data": {
+        "EchoTime": [
+          3,
+          6,
+          10,
+          12
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}
