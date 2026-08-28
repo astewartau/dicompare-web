@@ -29,5 +29,5 @@ dist/
 /release
 
 # Pyodide offline bundle (downloaded at build time)
-/public/pyodideout/
-release/
+/public/pyodide
+/out
