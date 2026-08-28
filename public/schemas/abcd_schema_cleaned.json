@@ -10,7 +10,11 @@
   "acquisitions": {
     "fMRI Field Map (P>>A)": {
       "description": "fMRI B0 field map - Posterior-Anterior phase encoding",
-      "tags": ["brain", "fieldmap", "fMRI"],
+      "tags": [
+        "brain",
+        "fieldmap",
+        "fMRI"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -63,7 +67,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.4
+          "value": 2.4,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -71,7 +76,8 @@
           "value": [
             2.4,
             2.4
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -96,17 +102,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 7030
+          "value": 7030,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 80
+          "value": 80,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -168,12 +177,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -192,7 +203,13 @@
     },
     "Task fMRI - Monetary Incentive Delay (MID)": {
       "description": "Monetary Incentive Delay (MID) task fMRI measuring reward processing (2 runs, ~5:42 each)",
-      "tags": ["analysis:fmri", "brain", "fMRI", "task-based", "reward"],
+      "tags": [
+        "analysis:fmri",
+        "brain",
+        "fMRI",
+        "task-based",
+        "reward"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -353,12 +370,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -377,7 +396,10 @@
     },
     "Localizer": {
       "description": "Localizer scan for slice positioning",
-      "tags": ["brain", "localizer"],
+      "tags": [
+        "brain",
+        "localizer"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -431,7 +453,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 7
+          "value": 7,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -439,7 +462,8 @@
           "value": [
             0.48828,
             0.48828
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -454,17 +478,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 7.5
+          "value": 7.5,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 3.69
+          "value": 3.69,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 20
+          "value": 20,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -527,12 +554,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 91
+          "value": 91,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "AngioFlag",
@@ -579,11 +608,17 @@
         }
       ],
       "rules": [],
-      "detailed_description": "## Localizer\n\nStandard localizer acquisition using 32-channel head coil for planning subsequent scan prescriptions. Acquired in orthogonal orientations (ROW and COL phase encoding) for optimal slice positioning.\n\n### Key Parameters (Siemens)\n- Sequence: 2D Gradient Echo\n- Resolution: 0.49 \u00d7 0.49 mm in-plane\n- Slice Thickness: 7 mm\n- TR/TE: 7.5/3.69 ms\n- Flip Angle: 20\u00b0"
+      "detailed_description": "## Localizer\n\nStandard localizer acquisition using 32-channel head coil for planning subsequent scan prescriptions. Acquired in orthogonal orientations (ROW and COL phase encoding) for optimal slice positioning.\n\n### Key Parameters (Siemens)\n- Sequence: 2D Gradient Echo\n- Resolution: 0.49 × 0.49 mm in-plane\n- Slice Thickness: 7 mm\n- TR/TE: 7.5/3.69 ms\n- Flip Angle: 20°"
     },
     "T2-weighted 3D SPACE": {
       "description": "3D T2-weighted SPACE/CUBE with vNav motion correction for white matter lesion detection and CSF quantification",
-      "tags": ["analysis:segmentation", "analysis:lesion-detection", "brain", "structural", "T2-weighted"],
+      "tags": [
+        "analysis:segmentation",
+        "analysis:lesion-detection",
+        "brain",
+        "structural",
+        "T2-weighted"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -736,12 +771,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -791,15 +828,25 @@
           "name": "T2 EchoTime Vendor-Specific Validation",
           "description": "Validates T2 echo time based on scanner manufacturer. TE varies significantly across vendors: Siemens ~565ms, Philips ~252ms, GE ~60ms.",
           "implementation": "manufacturer = str(value['Manufacturer'].iloc[0]).upper()\nte = float(value['EchoTime'].iloc[0])\n\nif 'SIEMENS' in manufacturer:\n    if abs(te - 565) > 30:\n        raise ValidationError(f'T2 TE should be ~565ms for Siemens. Found: {te}ms')\nelif 'PHILIPS' in manufacturer:\n    if abs(te - 252) > 30:\n        raise ValidationError(f'T2 TE should be ~252ms for Philips. Found: {te}ms')\nelif 'GE' in manufacturer:\n    if abs(te - 60) > 15:\n        raise ValidationError(f'T2 TE should be ~60ms for GE. Found: {te}ms')",
-          "fields": ["Manufacturer", "EchoTime"],
+          "fields": [
+            "Manufacturer",
+            "EchoTime"
+          ],
           "testCases": []
         }
       ],
-      "detailed_description": "## 3D T2-Weighted Structural Imaging (SPACE/CUBE)\n\nHigh-resolution T2-weighted fast spin echo with variable flip angle (SPACE on Siemens, CUBE on GE) for detection and quantification of white matter lesions and CSF. Uses volumetric navigators for prospective motion correction.\n\n### Clinical Purpose\n- White matter hyperintensity detection\n- CSF quantification\n- Lesion characterization\n- Complementary contrast to T1w\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | Flip | Time |\n|----------|--------|------------|-----|-----|------|------|\n| Siemens | 256\u00d7256 | 1.0 mm iso | 3200 ms | 565 ms | Variable | 6:35 |\n| Philips | 256\u00d7256 | 1.0 mm iso | 2500 ms | 251.6 ms | 90\u00b0 | 2:53 |\n| GE | 256\u00d7256 | 1.0 mm iso | 3200 ms | 60 ms | Variable | 5:50 |\n\n### Technical Notes\n- Parallel imaging: 2\u00d7 \n- Variable refocusing flip angle train for optimal contrast\n- 176-256 slices depending on platform"
+      "detailed_description": "## 3D T2-Weighted Structural Imaging (SPACE/CUBE)\n\nHigh-resolution T2-weighted fast spin echo with variable flip angle (SPACE on Siemens, CUBE on GE) for detection and quantification of white matter lesions and CSF. Uses volumetric navigators for prospective motion correction.\n\n### Clinical Purpose\n- White matter hyperintensity detection\n- CSF quantification\n- Lesion characterization\n- Complementary contrast to T1w\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | Flip | Time |\n|----------|--------|------------|-----|-----|------|------|\n| Siemens | 256×256 | 1.0 mm iso | 3200 ms | 565 ms | Variable | 6:35 |\n| Philips | 256×256 | 1.0 mm iso | 2500 ms | 251.6 ms | 90° | 2:53 |\n| GE | 256×256 | 1.0 mm iso | 3200 ms | 60 ms | Variable | 5:50 |\n\n### Technical Notes\n- Parallel imaging: 2× \n- Variable refocusing flip angle train for optimal contrast\n- 176-256 slices depending on platform"
     },
     "T1-weighted 3D MPRAGE": {
       "description": "3D T1-weighted MPRAGE with vNav motion correction for cortical and subcortical segmentation",
-      "tags": ["analysis:segmentation", "analysis:volumetry", "analysis:cortical-thickness", "brain", "structural", "T1-weighted"],
+      "tags": [
+        "analysis:segmentation",
+        "analysis:volumetry",
+        "analysis:cortical-thickness",
+        "brain",
+        "structural",
+        "T1-weighted"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -962,12 +1009,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -984,11 +1033,18 @@
         }
       ],
       "rules": [],
-      "detailed_description": "## 3D T1-Weighted Structural Imaging (MPRAGE)\n\nHigh-resolution T1-weighted magnetization-prepared rapid acquisition gradient echo (MPRAGE) scan for cortical and subcortical segmentation. Uses volumetric navigators (vNav) for prospective motion correction and selective reacquisition.\n\n### Clinical Purpose\n- Cortical surface reconstruction\n- Subcortical volume segmentation\n- Gray/white matter differentiation\n- Anatomical reference for functional data\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | TI | Flip | Time |\n|----------|--------|------------|-----|-----|------|------|------|\n| Siemens | 256\u00d7256 | 1.0 mm iso | 2500 ms | 2.88 ms | 1060 ms | 8\u00b0 | 7:12 |\n| Philips | 256\u00d7256 | 1.0 mm iso | 6.31 ms | 2.9 ms | 1060 ms | 8\u00b0 | 5:38 |\n| GE | 256\u00d7256 | 1.0 mm iso | 2500 ms | 2 ms | 1060 ms | 8\u00b0 | 6:09 |\n\n### Technical Notes\n- Parallel imaging: 2\u00d7 (GRAPPA/SENSE/ARC)\n- Prospective motion correction via vNav (Siemens, Philips) or PROMO (GE)\n- 176-208 slices depending on platform"
+      "detailed_description": "## 3D T1-Weighted Structural Imaging (MPRAGE)\n\nHigh-resolution T1-weighted magnetization-prepared rapid acquisition gradient echo (MPRAGE) scan for cortical and subcortical segmentation. Uses volumetric navigators (vNav) for prospective motion correction and selective reacquisition.\n\n### Clinical Purpose\n- Cortical surface reconstruction\n- Subcortical volume segmentation\n- Gray/white matter differentiation\n- Anatomical reference for functional data\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | TI | Flip | Time |\n|----------|--------|------------|-----|-----|------|------|------|\n| Siemens | 256×256 | 1.0 mm iso | 2500 ms | 2.88 ms | 1060 ms | 8° | 7:12 |\n| Philips | 256×256 | 1.0 mm iso | 6.31 ms | 2.9 ms | 1060 ms | 8° | 5:38 |\n| GE | 256×256 | 1.0 mm iso | 2500 ms | 2 ms | 1060 ms | 8° | 6:09 |\n\n### Technical Notes\n- Parallel imaging: 2× (GRAPPA/SENSE/ARC)\n- Prospective motion correction via vNav (Siemens, Philips) or PROMO (GE)\n- 176-208 slices depending on platform"
     },
     "Diffusion MRI (Multi-shell HARDI)": {
       "description": "High angular resolution diffusion imaging (HARDI) with multi-shell acquisition for white matter tract segmentation",
-      "tags": ["analysis:diffusion", "brain", "dMRI", "diffusion", "multiband", "HARDI"],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "dMRI",
+        "diffusion",
+        "multiband",
+        "HARDI"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1133,12 +1189,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -1160,7 +1218,9 @@
           "name": "ABCD Diffusion Directions",
           "description": "Validates expected number of diffusion gradient directions (96 diffusion-weighted + 7 b=0)",
           "implementation": "directions = value.get('DiffusionGradientDirectionSequence', [])\nn_directions = len(set(tuple(d) if isinstance(d, list) else d for d in directions))\n\nif n_directions < 96:\n  raise ValidationError(f'Expected at least 96 diffusion directions, found {n_directions}')",
-          "fields": ["DiffusionGradientDirectionSequence"],
+          "fields": [
+            "DiffusionGradientDirectionSequence"
+          ],
           "testCases": []
         },
         {
@@ -1168,7 +1228,10 @@
           "name": "Diffusion TR Vendor-Specific Validation",
           "description": "Validates diffusion TR based on scanner manufacturer. TR varies across vendors: Siemens/GE ~4100ms, Philips ~5300ms.",
           "implementation": "manufacturer = str(value['Manufacturer'].iloc[0]).upper()\ntr = float(value['RepetitionTime'].iloc[0])\n\nif 'SIEMENS' in manufacturer:\n    if abs(tr - 4100) > 200:\n        raise ValidationError(f'Diffusion TR should be ~4100ms for Siemens. Found: {tr}ms')\nelif 'PHILIPS' in manufacturer:\n    if abs(tr - 5300) > 200:\n        raise ValidationError(f'Diffusion TR should be ~5300ms for Philips. Found: {tr}ms')\nelif 'GE' in manufacturer:\n    if abs(tr - 4100) > 200:\n        raise ValidationError(f'Diffusion TR should be ~4100ms for GE. Found: {tr}ms')",
-          "fields": ["Manufacturer", "RepetitionTime"],
+          "fields": [
+            "Manufacturer",
+            "RepetitionTime"
+          ],
           "testCases": []
         },
         {
@@ -1176,16 +1239,24 @@
           "name": "Diffusion Flip Angle Vendor-Specific Validation",
           "description": "Validates diffusion flip angle based on scanner manufacturer. Flip angle varies: Siemens 90, Philips 78, GE 77 degrees.",
           "implementation": "manufacturer = str(value['Manufacturer'].iloc[0]).upper()\nflip = float(value['FlipAngle'].iloc[0])\n\nif 'SIEMENS' in manufacturer:\n    if abs(flip - 90) > 5:\n        raise ValidationError(f'Diffusion flip angle should be ~90 deg for Siemens. Found: {flip} deg')\nelif 'PHILIPS' in manufacturer:\n    if abs(flip - 78) > 5:\n        raise ValidationError(f'Diffusion flip angle should be ~78 deg for Philips. Found: {flip} deg')\nelif 'GE' in manufacturer:\n    if abs(flip - 77) > 5:\n        raise ValidationError(f'Diffusion flip angle should be ~77 deg for GE. Found: {flip} deg')",
-          "fields": ["Manufacturer", "FlipAngle"],
+          "fields": [
+            "Manufacturer",
+            "FlipAngle"
+          ],
           "testCases": []
         }
       ],
-      "detailed_description": "## Diffusion-Weighted Imaging (HARDI)\n\nHigh angular resolution diffusion imaging (HARDI) with multiple b-values for white matter tract segmentation and diffusion measurement. Includes fast integrated B0 distortion correction using reversed polarity gradient (RPG) method.\n\n### Clinical Purpose\n- White matter tract segmentation\n- Fractional anisotropy (FA) mapping\n- Mean diffusivity (MD) measurement\n- Tractography and connectomics\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | Flip | Directions | b-values | Time |\n|----------|--------|------------|-----|-----|------|------------|----------|------|\n| Siemens | 140\u00d7140 | 1.7 mm iso | 4100 ms | 88 ms | 90\u00b0 | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 7:31 |\n| Philips | 140\u00d7140 | 1.7 mm iso | 5300 ms | 89 ms | 78\u00b0 | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 9:14 |\n| GE | 140\u00d7140 | 1.7 mm iso | 4100 ms | 81.9 ms | 77\u00b0 | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 7:30 |\n\n### Technical Notes\n- Multiband acceleration: 3\u00d7\n- Partial Fourier: 6/8 (Siemens/GE) or 0.6 (Philips)\n- 81 slices\n- Multi-shell scheme enables advanced diffusion models (NODDI, etc.)",
+      "detailed_description": "## Diffusion-Weighted Imaging (HARDI)\n\nHigh angular resolution diffusion imaging (HARDI) with multiple b-values for white matter tract segmentation and diffusion measurement. Includes fast integrated B0 distortion correction using reversed polarity gradient (RPG) method.\n\n### Clinical Purpose\n- White matter tract segmentation\n- Fractional anisotropy (FA) mapping\n- Mean diffusivity (MD) measurement\n- Tractography and connectomics\n\n### Key Parameters (from Table 2)\n| Platform | Matrix | Resolution | TR | TE | Flip | Directions | b-values | Time |\n|----------|--------|------------|-----|-----|------|------------|----------|------|\n| Siemens | 140×140 | 1.7 mm iso | 4100 ms | 88 ms | 90° | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 7:31 |\n| Philips | 140×140 | 1.7 mm iso | 5300 ms | 89 ms | 78° | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 9:14 |\n| GE | 140×140 | 1.7 mm iso | 4100 ms | 81.9 ms | 77° | 96 | 500(6), 1000(15), 2000(15), 3000(60) | 7:30 |\n\n### Technical Notes\n- Multiband acceleration: 3×\n- Partial Fourier: 6/8 (Siemens/GE) or 0.6 (Philips)\n- 81 slices\n- Multi-shell scheme enables advanced diffusion models (NODDI, etc.)",
       "series": []
     },
     "Diffusion Field Map (A>>P)": {
       "description": "Diffusion B0 field map - Anterior-Posterior phase encoding",
-      "tags": ["brain", "fieldmap", "dMRI", "diffusion"],
+      "tags": [
+        "brain",
+        "fieldmap",
+        "dMRI",
+        "diffusion"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1239,7 +1310,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 1.7
+          "value": 1.7,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -1247,7 +1319,8 @@
           "value": [
             1.71429,
             1.71429
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -1272,17 +1345,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 12400
+          "value": 12400,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 89
+          "value": 89,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -1349,12 +1425,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -1376,7 +1454,12 @@
     },
     "Diffusion Field Map (P>>A)": {
       "description": "Diffusion B0 field map - Posterior-Anterior phase encoding",
-      "tags": ["brain", "fieldmap", "dMRI", "diffusion"],
+      "tags": [
+        "brain",
+        "fieldmap",
+        "dMRI",
+        "diffusion"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1430,7 +1513,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 1.7
+          "value": 1.7,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -1438,7 +1522,8 @@
           "value": [
             1.71429,
             1.71429
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -1463,17 +1548,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 12400
+          "value": 12400,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 89
+          "value": 89,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -1540,12 +1628,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -1567,7 +1657,11 @@
     },
     "fMRI Field Map (A>>P)": {
       "description": "fMRI B0 field map - Anterior-Posterior phase encoding",
-      "tags": ["brain", "fieldmap", "fMRI"],
+      "tags": [
+        "brain",
+        "fieldmap",
+        "fMRI"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1620,7 +1714,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.4
+          "value": 2.4,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -1628,7 +1723,8 @@
           "value": [
             2.4,
             2.4
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -1653,17 +1749,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 7030
+          "value": 7030,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 80
+          "value": 80,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -1725,12 +1824,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -1749,7 +1850,13 @@
     },
     "Resting-State fMRI": {
       "description": "Resting-state fMRI with multiband acceleration (4 runs, ~7 min each)",
-      "tags": ["analysis:fmri", "brain", "fMRI", "resting-state", "multiband"],
+      "tags": [
+        "analysis:fmri",
+        "brain",
+        "fMRI",
+        "resting-state",
+        "multiband"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1908,12 +2015,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -1928,11 +2037,18 @@
       ],
       "series": [],
       "rules": [],
-      "detailed_description": "## Resting-State Functional MRI\n\nHigh spatial and temporal resolution simultaneous multi-slice (SMS)/multiband EPI resting-state fMRI for examining functional connectivity. Participants passively view a crosshair with eyes open.\n\n### Protocol\n- 4 runs of 5 minutes each (20 minutes total)\n- 2 runs acquired after T1w\n- 2 runs acquired after T2w\n- Eyes open, passive fixation crosshair viewing\n\n### Key Parameters (from Table 2)\n| Parameter | Value |\n|-----------|-------|\n| Matrix | 90 \u00d7 90 |\n| Resolution | 2.4 mm isotropic |\n| TR | 800 ms |\n| TE | 30 ms |\n| Flip Angle | 52\u00b0 |\n| Slices | 60 |\n| Multiband Factor | 6 |\n\n### Technical Notes\n- High temporal resolution (TR=800ms) enabled by multiband\n- Mean frame-to-frame displacement: 0.22 mm (SD=0.20)\n- FIRMM real-time motion monitoring at Siemens sites"
+      "detailed_description": "## Resting-State Functional MRI\n\nHigh spatial and temporal resolution simultaneous multi-slice (SMS)/multiband EPI resting-state fMRI for examining functional connectivity. Participants passively view a crosshair with eyes open.\n\n### Protocol\n- 4 runs of 5 minutes each (20 minutes total)\n- 2 runs acquired after T1w\n- 2 runs acquired after T2w\n- Eyes open, passive fixation crosshair viewing\n\n### Key Parameters (from Table 2)\n| Parameter | Value |\n|-----------|-------|\n| Matrix | 90 × 90 |\n| Resolution | 2.4 mm isotropic |\n| TR | 800 ms |\n| TE | 30 ms |\n| Flip Angle | 52° |\n| Slices | 60 |\n| Multiband Factor | 6 |\n\n### Technical Notes\n- High temporal resolution (TR=800ms) enabled by multiband\n- Mean frame-to-frame displacement: 0.22 mm (SD=0.20)\n- FIRMM real-time motion monitoring at Siemens sites"
     },
     "Task fMRI - Emotional N-back": {
       "description": "Emotional N-back (EN-back) fMRI measuring working memory and emotional processing (2 runs, ~5:13 each)",
-      "tags": ["analysis:fmri", "brain", "fMRI", "task-based", "working-memory", "emotion"],
+      "tags": [
+        "analysis:fmri",
+        "brain",
+        "fMRI",
+        "task-based",
+        "working-memory",
+        "emotion"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -2093,12 +2209,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -2117,7 +2235,13 @@
     },
     "Task fMRI - Stop Signal Task (SST)": {
       "description": "Stop Signal Task (SST) fMRI measuring response inhibition (2 runs, ~5:26 each)",
-      "tags": ["analysis:fmri", "brain", "fMRI", "task-based", "inhibition"],
+      "tags": [
+        "analysis:fmri",
+        "brain",
+        "fMRI",
+        "task-based",
+        "inhibition"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -2278,12 +2402,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",

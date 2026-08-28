@@ -34,22 +34,26 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 2300
+          "value": 2300,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 2
+          "value": 2,
+          "tolerance": 1.0
         },
         {
           "field": "InversionTime",
           "tag": "0018,0082",
-          "value": 857
+          "value": 857,
+          "tolerance": 10.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 9
+          "value": 9,
+          "tolerance": 2.0
         },
         {
           "field": "NumberOfAverages",
@@ -59,7 +63,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 1
+          "value": 1,
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -77,12 +82,14 @@
           "value": [
             1,
             1
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "PixelBandwidth",
           "tag": "0018,0095",
-          "value": 230
+          "value": 230,
+          "tolerance": 50.0
         },
         {
           "field": "InPlanePhaseEncodingDirection",
@@ -97,7 +104,8 @@
         {
           "field": "EchoSpacing",
           "tag": "derived",
-          "value": 5.9
+          "value": 5.9,
+          "tolerance": 0.05
         },
         {
           "field": "GradientMode",
@@ -117,7 +125,8 @@
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         }
       ],
       "series": [],
@@ -148,12 +157,14 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 3500
+          "value": 3500,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 66
+          "value": 66,
+          "tolerance": 1.0
         },
         {
           "field": "NumberOfAverages",
@@ -163,7 +174,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -181,12 +193,14 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "PixelBandwidth",
           "tag": "0018,0095",
-          "value": 2272
+          "value": 2272,
+          "tolerance": 50.0
         },
         {
           "field": "EchoTrainLength",
@@ -241,7 +255,8 @@
         {
           "field": "EchoSpacing",
           "tag": "derived",
-          "value": 0.52
+          "value": 0.52,
+          "tolerance": 0.05
         },
         {
           "field": "GradientMode",
@@ -271,7 +286,8 @@
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "SmallDelta",
@@ -367,12 +383,14 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 3500
+          "value": 3500,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 66
+          "value": 66,
+          "tolerance": 1.0
         },
         {
           "field": "NumberOfAverages",
@@ -382,7 +400,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -400,12 +419,14 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "PixelBandwidth",
           "tag": "0018,0095",
-          "value": 2272
+          "value": 2272,
+          "tolerance": 50.0
         },
         {
           "field": "EchoTrainLength",
@@ -461,7 +482,8 @@
         {
           "field": "EchoSpacing",
           "tag": "derived",
-          "value": 0.52
+          "value": 0.52,
+          "tolerance": 0.05
         },
         {
           "field": "GradientMode",
@@ -491,7 +513,8 @@
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "SmallDelta",
@@ -546,12 +569,14 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 3500
+          "value": 3500,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 66
+          "value": 66,
+          "tolerance": 1.0
         },
         {
           "field": "NumberOfAverages",
@@ -561,7 +586,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -579,12 +605,14 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "PixelBandwidth",
           "tag": "0018,0095",
-          "value": 2272
+          "value": 2272,
+          "tolerance": 50.0
         },
         {
           "field": "EchoTrainLength",
@@ -639,7 +667,8 @@
         {
           "field": "EchoSpacing",
           "tag": "derived",
-          "value": 0.52
+          "value": 0.52,
+          "tolerance": 0.05
         },
         {
           "field": "GradientMode",
@@ -669,7 +698,8 @@
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "SmallDelta",

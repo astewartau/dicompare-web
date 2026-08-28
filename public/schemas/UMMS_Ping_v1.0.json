@@ -9,7 +9,10 @@
     "Localizer": {
       "description": "Survey/localizer scan",
       "detailed_description": "Three-plane survey/localizer scan for positioning subsequent acquisitions. 2D gradient echo sequence with TR=10.5ms, TE=4ms, flip angle=10°, 0.49mm in-plane resolution, 10mm slice thickness, 512×512 matrix. Quick acquisition (~10 seconds) used by the MR technologist to verify patient positioning and plan slice locations for the structural and functional scans.",
-      "tags": ["brain", "localizer"],
+      "tags": [
+        "brain",
+        "localizer"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -55,7 +58,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 10
+          "value": 10,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -63,7 +67,8 @@
           "value": [
             0.48828,
             0.48828
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -93,17 +98,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 10.5199
+          "value": 10.5199,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 4
+          "value": 4,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 10
+          "value": 10,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -196,12 +204,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 50
+          "value": 50,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -255,7 +265,13 @@
     "T2-weighted 2D TSE": {
       "description": "T2-weighted turbo spin echo structural image",
       "detailed_description": "2D T2-weighted turbo spin echo (TSE) scan for detection and quantification of white matter lesions and CSF segmentation. Key parameters: TR=3000ms, TE=80ms, flip angle=90°, 0.45mm in-plane resolution, 3mm slice thickness, 560×560 matrix (reconstructed), ETL=15. Acquired with PROMO prospective motion correction to minimize motion artifacts in pediatric subjects.",
-      "tags": ["analysis:segmentation", "analysis:lesion-detection", "brain", "structural", "T2-weighted"],
+      "tags": [
+        "analysis:segmentation",
+        "analysis:lesion-detection",
+        "brain",
+        "structural",
+        "T2-weighted"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -301,7 +317,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 3
+          "value": 3,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -309,7 +326,8 @@
           "value": [
             0.44643,
             0.44643
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -339,17 +357,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 3000
+          "value": 3000,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 80
+          "value": 80,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -442,12 +463,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 79.54546
+          "value": 79.54546,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 80.73394
+          "value": 80.73394,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -501,7 +524,14 @@
     "T1-weighted 3D MPRAGE": {
       "description": "T1-weighted MPRAGE structural image",
       "detailed_description": "3D T1-weighted inversion-prepared RF-spoiled gradient echo (MPRAGE) scan acquired with PROMO prospective motion correction for cortical and subcortical segmentation. Key parameters: TR=6.77ms, TE=3.13ms, flip angle=8°, 1mm in-plane resolution, 1.2mm slice thickness, 256×256 matrix, SENSE parallel imaging. This acquisition provides the primary anatomical reference for FreeSurfer-based morphometric analysis in the PING processing pipeline.",
-      "tags": ["analysis:segmentation", "analysis:volumetry", "analysis:cortical-thickness", "brain", "structural", "T1-weighted"],
+      "tags": [
+        "analysis:segmentation",
+        "analysis:volumetry",
+        "analysis:cortical-thickness",
+        "brain",
+        "structural",
+        "T1-weighted"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -547,7 +577,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 1.2
+          "value": 1.2,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -555,7 +586,8 @@
           "value": [
             1,
             1
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -585,17 +617,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 6.7661
+          "value": 6.7661,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 3.133
+          "value": 3.133,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 8
+          "value": 8,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -693,12 +728,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 93.75
+          "value": 93.75,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -747,7 +784,13 @@
     "Diffusion - ADC Map": {
       "description": "Apparent diffusion coefficient map",
       "detailed_description": "Apparent Diffusion Coefficient (ADC) map computed from the HARDI diffusion acquisition. ADC quantifies the overall magnitude of water diffusion and is sensitive to changes in tissue cellularity. Derived from the same acquisition parameters as DWI: TR=9000ms, TE=91.14ms, 2.5mm isotropic resolution. Generated on-scanner from the diffusion-weighted images using mono-exponential fitting.",
-      "tags": ["analysis:diffusion", "brain", "dMRI", "diffusion", "derived"],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "dMRI",
+        "diffusion",
+        "derived"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -793,7 +836,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -801,7 +845,8 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -831,17 +876,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 9000
+          "value": 9000,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 91.14
+          "value": 91.14,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -934,12 +982,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -993,7 +1043,13 @@
     "Diffusion - Exponential ADC Map": {
       "description": "Exponential apparent diffusion coefficient map",
       "detailed_description": "Exponential Apparent Diffusion Coefficient (eADC) map computed from the HARDI diffusion acquisition. eADC = exp(-b×ADC) provides T2-independent diffusion contrast where high signal indicates restricted diffusion (low ADC). Useful for detecting acute pathology. Derived from the same acquisition parameters as DWI: TR=9000ms, TE=91.14ms, 2.5mm isotropic resolution, b=1000 s/mm².",
-      "tags": ["analysis:diffusion", "brain", "dMRI", "diffusion", "derived"],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "dMRI",
+        "diffusion",
+        "derived"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1039,7 +1095,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -1047,7 +1104,8 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -1077,17 +1135,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 9000
+          "value": 9000,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 91.14
+          "value": 91.14,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -1180,12 +1241,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -1239,7 +1302,13 @@
     "Diffusion - Fractional Anisotropy Map": {
       "description": "Fractional anisotropy map",
       "detailed_description": "Fractional Anisotropy (FA) map derived from diffusion tensor fitting of the HARDI acquisition. FA ranges from 0 (isotropic diffusion) to 1 (highly directional) and is the primary metric for assessing white matter integrity in the PING developmental trajectories. Key for connectomic analysis of white matter tract development from ages 3-20. Derived from same parameters as DWI: 2.5mm isotropic resolution.",
-      "tags": ["analysis:diffusion", "brain", "dMRI", "diffusion", "derived"],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "dMRI",
+        "diffusion",
+        "derived"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1285,7 +1354,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -1293,7 +1363,8 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -1323,17 +1394,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 9000
+          "value": 9000,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 91.14
+          "value": 91.14,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -1426,12 +1500,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -1485,7 +1561,12 @@
     "Resting-State fMRI": {
       "description": "Resting-state functional MRI",
       "detailed_description": "Resting-state blood oxygenation level-dependent (BOLD) fMRI scan with integrated distortion correction for functional connectivity analysis. Key parameters: TR=2500ms, TE=30ms, flip angle=75°, 2.67mm in-plane resolution, 3mm slice thickness, 156 temporal volumes (6.5 min acquisition), SENSE factor 3, gradient echo EPI. Used for studying developing functional brain networks in pediatric subjects. Children instructed to keep eyes open and fixate on crosshair.",
-      "tags": ["analysis:fmri", "brain", "fMRI", "resting-state"],
+      "tags": [
+        "analysis:fmri",
+        "brain",
+        "fMRI",
+        "resting-state"
+      ],
       "fields": [
         {
           "field": "SeriesDescription",
@@ -1531,7 +1612,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 3
+          "value": 3,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -1539,7 +1621,8 @@
           "value": [
             2.66667,
             2.66667
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -1569,17 +1652,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 2500
+          "value": 2500,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 30
+          "value": 30,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 75
+          "value": 75,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -1677,12 +1763,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 101.19048
+          "value": 101.19048,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -2080,7 +2168,12 @@
     "B0 Field Map (High Resolution)": {
       "description": "B0 field map for distortion correction (high resolution)",
       "detailed_description": "High-resolution B0 field map for EPI distortion correction of diffusion-weighted images. Acquired with matching geometry to DWI: 2.5mm isotropic resolution, 96×96 matrix, spin echo sequence. Key parameters: TR=9000ms, TE=91ms, 240mm FOV. Used as part of the DISCO (Distortion Correction) pipeline to correct susceptibility-induced geometric distortions in the HARDI acquisition.",
-      "tags": ["brain", "fieldmap", "dMRI", "diffusion"],
+      "tags": [
+        "brain",
+        "fieldmap",
+        "dMRI",
+        "diffusion"
+      ],
       "fields": [
         {
           "field": "SequenceVariant",
@@ -2121,7 +2214,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -2129,7 +2223,8 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -2159,17 +2254,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 9000
+          "value": 9000,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 91
+          "value": 91,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -2262,12 +2360,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -2321,7 +2421,11 @@
     "B0 Field Map (SENSE)": {
       "description": "B0 field map for distortion correction (SENSE accelerated)",
       "detailed_description": "SENSE-accelerated B0 field map for EPI distortion correction of resting-state fMRI. Acquired with matching geometry to fMRI: 2.67mm in-plane resolution, 3mm slice thickness, 96×96 matrix, SENSE factor 3. Key parameters: TR=10000ms, TE=100ms, 256mm FOV, spin echo sequence. Used for correcting susceptibility-induced geometric distortions in the resting-state BOLD acquisition.",
-      "tags": ["brain", "fieldmap", "fMRI"],
+      "tags": [
+        "brain",
+        "fieldmap",
+        "fMRI"
+      ],
       "fields": [
         {
           "field": "SequenceVariant",
@@ -2362,7 +2466,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 3
+          "value": 3,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -2370,7 +2475,8 @@
           "value": [
             2.66667,
             2.66667
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -2400,17 +2506,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 10000
+          "value": 10000,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 100
+          "value": 100,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 75
+          "value": 75,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -2508,12 +2617,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 101.19048
+          "value": 101.19048,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",
@@ -2567,7 +2678,13 @@
     "Diffusion-Weighted Imaging (HARDI)": {
       "description": "Diffusion-weighted imaging",
       "detailed_description": "High angular resolution diffusion imaging (HARDI) scan with integrated B0 distortion correction (DISCO) for white matter tract segmentation and diffusion parameter measurement. Protocol: 30 diffusion directions at b=1000 s/mm² plus 2 b=0 reference images (one A-P, one P-A phase encoding for distortion correction). Key parameters: TR=9000ms, TE=91.14ms, 2.5mm isotropic resolution, 96×96 matrix, spin echo EPI, fat suppression. Part of the PING connectomic analysis pipeline.",
-      "tags": ["analysis:diffusion", "brain", "dMRI", "diffusion", "HARDI"],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "dMRI",
+        "diffusion",
+        "HARDI"
+      ],
       "fields": [
         {
           "field": "SequenceVariant",
@@ -2608,7 +2725,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "PixelSpacing",
@@ -2616,7 +2734,8 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -2646,17 +2765,20 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 9000
+          "value": 9000,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 91.14
+          "value": 91.14,
+          "tolerance": 1.0
         },
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "EchoTrainLength",
@@ -2744,12 +2866,14 @@
         {
           "field": "PercentSampling",
           "tag": "0018,0093",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "ScanOptions",

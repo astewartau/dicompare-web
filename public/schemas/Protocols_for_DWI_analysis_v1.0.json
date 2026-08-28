@@ -48,7 +48,8 @@
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "DiffusionBValue",
@@ -230,7 +231,8 @@
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "AccelerationFactorPE",
@@ -394,12 +396,14 @@
         {
           "field": "RepetitionTime",
           "tag": "0018,0080",
-          "value": 3500
+          "value": 3500,
+          "tolerance": 10.0
         },
         {
           "field": "EchoTime",
           "tag": "0018,0081",
-          "value": 66
+          "value": 66,
+          "tolerance": 1.0
         },
         {
           "field": "NumberOfAverages",
@@ -409,7 +413,8 @@
         {
           "field": "SliceThickness",
           "tag": "0018,0050",
-          "value": 2.5
+          "value": 2.5,
+          "tolerance": 0.1
         },
         {
           "field": "Rows",
@@ -427,12 +432,14 @@
           "value": [
             2.5,
             2.5
-          ]
+          ],
+          "tolerance": 0.1
         },
         {
           "field": "PixelBandwidth",
           "tag": "0018,0095",
-          "value": 2272
+          "value": 2272,
+          "tolerance": 50.0
         },
         {
           "field": "EchoTrainLength",
@@ -487,7 +494,8 @@
         {
           "field": "EchoSpacing",
           "tag": "derived",
-          "value": 0.52
+          "value": 0.52,
+          "tolerance": 0.05
         },
         {
           "field": "GradientMode",
@@ -517,7 +525,8 @@
         {
           "field": "PercentPhaseFieldOfView",
           "tag": "0018,0094",
-          "value": 100
+          "value": 100,
+          "tolerance": 10.0
         },
         {
           "field": "SmallDelta",
@@ -626,7 +635,8 @@
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "AccelerationFactorPE",
@@ -810,7 +820,8 @@
         {
           "field": "FlipAngle",
           "tag": "0018,1314",
-          "value": 90
+          "value": 90,
+          "tolerance": 2.0
         },
         {
           "field": "DiffusionBValue",

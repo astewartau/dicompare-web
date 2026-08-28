@@ -36,7 +36,8 @@
           "tag": "0018,1314",
           "value": 9,
           "vr": "DS",
-          "dataType": "number"
+          "dataType": "number",
+          "tolerance": 2.0
         },
         {
           "field": "MagneticFieldStrength",
@@ -489,7 +490,8 @@
           "tag": "0018,1314",
           "value": 90,
           "vr": "DS",
-          "dataType": "number"
+          "dataType": "number",
+          "tolerance": 2.0
         },
         {
           "field": "EchoTime",
@@ -773,7 +775,8 @@
           "tag": "0018,1314",
           "value": 30,
           "vr": "DS",
-          "dataType": "number"
+          "dataType": "number",
+          "tolerance": 2.0
         },
         {
           "field": "MagneticFieldStrength",
@@ -963,7 +966,8 @@
           "tag": "0018,1314",
           "value": 9,
           "vr": "DS",
-          "dataType": "number"
+          "dataType": "number",
+          "tolerance": 2.0
         },
         {
           "field": "MagneticFieldStrength",
@@ -1207,7 +1211,8 @@
           "tag": "0018,1314",
           "value": 9,
           "vr": "DS",
-          "dataType": "number"
+          "dataType": "number",
+          "tolerance": 2.0
         },
         {
           "field": "MagneticFieldStrength",
@@ -1399,7 +1404,8 @@
           "tag": "0018,1314",
           "value": 15,
           "vr": "DS",
-          "dataType": "number"
+          "dataType": "number",
+          "tolerance": 2.0
         },
         {
           "field": "MagneticFieldStrength",
