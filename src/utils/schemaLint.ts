@@ -42,6 +42,9 @@ const ENUMERATED_CS_FIELDS: Record<string, string[]> = {
     'HFS', 'HFP', 'FFS', 'FFP', 'HFDR', 'HFDL', 'FFDR', 'FFDL',
     'LFP', 'LFS', 'RFP', 'RFS', 'AFDR', 'AFDL', 'PFDR', 'PFDL',
   ],
+  // Derived (not DICOM CS): dicompare maps Siemens ucCoilCombineMode to these
+  // strings when reading DICOMs, so a raw code like 2 never matches.
+  CoilCombinationMethod: ['Sum of Squares', 'Adaptive Combine'],
 };
 
 const DISPLAY_STRING_PATTERN = /(>>|<<|→|←|->|<-)/;
@@ -81,10 +84,12 @@ export function lintField(field: LintableField): FieldLintWarning[] {
   }
 
   // B) Value outside a known enumerated set (only meaningful for exact match).
+  // Numeric values count as offenders too: on an enumerated string field they
+  // are usually a raw vendor code (e.g. ucCoilCombineMode 2) leaking through.
   const enumSet = ENUMERATED_CS_FIELDS[key];
   if (enumSet && rule.type === 'exact') {
     const strVals = toArray(constraintValue)
-      .filter(v => typeof v === 'string' && v.trim() !== '');
+      .filter(v => (typeof v === 'string' && v.trim() !== '') || typeof v === 'number');
     const offender = strVals.find(
       v => !enumSet.some(allowed => allowed.toLowerCase() === String(v).trim().toLowerCase())
     );

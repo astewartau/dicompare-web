@@ -56,4 +56,24 @@ describe('lintField', () => {
     });
     expect(w.length).toBe(0);
   });
+
+  test('flags a raw vendor code on an enumerated field', () => {
+    // Siemens ucCoilCombineMode 2 means "Adaptive Combine"; the raw code never
+    // matches the mapped string dicompare stores.
+    const w = lintField({
+      keyword: 'CoilCombinationMethod',
+      value: 2,
+      validationRule: { type: 'exact', value: 2 },
+    });
+    expect(w.some(x => x.code === 'enum-mismatch')).toBe(true);
+  });
+
+  test('accepts a mapped coil combination string', () => {
+    const w = lintField({
+      keyword: 'CoilCombinationMethod',
+      value: 'Adaptive Combine',
+      validationRule: { type: 'exact', value: 'Adaptive Combine' },
+    });
+    expect(w.length).toBe(0);
+  });
 });

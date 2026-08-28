@@ -256,7 +256,7 @@
         {
           "field": "CoilCombinationMethod",
           "tag": "derived",
-          "value": 2
+          "value": "Adaptive Combine"
         },
         {
           "field": "NumberOfAverages",
