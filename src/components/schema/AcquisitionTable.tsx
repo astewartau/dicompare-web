@@ -380,17 +380,29 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const handleCreateNewValidationFunction = () => {
     if (isComplianceMode) return;
 
+    // Scaffolds the ctx-based rule API (dicompare >= 0.8): typed field access
+    // via ctx.rows, findings collected with ctx.error()/ctx.warn(). The
+    // legacy `value` DataFrame interface remains supported for old rules.
+    const ruleTemplate = [
+      '# Validate this acquisition. Report findings with:',
+      '#   ctx.error("message")  # requirement not met (fails validation)',
+      '#   ctx.warn("message")   # recommendation not followed (warning)',
+      '# ctx.rows is a list of per-row dicts; list-valued fields are plain lists.',
+      'for row in ctx.rows:',
+      '    pass  # e.g. if row["FieldName"] != expected: ctx.error("...")',
+    ].join('\n');
+
     const newFunction: SelectedValidationFunction = {
       id: `custom_${Date.now()}`,
       name: 'New Validation Function',
       description: 'Custom validation function',
       category: 'Custom',
       fields: ['FieldName'],
-      implementation: `# Custom validation logic\n# Access field data with value["FieldName"]\n# Raise ValidationError for failures\n# Function should not return anything`,
+      implementation: ruleTemplate,
       customName: 'New Validation Function',
       customDescription: 'Custom validation function',
       customFields: ['FieldName'],
-      customImplementation: `# Custom validation logic\n# Access field data with value["FieldName"]\n# Raise ValidationError for failures\n# Function should not return anything`,
+      customImplementation: ruleTemplate,
       customTestCases: [],
       enabledSystemFields: []
     };

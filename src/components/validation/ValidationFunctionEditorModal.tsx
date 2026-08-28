@@ -163,7 +163,7 @@ return test_data`;
             from: view.state.doc.line(lineIndex + 1).from,
             to: view.state.doc.line(lineIndex + 1).to,
             severity: 'warning',
-            message: 'Validation functions should not return anything - raise ValidationError for failures or ValidationWarning for warnings'
+            message: 'Validation functions should not return anything — report findings with ctx.error()/ctx.warn(), or raise ValidationError/ValidationWarning'
           });
         }
       });

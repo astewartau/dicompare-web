@@ -215,27 +215,18 @@ export function canHaveMultipleValues(vr: string, valueMultiplicity?: string): b
  * Get suggested validation constraint based on VR characteristics and field name
  */
 export function getSuggestedConstraintForVR(vr: string, fieldName?: string, tag?: string, source?: 'dicom' | 'pro'): 'exact' | 'tolerance' | 'contains' | 'range' | 'contains_any' | 'contains_all' {
-  // Special case for MagneticFieldStrength - use tolerance instead of exact
-  if (fieldName === 'Magnetic Field Strength' || tag === '0018,0087') {
+  // Fields with a suggested tolerance in the canonical field registry get a
+  // tolerance constraint by default (e.g. MagneticFieldStrength ±0.3 T).
+  if (getSuggestedToleranceValue(fieldName, tag) !== undefined) {
     return 'tolerance';
   }
-  
-  // Special case for ImagingFrequency - use tolerance instead of exact
-  if (fieldName === 'Imaging Frequency' || tag === '0018,0084') {
-    return 'tolerance';
-  }
-  
-  // Special case for PixelBandwidth - use tolerance instead of exact
-  if (fieldName === 'Pixel Bandwidth' || tag === '0018,0095') {
-    return 'tolerance';
-  }
-  
+
   // Special case for ScanOptions when source is .pro file - use contains_any instead of exact
   // .pro files show available options, but actual acquisition may only use some of them
   if ((fieldName === 'Scan Options' || tag === '0018,0022') && source === 'pro') {
     return 'contains_any';
   }
-  
+
   // Default to exact match for all other fields
   return 'exact';
 }
