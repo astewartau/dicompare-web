@@ -38,7 +38,7 @@ Every rule should have at least **one passing and one failing test case**, with 
 
 ## 5. Identifiers and structure
 
-- Rule ids and test-case ids must be **unique across the whole schema** — copying an acquisition and editing it silently duplicates ids.
+- Rule ids must be **unique within their acquisition** (a collision silently drops one of the rules), and test-case ids unique within their rule. Reusing ids across different acquisitions is harmless — rules are scoped per acquisition and there is no shared-rule mechanism.
 - Every acquisition should have a short `description` (one line, shown in lists) and a `detailed_description` (markdown: purpose, key requirements, references). Don't leave placeholders like "Protocol from ProtocolFile.txt" or empty detailed descriptions.
 - Add `tags` to every acquisition (e.g. `analysis:diffusion`, `brain`, method name) — they drive filtering in the library.
 - `"tag": "derived"` marks non-DICOM fields computed by dicompare (e.g. `NumberOfDiffusionShells`, `PostLabelDelay`); use real DICOM tags for everything else.
