@@ -10,5 +10,6 @@
   "/schemas/hcp_schema.json",
   "/schemas/abcd_schema_cleaned.json",
   "/schemas/SeedSeg_Prostate_T1w_v1.0.json",
-  "/schemas/Axon_diameter_mapping_v1.1.json"
+  "/schemas/Axon_diameter_mapping_v1.1.json",
+  "/schemas/Protocols_for_DWI_analysis_v1.0.json"
 ]
