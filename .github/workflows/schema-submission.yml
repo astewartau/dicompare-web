@@ -81,6 +81,53 @@ jobs:
             core.setOutput('filename', filename);
             core.setOutput('slug', slug);
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Lint the submitted schema with the dicompare package: registry checks
+      # (display strings, raw vendor codes, exact-on-continuous), rule
+      # structure (duplicate ids, undeclared field reads), and execution of
+      # every rule test case through the production validation path. Errors
+      # block the PR; warnings are reported on the issue. Skips gracefully
+      # while the released dicompare predates the lint module.
+      - name: Lint schema
+        id: lint
+        run: |
+          pip install --quiet dicompare
+          if ! python -c "import dicompare.schema.lint" 2>/dev/null; then
+            echo "released dicompare predates schema lint; skipping."
+            echo "report=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          set +e
+          dicompare lint "public/schemas/${{ steps.extract.outputs.filename }}" --format markdown > /tmp/lint.md
+          code=$?
+          set -e
+          {
+            echo "report<<LINT_EOF"
+            cat /tmp/lint.md
+            echo "LINT_EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [ $code -ne 0 ]; then
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report lint errors and stop
+        if: steps.lint.outputs.failed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const report = ${{ toJSON(steps.lint.outputs.report) }};
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `The submitted schema has lint errors that must be fixed before it can be added:\n\n${report}\n\nPlease update the schema (the [authoring best practices](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/docs/schema-best-practices.md) explain each check), edit the JSON in the issue body, and a maintainer will re-run the submission.`
+            });
+            core.setFailed('Schema lint reported errors.');
+
       - name: Create Pull Request
         id: create-pr
         uses: peter-evans/create-pull-request@v7
@@ -101,11 +148,15 @@ jobs:
           script: |
             const prNumber = '${{ steps.create-pr.outputs.pull-request-number }}';
             const prUrl = '${{ steps.create-pr.outputs.pull-request-url }}';
+            const lintReport = ${{ toJSON(steps.lint.outputs.report) }};
             let comment;
             if (prNumber) {
               comment = `Schema validated successfully! A pull request has been created: ${prUrl}`;
             } else {
               comment = `Schema validated but no changes were detected (the schema may already exist).`;
+            }
+            if (lintReport && lintReport.trim()) {
+              comment += `\n\n${lintReport}`;
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
