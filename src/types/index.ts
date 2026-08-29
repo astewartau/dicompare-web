@@ -49,13 +49,34 @@ export interface Series {
 }
 
 // Validation Functions Types (imported from validation components)
+export type ValidationParameterType = 'number' | 'string' | 'boolean' | 'enum';
+
+// Typed declaration of a rule parameter (library format). The implementation
+// reads the configured value via params["name"] / ctx.params["name"].
+export interface ValidationParameterDefinition {
+  name: string;
+  label?: string;
+  type: ValidationParameterType;
+  description?: string;
+  default?: any;
+  min?: number;
+  max?: number;
+  options?: any[];
+  unit?: string;
+}
+
 export interface ValidationFunction {
   id: string;
   name: string;
   description: string;
   category: string;
   fields: string[];
-  parameters?: Record<string, any>;
+  // Fields made available to the rule when present but whose absence is not an
+  // error (e.g. vendor-specific tags in a rule that branches on Manufacturer)
+  optional_fields?: string[];
+  // Typed parameter declarations; configured VALUES live in configuredParams
+  // (UI) / the schema rule's `parameters` dict (serialized)
+  parameterDefinitions?: ValidationParameterDefinition[];
   implementation: string;
   testCases?: any[];
   requiredSystemFields?: string[];

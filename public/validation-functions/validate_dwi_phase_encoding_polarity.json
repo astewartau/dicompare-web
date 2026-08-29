@@ -1,19 +1,19 @@
 {
   "id": "validate_dwi_phase_encoding_polarity",
-  "name": "DWI Phase Encoding Polarity",
-  "description": "Validates phase encoding direction polarity. Spine-generic DWI uses P-A (posterior to anterior) phase encoding. Siemens: PhaseEncodingDirectionPositive=0, GE: RectilinearPhaseEncodeReordering=REVERSE_LINEAR. Philips does not encode polarity in DICOM. (From the Generic Spine Protocol schema.)",
+  "name": "Phase Encoding Polarity",
+  "description": "Validates the phase encoding axis and polarity. Vendor-specific: Siemens encodes polarity in PhaseEncodingDirectionPositive, GE in RectilinearPhaseEncodeReordering; Philips does not encode polarity in DICOM (manual check).",
   "category": "Diffusion",
   "fields": [
     "Manufacturer",
     "InPlanePhaseEncodingDirection"
   ],
   "requiredSystemFields": [],
-  "parameters": null,
-  "implementation": "manufacturer = value['Manufacturer'].iloc[0].upper() if 'Manufacturer' in value.columns else ''\n\n# Check InPlanePhaseEncodingDirection first (should be COL for A-P axis)\nif 'InPlanePhaseEncodingDirection' in value.columns:\n    pe_dir = str(value['InPlanePhaseEncodingDirection'].iloc[0]).upper()\n    if pe_dir != 'COL':\n        raise ValidationError(f\"DWI phase encoding should be along COL (A-P axis). Found: {pe_dir}\")\n\n# Vendor-specific polarity checks\nif 'SIEMENS' in manufacturer:\n    if 'PhaseEncodingDirectionPositive' in value.columns:\n        pe_positive = value['PhaseEncodingDirectionPositive'].iloc[0]\n        if pe_positive is not None:\n            pe_positive = int(pe_positive)\n            if pe_positive != 0:\n                raise ValidationError(f\"Siemens DWI should use P-A phase encoding (PhaseEncodingDirectionPositive=0). Found: {pe_positive}\")\n    else:\n        raise ValidationWarning(\"Siemens PhaseEncodingDirectionPositive not found. Cannot verify P-A phase encoding polarity.\")\n\nelif 'GE' in manufacturer:\n    if 'RectilinearPhaseEncodeReordering' in value.columns:\n        pe_reorder = str(value['RectilinearPhaseEncodeReordering'].iloc[0]).upper()\n        # REVERSE_LINEAR indicates reversed phase encoding direction\n        if 'REVERSE' not in pe_reorder:\n            raise ValidationWarning(f\"GE DWI typically uses REVERSE_LINEAR for P-A encoding. Found: {pe_reorder}\")\n    else:\n        raise ValidationWarning(\"GE RectilinearPhaseEncodeReordering not found. Cannot verify phase encoding polarity.\")\n\nelif 'PHILIPS' in manufacturer:\n    raise ValidationWarning(\"Philips DICOM does not encode phase encoding polarity. Please manually verify P-A phase encoding direction.\")",
+  "implementation": "manufacturer = value['Manufacturer'].iloc[0].upper() if 'Manufacturer' in value.columns else ''\naxis = (params.get('expected_axis') or 'COL').upper()\nexpect_reversed = params.get('expect_reversed')\nif expect_reversed is None:\n    expect_reversed = True\n\nif 'InPlanePhaseEncodingDirection' in value.columns:\n    pe_dir = str(value['InPlanePhaseEncodingDirection'].iloc[0]).upper()\n    if pe_dir != axis:\n        raise ValidationError(f\"Phase encoding should be along {axis}. Found: {pe_dir}\")\n\nif 'SIEMENS' in manufacturer:\n    if 'PhaseEncodingDirectionPositive' in value.columns:\n        pe_positive = value['PhaseEncodingDirectionPositive'].iloc[0]\n        if pe_positive is not None and not pd.isna(pe_positive):\n            expected = 0 if expect_reversed else 1\n            if int(pe_positive) != expected:\n                raise ValidationError(f\"Phase encoding polarity mismatch: PhaseEncodingDirectionPositive={int(pe_positive)}, expected {expected}.\")\n    else:\n        raise ValidationWarning('Siemens PhaseEncodingDirectionPositive not found. Cannot verify phase encoding polarity.')\nelif 'GE' in manufacturer:\n    if 'RectilinearPhaseEncodeReordering' in value.columns:\n        pe_reorder = str(value['RectilinearPhaseEncodeReordering'].iloc[0]).upper()\n        is_reversed = 'REVERSE' in pe_reorder\n        if is_reversed != expect_reversed:\n            raise ValidationWarning(f\"GE phase encode reordering '{pe_reorder}' does not match the expected polarity.\")\n    else:\n        raise ValidationWarning('GE RectilinearPhaseEncodeReordering not found. Cannot verify phase encoding polarity.')\nelif 'PHILIPS' in manufacturer:\n    raise ValidationWarning('Philips DICOM does not encode phase encoding polarity. Please verify manually.')\n",
   "testCases": [
     {
-      "id": "test_dwi_siemens_pa_pass",
-      "name": "Siemens P-A encoding",
+      "id": "siemens_pa_pass",
+      "name": "Siemens COL with reversed polarity passes",
+      "expectedResult": "pass",
       "data": {
         "Manufacturer": [
           "SIEMENS"
@@ -24,13 +24,44 @@
         "PhaseEncodingDirectionPositive": [
           0
         ]
-      },
-      "expectedResult": "pass",
-      "description": ""
+      }
     },
     {
-      "id": "test_dwi_siemens_ap_fail",
-      "name": "Siemens A-P encoding (wrong)",
+      "id": "wrong_axis_fail",
+      "name": "ROW axis fails default COL",
+      "expectedResult": "fail",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "InPlanePhaseEncodingDirection": [
+          "ROW"
+        ],
+        "PhaseEncodingDirectionPositive": [
+          0
+        ]
+      }
+    },
+    {
+      "id": "wrong_polarity_fail",
+      "name": "Positive polarity fails when reversed is expected",
+      "expectedResult": "fail",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "InPlanePhaseEncodingDirection": [
+          "COL"
+        ],
+        "PhaseEncodingDirectionPositive": [
+          1
+        ]
+      }
+    },
+    {
+      "id": "polarity_moves",
+      "name": "Positive polarity passes when expect_reversed=false",
+      "expectedResult": "pass",
       "data": {
         "Manufacturer": [
           "SIEMENS"
@@ -42,60 +73,46 @@
           1
         ]
       },
-      "expectedResult": "fail",
-      "description": ""
+      "params": {
+        "expect_reversed": false
+      }
     },
     {
-      "id": "test_dwi_ge_reverse_pass",
-      "name": "GE REVERSE_LINEAR",
-      "data": {
-        "Manufacturer": [
-          "GE MEDICAL SYSTEMS"
-        ],
-        "InPlanePhaseEncodingDirection": [
-          "COL"
-        ],
-        "RectilinearPhaseEncodeReordering": [
-          "REVERSE_LINEAR"
-        ]
-      },
-      "expectedResult": "pass",
-      "description": ""
-    },
-    {
-      "id": "test_dwi_philips_warning",
-      "name": "Philips polarity unknown",
-      "data": {
-        "Manufacturer": [
-          "Philips"
-        ],
-        "InPlanePhaseEncodingDirection": [
-          "COL"
-        ]
-      },
+      "id": "philips_manual",
+      "name": "Philips warns for manual verification",
       "expectedResult": "warning",
-      "description": "Philips cannot encode polarity"
-    },
-    {
-      "id": "test_dwi_wrong_axis",
-      "name": "Wrong phase encoding axis",
       "data": {
         "Manufacturer": [
-          "SIEMENS"
+          "PHILIPS"
         ],
         "InPlanePhaseEncodingDirection": [
-          "ROW"
-        ],
-        "PhaseEncodingDirectionPositive": [
-          0
+          "COL"
         ]
-      },
-      "expectedResult": "fail",
-      "description": ""
+      }
     }
   ],
   "optional_fields": [
     "PhaseEncodingDirectionPositive",
     "RectilinearPhaseEncodeReordering"
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "expected_axis",
+      "label": "Expected axis",
+      "type": "enum",
+      "default": "COL",
+      "options": [
+        "COL",
+        "ROW"
+      ],
+      "description": "Required InPlanePhaseEncodingDirection (COL = A-P axis, ROW = R-L axis)"
+    },
+    {
+      "name": "expect_reversed",
+      "label": "Expect reversed polarity",
+      "type": "boolean",
+      "default": true,
+      "description": "True for reversed polarity (e.g. P-A when the axis is COL), false for positive (e.g. A-P)"
+    }
   ]
 }

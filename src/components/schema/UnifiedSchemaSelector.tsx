@@ -238,6 +238,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       });
     }
 
+    // Alphabetical by schema name
+    schemas = [...schemas].sort((a, b) =>
+      (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
+    );
+
     // Surface a just-uploaded schema to the top of the list.
     if (recentUpload?.id) {
       schemas = [...schemas].sort((a, b) =>
@@ -447,6 +452,12 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         })
         .filter(item => item.matchesTag && item.matchesKeywords);
     });
+
+    // Alphabetical by acquisition name (base order for the flat view)
+    result.sort((a, b) =>
+      (a.acquisition.protocolName || '').toLowerCase()
+        .localeCompare((b.acquisition.protocolName || '').toLowerCase())
+    );
 
     // Sort by score if acquisitionScores is provided
     // Primary: score descending, Secondary: passCount descending (more constraints = better match)

@@ -1,13 +1,12 @@
 {
   "id": "validate_mtoff_tr_matches_mton",
   "name": "MToff TR Must Match MTon",
-  "description": "TR for MToff acquisition MUST match MTon acquisition for valid MTR calculation. This cannot be automatically verified across acquisitions. (From the Generic Spine Protocol schema.)",
+  "description": "TR for MToff acquisition MUST match MTon acquisition for valid MTR calculation. This cannot be automatically verified across acquisitions.",
   "category": "Contrast Preparation",
   "fields": [
     "RepetitionTime"
   ],
   "requiredSystemFields": [],
-  "parameters": null,
   "implementation": "raise ValidationWarning(\"MToff TR must match MTon TR for valid MTR calculation. Please manually verify that TR values are identical between MTon and MToff acquisitions.\")",
   "testCases": [
     {

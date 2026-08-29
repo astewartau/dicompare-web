@@ -10,6 +10,7 @@ import { ComplianceFieldResult } from '../types/schema';
 import { getItemFlags } from './workspaceHelpers';
 import { escapeHtml, normalizeTag } from './stringHelpers';
 import { isAnalysisTag } from './tagUtils';
+import { getParameterDefinitions, getEffectiveParams, formatParamValue, interpolateRuleName } from './validationParams';
 import { isFlatImageUrl, isVolumeUrl } from './imageHelpers';
 import { getVolumeThumbnail, getVolumeThumbnailFromFile } from './niivueThumbnail';
 import { Dcm2niix } from '@niivue/dcm2niix';
@@ -767,11 +768,20 @@ function buildRulesHtml(
       ? `<div class="rule-fields">${ruleFields.map((f: string) => `<span class="field-tag-badge">${escapeHtml(f)}</span>`).join('')}</div>`
       : '';
 
+    const paramDefs = getParameterDefinitions(v);
+    const effectiveParams = getEffectiveParams(v);
+    const paramsHtml = paramDefs.length > 0
+      ? `<div class="rule-fields">${paramDefs.map(p =>
+          `<span class="field-tag-badge">${escapeHtml(`${p.name} = ${formatParamValue(effectiveParams[p.name])}${p.unit && effectiveParams[p.name] != null ? ` ${p.unit}` : ''}`)}</span>`
+        ).join('')}</div>`
+      : '';
+
     return `
       <tr>
         <td>
-          <div class="field-name">${escapeHtml(ruleName)}</div>
+          <div class="field-name">${escapeHtml(interpolateRuleName(ruleName, effectiveParams))}</div>
           ${fieldsHtml}
+          ${paramsHtml}
         </td>
         <td>${escapeHtml(ruleDescription)}</td>
         ${isComplianceMode ? `<td class="${ruleStatusClass}">${escapeHtml(ruleStatus)}</td>` : ''}

@@ -35,21 +35,24 @@
     "valueType": "number",
     "vr": "DS",
     "unit": "ms",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 0.05
   },
   "EchoTime": {
     "valueType": "number",
     "tag": "0018,0081",
     "vr": "DS",
     "unit": "ms",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 1.0
   },
   "FlipAngle": {
     "valueType": "number",
     "tag": "0018,1314",
     "vr": "DS",
     "unit": "deg",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 2.0
   },
   "ImagedNucleus": {
     "valueType": "string",
@@ -88,7 +91,8 @@
     "tag": "0018,0082",
     "vr": "DS",
     "unit": "ms",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 10.0
   },
   "MRAcquisitionType": {
     "valueType": "string",
@@ -158,14 +162,16 @@
     "tag": "0018,0094",
     "vr": "DS",
     "unit": "%",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 10.0
   },
   "PercentSampling": {
     "valueType": "number",
     "tag": "0018,0093",
     "vr": "DS",
     "unit": "%",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 10.0
   },
   "PhaseEncodingDirectionPositive": {
     "valueType": "number",
@@ -196,21 +202,23 @@
     "vr": "DS",
     "unit": "Hz/pixel",
     "continuous": true,
-    "suggestedTolerance": 1.0
+    "suggestedTolerance": 50.0
   },
   "PixelSpacing": {
     "valueType": "list_number",
     "tag": "0028,0030",
     "vr": "DS",
     "unit": "mm",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 0.1
   },
   "RepetitionTime": {
     "valueType": "number",
     "tag": "0018,0080",
     "vr": "DS",
     "unit": "ms",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 10.0
   },
   "SAR": {
     "valueType": "number",
@@ -224,14 +232,16 @@
     "tag": "0018,0050",
     "vr": "DS",
     "unit": "mm",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 0.1
   },
   "SpacingBetweenSlices": {
     "valueType": "number",
     "tag": "0018,0088",
     "vr": "DS",
     "unit": "mm",
-    "continuous": true
+    "continuous": true,
+    "suggestedTolerance": 0.1
   },
   "dBdt": {
     "valueType": "number",

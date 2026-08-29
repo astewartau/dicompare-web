@@ -437,7 +437,7 @@
     },
     "Multiband diffusion brain images": {
       "description": "Multi-shell diffusion MRI with multi-band acceleration for white matter microstructure",
-      "detailed_description": "## Diffusion-Weighted MRI\n\nThis acquisition provides multi-shell diffusion-weighted imaging for characterizing white matter microstructure using multi-band acceleration.\n\n### Purpose\n\nThe diffusion MRI scan enables investigation of white matter organization and connectivity:\n- White matter tract reconstruction (tractography)\n- Microstructural measures (FA, MD, diffusivities)\n- Advanced modeling (NODDI, DKI)\n- Structural connectivity analysis\n- Detection of white matter pathology\n\n### Acquisition Parameters\n\n- **Sequence**: Spin-echo EPI with multi-band acceleration\n- **Resolution**: 2.0 mm isotropic\n- **FOV**: 210 x 210 mm, transverse oblique (AC-PC aligned)\n- **TR/TE**: 3600 ms / 92 ms\n- **Flip Angle**: 78 degrees\n- **Multi-band Factor**: 3 (72 slices acquired in 24 groups)\n- **Slices**: 72 (whole brain coverage)\n\n### Diffusion Scheme\n\n- **b = 0 s/mm²**: ~8 volumes (non-diffusion weighted)\n- **b = 1000 s/mm²**: 50 directions\n- **b = 2000 s/mm²**: 50 directions\n- **Total volumes**: 108\n- **Scan Time**: ~7 minutes (including PA field map)\n\n### Field Map Acquisition\n\nA short reverse phase-encode (PA) acquisition with 3 b=0 volumes is acquired for susceptibility distortion correction using FSL's topup.\n\n### Key Features\n\n- Multi-shell design enables advanced diffusion models beyond DTI\n- Multi-band acceleration reduces scan time while maintaining angular resolution\n- Isotropic resolution for accurate tractography\n- Optimized gradient directions for uniform sampling\n\n### Derived Measures\n\nUK Biobank provides diffusion IDPs including:\n- Fractional anisotropy (FA) in major white matter tracts\n- Mean diffusivity (MD), axial and radial diffusivity\n- NODDI metrics (ICVF, ISOVF, OD)\n- Tract-averaged measures for 27 major pathways\n\n### Reference\n\nMiller, K.L., et al. (2016). Multimodal population brain imaging in the UK Biobank prospective epidemiological study. Nature Neuroscience, 19(11), 1523-1536.",
+      "detailed_description": "## Diffusion-Weighted MRI\n\nThis acquisition provides multi-shell diffusion-weighted imaging for characterizing white matter microstructure using multi-band acceleration.\n\n### Purpose\n\nThe diffusion MRI scan enables investigation of white matter organization and connectivity:\n- White matter tract reconstruction (tractography)\n- Microstructural measures (FA, MD, diffusivities)\n- Advanced modeling (NODDI, DKI)\n- Structural connectivity analysis\n- Detection of white matter pathology\n\n### Acquisition Parameters\n\n- **Sequence**: Spin-echo EPI with multi-band acceleration\n- **Resolution**: 2.0 mm isotropic\n- **FOV**: 210 x 210 mm, transverse oblique (AC-PC aligned)\n- **TR/TE**: 3600 ms / 92 ms\n- **Flip Angle**: 78 degrees\n- **Multi-band Factor**: 3 (72 slices acquired in 24 groups)\n- **Slices**: 72 (whole brain coverage)\n\n### Diffusion Scheme\n\n- **b = 0 s/mm\u00b2**: ~8 volumes (non-diffusion weighted)\n- **b = 1000 s/mm\u00b2**: 50 directions\n- **b = 2000 s/mm\u00b2**: 50 directions\n- **Total volumes**: 108\n- **Scan Time**: ~7 minutes (including PA field map)\n\n### Field Map Acquisition\n\nA short reverse phase-encode (PA) acquisition with 3 b=0 volumes is acquired for susceptibility distortion correction using FSL's topup.\n\n### Key Features\n\n- Multi-shell design enables advanced diffusion models beyond DTI\n- Multi-band acceleration reduces scan time while maintaining angular resolution\n- Isotropic resolution for accurate tractography\n- Optimized gradient directions for uniform sampling\n\n### Derived Measures\n\nUK Biobank provides diffusion IDPs including:\n- Fractional anisotropy (FA) in major white matter tracts\n- Mean diffusivity (MD), axial and radial diffusivity\n- NODDI metrics (ICVF, ISOVF, OD)\n- Tract-averaged measures for 27 major pathways\n\n### Reference\n\nMiller, K.L., et al. (2016). Multimodal population brain imaging in the UK Biobank prospective epidemiological study. Nature Neuroscience, 19(11), 1523-1536.",
       "tags": [
         "analysis:diffusion",
         "brain",
@@ -619,7 +619,7 @@
           "id": "custom_1758075459044",
           "name": "Diffusion Directions",
           "description": "Checks expected number of diffusion gradient directions",
-          "implementation": "n_expected = 100\ndirections = [\n  tuple(d) if isinstance(d, list) else \n  d for d in value[\"DiffusionGradientOrientation\"]\n]\nn_actual = len(set(directions))\n\nif n_actual != n_expected:\n  raise ValidationError(f\"Expected {n_expected} distinct diffusion gradient directions, but found {n_actual}.\")\n",
+          "implementation": "dir_col = next((c for c in value.columns if c not in (\"DiffusionBValue\", \"Count\")), None)\nif dir_col is None:\n    raise ValidationWarning(\"Cannot count directions (no gradient orientation field available).\")\nrows = value\nb0_thr = params.get(\"b0_threshold\")\nif \"DiffusionBValue\" in value.columns and b0_thr is not None:\n    b = value[\"DiffusionBValue\"].fillna(0).astype(float)\n    rows = value[b > b0_thr]\ndirs = set()\nfor o in rows[dir_col]:\n    if o is None or o != o:\n        continue\n    try:\n        dirs.add(tuple(round(float(x), 3) for x in as_list(o)))\n    except (TypeError, ValueError):\n        dirs.add(str(o))\nn = len(dirs)\nexact = params.get(\"exact_directions\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact} unique diffusion directions, found {n}.\")\nelse:\n    min_n = params.get(\"min_directions\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Only {n} unique diffusion directions; at least {min_n} required.\")\n    rec = params.get(\"recommended_directions\")\n    if rec is not None and n < rec:\n        raise ValidationWarning(f\"{n} unique diffusion directions; {rec}+ recommended.\")\n",
           "fields": [
             "DiffusionGradientOrientation"
           ],
@@ -1144,13 +1144,49 @@
               "expectedResult": "fail",
               "description": ""
             }
+          ],
+          "parameters": {
+            "exact_directions": 100
+          },
+          "parameterDefinitions": [
+            {
+              "name": "min_directions",
+              "label": "Minimum directions",
+              "type": "number",
+              "default": 30,
+              "min": 1,
+              "description": "Fail if fewer unique directions than this"
+            },
+            {
+              "name": "recommended_directions",
+              "label": "Recommended directions",
+              "type": "number",
+              "default": null,
+              "description": "Warn if fewer unique directions than this (optional)"
+            },
+            {
+              "name": "exact_directions",
+              "label": "Exact directions",
+              "type": "number",
+              "default": null,
+              "description": "Require exactly this many directions (overrides min/recommended)"
+            },
+            {
+              "name": "b0_threshold",
+              "label": "b=0 threshold",
+              "type": "number",
+              "default": 50,
+              "min": 0,
+              "unit": "s/mm\u00b2",
+              "description": "Volumes with b-value at or below this are excluded (b=0 orientations are meaningless)"
+            }
           ]
         },
         {
           "id": "custom_1758079469072",
           "name": "B-value Distribution Validation",
           "description": "Validate b-value shell distribution",
-          "implementation": "# value has unique DiffusionBValue rows with a Count column\nb_values = value[\"DiffusionBValue\"]\ncounts = value[\"Count\"]\n\nb0_count = counts[b_values < 50].sum()\nb1000_count = counts[(b_values >= 900) & (b_values <= 1100)].sum()\nb2000_count = counts[(b_values >= 1900) & (b_values <= 2100)].sum()\n\nif b0_count < 8 or b0_count > 12:\n  raise ValidationError(f\"Expected ~10 b=0 images, found {b0_count}\")\n\nif b1000_count < 45 or b1000_count > 55:\n  raise ValidationError(f\"Expected ~50 b=1000 images, found {b1000_count}\")\n\nif b2000_count < 45 or b2000_count > 55:\n  raise ValidationError(f\"Expected ~50 b=2000 images, found {b2000_count}\")\n",
+          "implementation": "spec = params.get(\"shell_spec\") or \"\"\ntol = params.get(\"shell_tolerance\") if params.get(\"shell_tolerance\") is not None else 100\nb = value[\"DiffusionBValue\"].fillna(0).astype(float)\ncounts = value[\"Count\"]\nproblems = []\nfor part in [p.strip() for p in spec.split(\",\") if p.strip()]:\n    center_str, _, rng = part.partition(\":\")\n    center = float(center_str)\n    n = int(counts[(b - center).abs() <= tol].sum())\n    if \"-\" in rng:\n        lo_str, hi_str = rng.split(\"-\", 1)\n        lo, hi = float(lo_str), float(hi_str)\n    else:\n        lo, hi = float(rng), None\n    if n < lo:\n        problems.append(f\"b~{center:g}: found {n} images, expected >= {lo:g}\")\n    elif hi is not None and n > hi:\n        problems.append(f\"b~{center:g}: found {n} images, expected <= {hi:g}\")\nif problems:\n    raise ValidationError(\"; \".join(problems))\n",
           "fields": [
             "DiffusionBValue"
           ],
@@ -1190,6 +1226,28 @@
               },
               "expectedResult": "fail",
               "description": "Only one b=0 image"
+            }
+          ],
+          "parameters": {
+            "shell_spec": "0:8-12, 1000:45-55, 2000:45-55",
+            "shell_tolerance": 100
+          },
+          "parameterDefinitions": [
+            {
+              "name": "shell_spec",
+              "label": "Shell specification",
+              "type": "string",
+              "default": "0:1, 1000:1",
+              "description": "Comma-separated 'center:min' or 'center:min-max' image counts per shell"
+            },
+            {
+              "name": "shell_tolerance",
+              "label": "Shell tolerance",
+              "type": "number",
+              "default": 100,
+              "min": 0,
+              "unit": "s/mm\u00b2",
+              "description": "b-values within \u00b1 this of a shell center belong to that shell"
             }
           ]
         }
@@ -1389,7 +1447,7 @@
           "id": "custom_1758084379924",
           "name": "Expected number of echoes",
           "description": "Expected two echoes",
-          "implementation": "expected = 2\nactual = value['EchoTime'].nunique()\n\nif expected != actual:\n  raise ValidationError(f\"Expected {expected} echoes but got {actual}.\")",
+          "implementation": "n = value[\"EchoTime\"].dropna().nunique()\nexact = params.get(\"exact_echoes\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact} echoes, found {n}.\")\nelse:\n    min_n = params.get(\"min_echoes\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Only {n} echoes; at least {min_n} required.\")\n    rec = params.get(\"recommended_echoes\")\n    if rec is not None and n < rec:\n        raise ValidationWarning(f\"Found {n} echoes; {rec}+ recommended.\")\n",
           "fields": [
             "EchoTime"
           ],
@@ -1406,13 +1464,40 @@
               "expectedResult": "pass",
               "description": ""
             }
+          ],
+          "parameters": {
+            "exact_echoes": 2
+          },
+          "parameterDefinitions": [
+            {
+              "name": "min_echoes",
+              "label": "Minimum echoes",
+              "type": "number",
+              "default": 2,
+              "min": 1,
+              "description": "Fail if fewer unique echoes than this"
+            },
+            {
+              "name": "recommended_echoes",
+              "label": "Recommended echoes",
+              "type": "number",
+              "default": null,
+              "description": "Warn if fewer unique echoes than this (optional)"
+            },
+            {
+              "name": "exact_echoes",
+              "label": "Exact echoes",
+              "type": "number",
+              "default": null,
+              "description": "Require exactly this many echoes (overrides min/recommended)"
+            }
           ]
         },
         {
           "id": "validate_image_type",
           "name": "Valid Magnitude/Phase Pairs",
           "description": "Each EchoTime must have at least one magnitude and phase image.",
-          "implementation": "magnitude_counts = []\nphase_counts = []\n\nfor echo_time, group in value.groupby(\"EchoTime\"):\n    image_types = group[\"ImageType\"]\n    \n    # Count occurrences of 'M' and 'P' in ImageType tuples\n    magnitude_counts.append(sum('M' in image for image in image_types))\n    phase_counts.append(sum('P' in image for image in image_types))\n\nif not all(m >= 1 for m in magnitude_counts):\n    raise ValidationError(f\"Each EchoTime must have at least one magnitude image. Found {magnitude_counts}.\")\nif not all(p >= 1 for p in phase_counts):\n    raise ValidationError(f\"Each EchoTime must have at least one phase image. Found {phase_counts}.\")\n",
+          "implementation": "# Validate magnitude/phase pairs per echo\nfor echo_time, group in value.groupby(\"EchoTime\"):\n    image_types = group[\"ImageType\"]\n\n    # ImageType is list-valued; check components, not the string repr\n    has_magnitude = any(\"M\" in as_list(it) for it in image_types)\n    has_phase = any(\"P\" in as_list(it) for it in image_types)\n\n    if not has_magnitude:\n        raise ValidationError(f\"Echo time {echo_time} ms is missing magnitude image.\")\n\n    if not has_phase:\n        raise ValidationError(f\"Echo time {echo_time} ms is missing phase image.\")\n",
           "fields": [
             "ImageType",
             "EchoTime"
@@ -1438,7 +1523,9 @@
               "expectedResult": "pass",
               "description": ""
             }
-          ]
+          ],
+          "parameters": {},
+          "parameterDefinitions": []
         }
       ]
     },

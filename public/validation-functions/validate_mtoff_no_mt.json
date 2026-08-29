@@ -1,14 +1,13 @@
 {
   "id": "validate_mtoff_no_mt",
   "name": "MT Pulse Disabled",
-  "description": "MToff acquisition should NOT have MT pulse enabled. (From the Generic Spine Protocol schema.)",
+  "description": "MToff acquisition should NOT have MT pulse enabled.",
   "category": "Contrast Preparation",
   "fields": [
     "ScanOptions",
     "SequenceVariant"
   ],
   "requiredSystemFields": [],
-  "parameters": null,
   "implementation": "scan_options = str(value['ScanOptions'].iloc[0]) if 'ScanOptions' in value.columns else ''\nseq_variant = str(value['SequenceVariant'].iloc[0]) if 'SequenceVariant' in value.columns else ''\n\n# Check that MTC is not in SequenceVariant (ScanOptions MT is less reliable)\nif 'MTC' in seq_variant.upper():\n    raise ValidationError(\"MToff acquisition should NOT have MT pulse enabled. Found MTC in SequenceVariant.\")",
   "testCases": [
     {

@@ -8,7 +8,7 @@
   "acquisitions": {
     "Localizer": {
       "description": "Survey/localizer scan",
-      "detailed_description": "Three-plane survey/localizer scan for positioning subsequent acquisitions. 2D gradient echo sequence with TR=10.5ms, TE=4ms, flip angle=10°, 0.49mm in-plane resolution, 10mm slice thickness, 512×512 matrix. Quick acquisition (~10 seconds) used by the MR technologist to verify patient positioning and plan slice locations for the structural and functional scans.",
+      "detailed_description": "Three-plane survey/localizer scan for positioning subsequent acquisitions. 2D gradient echo sequence with TR=10.5ms, TE=4ms, flip angle=10\u00b0, 0.49mm in-plane resolution, 10mm slice thickness, 512\u00d7512 matrix. Quick acquisition (~10 seconds) used by the MR technologist to verify patient positioning and plan slice locations for the structural and functional scans.",
       "tags": [
         "brain",
         "localizer"
@@ -266,7 +266,7 @@
     },
     "T2-weighted 2D TSE": {
       "description": "T2-weighted turbo spin echo structural image",
-      "detailed_description": "2D T2-weighted turbo spin echo (TSE) scan for detection and quantification of white matter lesions and CSF segmentation. Key parameters: TR=3000ms, TE=80ms, flip angle=90°, 0.45mm in-plane resolution, 3mm slice thickness, 560×560 matrix (reconstructed), ETL=15. Acquired with PROMO prospective motion correction to minimize motion artifacts in pediatric subjects.",
+      "detailed_description": "2D T2-weighted turbo spin echo (TSE) scan for detection and quantification of white matter lesions and CSF segmentation. Key parameters: TR=3000ms, TE=80ms, flip angle=90\u00b0, 0.45mm in-plane resolution, 3mm slice thickness, 560\u00d7560 matrix (reconstructed), ETL=15. Acquired with PROMO prospective motion correction to minimize motion artifacts in pediatric subjects.",
       "tags": [
         "analysis:segmentation",
         "analysis:lesion-detection",
@@ -527,7 +527,7 @@
     },
     "T1-weighted 3D MPRAGE": {
       "description": "T1-weighted MPRAGE structural image",
-      "detailed_description": "3D T1-weighted inversion-prepared RF-spoiled gradient echo (MPRAGE) scan acquired with PROMO prospective motion correction for cortical and subcortical segmentation. Key parameters: TR=6.77ms, TE=3.13ms, flip angle=8°, 1mm in-plane resolution, 1.2mm slice thickness, 256×256 matrix, SENSE parallel imaging. This acquisition provides the primary anatomical reference for FreeSurfer-based morphometric analysis in the PING processing pipeline.",
+      "detailed_description": "3D T1-weighted inversion-prepared RF-spoiled gradient echo (MPRAGE) scan acquired with PROMO prospective motion correction for cortical and subcortical segmentation. Key parameters: TR=6.77ms, TE=3.13ms, flip angle=8\u00b0, 1mm in-plane resolution, 1.2mm slice thickness, 256\u00d7256 matrix, SENSE parallel imaging. This acquisition provides the primary anatomical reference for FreeSurfer-based morphometric analysis in the PING processing pipeline.",
       "tags": [
         "analysis:segmentation",
         "analysis:volumetry",
@@ -1050,7 +1050,7 @@
     },
     "Diffusion - Exponential ADC Map": {
       "description": "Exponential apparent diffusion coefficient map",
-      "detailed_description": "Exponential Apparent Diffusion Coefficient (eADC) map computed from the HARDI diffusion acquisition. eADC = exp(-b×ADC) provides T2-independent diffusion contrast where high signal indicates restricted diffusion (low ADC). Useful for detecting acute pathology. Derived from the same acquisition parameters as DWI: TR=9000ms, TE=91.14ms, 2.5mm isotropic resolution, b=1000 s/mm².",
+      "detailed_description": "Exponential Apparent Diffusion Coefficient (eADC) map computed from the HARDI diffusion acquisition. eADC = exp(-b\u00d7ADC) provides T2-independent diffusion contrast where high signal indicates restricted diffusion (low ADC). Useful for detecting acute pathology. Derived from the same acquisition parameters as DWI: TR=9000ms, TE=91.14ms, 2.5mm isotropic resolution, b=1000 s/mm\u00b2.",
       "tags": [
         "analysis:diffusion",
         "brain",
@@ -1572,7 +1572,7 @@
     },
     "Resting-State fMRI": {
       "description": "Resting-state functional MRI",
-      "detailed_description": "Resting-state blood oxygenation level-dependent (BOLD) fMRI scan with integrated distortion correction for functional connectivity analysis. Key parameters: TR=2500ms, TE=30ms, flip angle=75°, 2.67mm in-plane resolution, 3mm slice thickness, 156 temporal volumes (6.5 min acquisition), SENSE factor 3, gradient echo EPI. Used for studying developing functional brain networks in pediatric subjects. Children instructed to keep eyes open and fixate on crosshair.",
+      "detailed_description": "Resting-state blood oxygenation level-dependent (BOLD) fMRI scan with integrated distortion correction for functional connectivity analysis. Key parameters: TR=2500ms, TE=30ms, flip angle=75\u00b0, 2.67mm in-plane resolution, 3mm slice thickness, 156 temporal volumes (6.5 min acquisition), SENSE factor 3, gradient echo EPI. Used for studying developing functional brain networks in pediatric subjects. Children instructed to keep eyes open and fixate on crosshair.",
       "tags": [
         "analysis:fmri",
         "brain",
@@ -1838,7 +1838,7 @@
           "id": "validate_temporal_volumes",
           "name": "Temporal Volume Count",
           "description": "Validates that the fMRI acquisition has exactly 156 temporal volumes (unique TriggerTime values).",
-          "implementation": "trigger_times = value[\"TriggerTime\"].dropna().unique()\nexpected_volumes = 156\n\nif len(trigger_times) != expected_volumes:\n    raise ValidationError(f\"Expected {expected_volumes} temporal volumes, but found {len(trigger_times)}.\")",
+          "implementation": "n = len(value[\"TriggerTime\"].dropna().unique())\nexact = params.get(\"exact_volumes\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact:g} temporal volumes, found {n}.\")\nelse:\n    min_n = params.get(\"min_volumes\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Expected at least {min_n:g} temporal volumes, found {n}.\")\n",
           "fields": [
             "TriggerTime"
           ],
@@ -2119,6 +2119,26 @@
               "expectedResult": "fail",
               "description": "Only 100 volumes instead of 156"
             }
+          ],
+          "parameters": {
+            "exact_volumes": 156
+          },
+          "parameterDefinitions": [
+            {
+              "name": "exact_volumes",
+              "label": "Exact volumes",
+              "type": "number",
+              "default": null,
+              "description": "Require exactly this many unique TriggerTime values"
+            },
+            {
+              "name": "min_volumes",
+              "label": "Minimum volumes",
+              "type": "number",
+              "default": 100,
+              "min": 1,
+              "description": "Fail if fewer unique TriggerTime values than this (used when no exact count is set)"
+            }
           ]
         },
         {
@@ -2175,13 +2195,15 @@
               "expectedResult": "fail",
               "description": "Gap of 3000ms instead of 2500ms"
             }
-          ]
+          ],
+          "parameters": {},
+          "parameterDefinitions": []
         }
       ]
     },
     "B0 Field Map (High Resolution)": {
       "description": "B0 field map for distortion correction (high resolution)",
-      "detailed_description": "High-resolution B0 field map for EPI distortion correction of diffusion-weighted images. Acquired with matching geometry to DWI: 2.5mm isotropic resolution, 96×96 matrix, spin echo sequence. Key parameters: TR=9000ms, TE=91ms, 240mm FOV. Used as part of the DISCO (Distortion Correction) pipeline to correct susceptibility-induced geometric distortions in the HARDI acquisition.",
+      "detailed_description": "High-resolution B0 field map for EPI distortion correction of diffusion-weighted images. Acquired with matching geometry to DWI: 2.5mm isotropic resolution, 96\u00d796 matrix, spin echo sequence. Key parameters: TR=9000ms, TE=91ms, 240mm FOV. Used as part of the DISCO (Distortion Correction) pipeline to correct susceptibility-induced geometric distortions in the HARDI acquisition.",
       "tags": [
         "brain",
         "fieldmap",
@@ -2436,7 +2458,7 @@
     },
     "B0 Field Map (SENSE)": {
       "description": "B0 field map for distortion correction (SENSE accelerated)",
-      "detailed_description": "SENSE-accelerated B0 field map for EPI distortion correction of resting-state fMRI. Acquired with matching geometry to fMRI: 2.67mm in-plane resolution, 3mm slice thickness, 96×96 matrix, SENSE factor 3. Key parameters: TR=10000ms, TE=100ms, 256mm FOV, spin echo sequence. Used for correcting susceptibility-induced geometric distortions in the resting-state BOLD acquisition.",
+      "detailed_description": "SENSE-accelerated B0 field map for EPI distortion correction of resting-state fMRI. Acquired with matching geometry to fMRI: 2.67mm in-plane resolution, 3mm slice thickness, 96\u00d796 matrix, SENSE factor 3. Key parameters: TR=10000ms, TE=100ms, 256mm FOV, spin echo sequence. Used for correcting susceptibility-induced geometric distortions in the resting-state BOLD acquisition.",
       "tags": [
         "brain",
         "fieldmap",
@@ -2695,7 +2717,7 @@
     },
     "Diffusion-Weighted Imaging (HARDI)": {
       "description": "Diffusion-weighted imaging",
-      "detailed_description": "High angular resolution diffusion imaging (HARDI) scan with integrated B0 distortion correction (DISCO) for white matter tract segmentation and diffusion parameter measurement. Protocol: 30 diffusion directions at b=1000 s/mm² plus 2 b=0 reference images (one A-P, one P-A phase encoding for distortion correction). Key parameters: TR=9000ms, TE=91.14ms, 2.5mm isotropic resolution, 96×96 matrix, spin echo EPI, fat suppression. Part of the PING connectomic analysis pipeline.",
+      "detailed_description": "High angular resolution diffusion imaging (HARDI) scan with integrated B0 distortion correction (DISCO) for white matter tract segmentation and diffusion parameter measurement. Protocol: 30 diffusion directions at b=1000 s/mm\u00b2 plus 2 b=0 reference images (one A-P, one P-A phase encoding for distortion correction). Key parameters: TR=9000ms, TE=91.14ms, 2.5mm isotropic resolution, 96\u00d796 matrix, spin echo EPI, fat suppression. Part of the PING connectomic analysis pipeline.",
       "tags": [
         "analysis:diffusion",
         "brain",

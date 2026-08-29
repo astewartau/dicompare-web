@@ -1,19 +1,19 @@
 {
   "id": "validate_parallel_imaging",
-  "name": "Parallel Imaging Factor 2",
-  "description": "MY-RADS recommends parallel imaging acceleration factor of 2. (From the MY-RADS Myeloma Whole-Body MRI Guidelines schema.)",
-  "category": "Other",
+  "name": "Parallel Imaging Factor",
+  "description": "Validates that parallel imaging (GRAPPA/SENSE) is enabled with a configurable acceleration factor.",
+  "category": "Acquisition",
   "fields": [
     "ParallelReductionFactorInPlane",
     "ParallelAcquisitionTechnique"
   ],
   "requiredSystemFields": [],
-  "parameters": null,
-  "implementation": "# Check for parallel imaging - field names vary by vendor\nparallel_factor = None\n\nif \"ParallelAcquisitionTechnique\" in value.columns:\n    pat = value[\"ParallelAcquisitionTechnique\"].dropna()\n    if len(pat) > 0 and pat.iloc[0] in [\"NONE\", \"None\", \"\"]:\n        raise ValidationWarning(\"Parallel imaging (GRAPPA/SENSE) with factor 2 is recommended.\")\n\nif \"ParallelReductionFactorInPlane\" in value.columns:\n    prf = value[\"ParallelReductionFactorInPlane\"].dropna()\n    if len(prf) > 0:\n        parallel_factor = prf.iloc[0]\n        if parallel_factor != 2:\n            raise ValidationWarning(f\"Parallel imaging factor should be 2. Found {parallel_factor}\")",
+  "implementation": "factor = params.get(\"expected_factor\")\nif \"ParallelAcquisitionTechnique\" in value.columns:\n    pat = value[\"ParallelAcquisitionTechnique\"].dropna()\n    if len(pat) > 0 and pat.iloc[0] in [\"NONE\", \"None\", \"\"]:\n        raise ValidationWarning(f\"Parallel imaging (GRAPPA/SENSE) with factor {factor:g} is recommended.\")\nif \"ParallelReductionFactorInPlane\" in value.columns:\n    prf = value[\"ParallelReductionFactorInPlane\"].dropna()\n    if len(prf) > 0 and factor is not None and prf.iloc[0] != factor:\n        raise ValidationWarning(f\"Parallel imaging factor should be {factor:g}. Found {prf.iloc[0]}\")\n",
   "testCases": [
     {
-      "id": "test_correct_grappa",
-      "name": "Correct parallel factor",
+      "id": "factor_pass",
+      "name": "Factor 2 passes default",
+      "expectedResult": "pass",
       "data": {
         "ParallelReductionFactorInPlane": [
           2
@@ -21,9 +21,46 @@
         "ParallelAcquisitionTechnique": [
           "GRAPPA"
         ]
-      },
+      }
+    },
+    {
+      "id": "factor_warns",
+      "name": "Factor 3 warns against default 2",
+      "expectedResult": "warning",
+      "data": {
+        "ParallelReductionFactorInPlane": [
+          3
+        ],
+        "ParallelAcquisitionTechnique": [
+          "GRAPPA"
+        ]
+      }
+    },
+    {
+      "id": "factor_moves",
+      "name": "Factor 3 passes when expected factor is 3",
       "expectedResult": "pass",
-      "description": "GRAPPA factor 2"
+      "data": {
+        "ParallelReductionFactorInPlane": [
+          3
+        ],
+        "ParallelAcquisitionTechnique": [
+          "GRAPPA"
+        ]
+      },
+      "params": {
+        "expected_factor": 3
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "expected_factor",
+      "label": "Expected factor",
+      "type": "number",
+      "default": 2,
+      "min": 1,
+      "description": "Warn if the in-plane parallel reduction factor differs from this"
     }
   ]
 }

@@ -8,6 +8,7 @@ import { SchemaTemplate } from '../types/schema';
 import { Acquisition as UIAcquisition, DicomField } from '../types';
 import { FileObject } from '../utils/fileUploadUtils';
 import { fieldToSchemaField } from '../utils/schemaFieldConverters';
+import { getEffectiveParams, getParameterDefinitions } from '../utils/validationParams';
 
 // Reject a request if the worker goes completely silent this long — no
 // progress, no completion. This is an *inactivity* window, not a wall-clock
@@ -480,8 +481,13 @@ class DicompareWorkerAPI {
         id: func.name.toLowerCase().replace(/\s+/g, '_'),
         name: func.customName || func.name,
         description: func.description || '',
-        implementation: func.implementation || '',
-        fields: func.fields || []
+        implementation: func.customImplementation || func.implementation || '',
+        fields: func.customFields || func.fields || [],
+        optional_fields: func.optional_fields || [],
+        // Effective parameter values (declaration defaults overlaid by the
+        // user's configured values), injected as `params` at execution time
+        parameters: getEffectiveParams(func),
+        parameterDefinitions: getParameterDefinitions(func)
       }));
     }
 

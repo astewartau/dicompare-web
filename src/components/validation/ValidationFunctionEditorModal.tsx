@@ -9,6 +9,8 @@ import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWork
 import { useTheme } from '../../contexts/ThemeContext';
 import DicomFieldAutocompleteInput from '../common/DicomFieldAutocompleteInput';
 import { parseCellInput, formatCellValue } from '../../utils/testCaseCells';
+import { getParameterDefinitions, getEffectiveParams, coerceParamValue, formatParamValue } from '../../utils/validationParams';
+import { ValidationParameterDefinition } from '../../types';
 
 interface ValidationFunctionEditorModalProps {
   isOpen: boolean;
@@ -511,6 +513,117 @@ output
     });
   };
 
+  const updateConfiguredParam = (decl: ValidationParameterDefinition, raw: string | boolean) => {
+    setEditedFunc(prev => {
+      if (!prev) return null;
+      const configured = { ...(prev.configuredParams || {}) };
+      if (raw === '') {
+        delete configured[decl.name]; // blank = fall back to the declaration default
+      } else {
+        configured[decl.name] = coerceParamValue(decl, raw);
+      }
+      return { ...prev, configuredParams: configured };
+    });
+    // Parameter values change rule behaviour, so cached test results are stale
+    setTestResults({});
+  };
+
+  const addParameterDefinition = () => {
+    setEditedFunc(prev => {
+      if (!prev) return null;
+      const decls = prev.parameterDefinitions || [];
+      const taken = new Set(decls.map(d => d.name));
+      let i = decls.length + 1;
+      let name = `param${i}`;
+      while (taken.has(name)) { i++; name = `param${i}`; }
+      return { ...prev, parameterDefinitions: [...decls, { name, type: 'number' as const, default: null }] };
+    });
+    setTestResults({});
+  };
+
+  const updateParameterDefinition = (index: number, patch: Partial<ValidationParameterDefinition>) => {
+    setEditedFunc(prev => {
+      if (!prev) return null;
+      const decls = [...(prev.parameterDefinitions || [])];
+      const old = decls[index];
+      if (!old) return prev;
+      decls[index] = { ...old, ...patch };
+      // Renaming a parameter migrates its configured value to the new key
+      let configured = prev.configuredParams;
+      if (patch.name && patch.name !== old.name && configured && old.name in configured) {
+        configured = { ...configured, [patch.name]: configured[old.name] };
+        delete configured[old.name];
+      }
+      return { ...prev, parameterDefinitions: decls, configuredParams: configured };
+    });
+    setTestResults({});
+  };
+
+  const removeParameterDefinition = (index: number) => {
+    setEditedFunc(prev => {
+      if (!prev) return null;
+      const decls = [...(prev.parameterDefinitions || [])];
+      const [removed] = decls.splice(index, 1);
+      let configured = prev.configuredParams;
+      if (removed && configured && removed.name in configured) {
+        configured = { ...configured };
+        delete configured[removed.name];
+      }
+      return { ...prev, parameterDefinitions: decls, configuredParams: configured };
+    });
+    setTestResults({});
+  };
+
+  const updateTestCaseParamOverride = (testIndex: number, testCase: TestCase, decl: ValidationParameterDefinition, raw: string | boolean) => {
+    const overrides = { ...(testCase.params || {}) };
+    if (raw === '' || raw === undefined) {
+      delete overrides[decl.name]; // blank = inherit the configured value
+    } else {
+      overrides[decl.name] = coerceParamValue(decl, raw);
+    }
+    updateTestCase(testIndex, { params: overrides });
+  };
+
+  const renderParamInput = (
+    decl: ValidationParameterDefinition,
+    value: any,
+    onChange: (raw: string | boolean) => void,
+    placeholder?: string
+  ) => {
+    const baseClass = "w-full px-2 py-1 text-sm border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500";
+    if (decl.type === 'boolean') {
+      return (
+        <input
+          type="checkbox"
+          checked={Boolean(value)}
+          onChange={(e) => onChange(e.target.checked)}
+          className="rounded border-border-secondary text-brand-600 focus:ring-brand-500"
+        />
+      );
+    }
+    if (decl.type === 'enum') {
+      return (
+        <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} className={baseClass}>
+          <option value="">{placeholder || '(not set)'}</option>
+          {(decl.options || []).map(opt => (
+            <option key={String(opt)} value={String(opt)}>{String(opt)}</option>
+          ))}
+        </select>
+      );
+    }
+    return (
+      <input
+        type={decl.type === 'number' ? 'number' : 'text'}
+        value={value ?? ''}
+        min={decl.min}
+        max={decl.max}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={baseClass}
+      />
+    );
+  };
+
   const runTestCase = async (testCase: TestCase, liveImplementation?: string, liveFields?: string[], liveSystemFields?: string[]) => {
     if (!editedFunc) return;
     
@@ -573,12 +686,17 @@ output
       // allowed imports, and list-cell types (tuples) match production, so a
       // passing test means the rule actually works on real data. The payload is
       // base64-encoded JSON to avoid any Python string-escaping issues.
+      // Effective params = declaration defaults <- configured values <- this
+      // test case's overrides. Sent as rule.parameters, which the pip
+      // execution path injects into the implementation as `params`.
+      const effectiveParams = { ...getEffectiveParams(editedFunc), ...(testCase.params || {}) };
       const rulePayload = {
         rule: {
           id: editedFunc.id,
           name: editedFunc.customName || editedFunc.name || editedFunc.id,
           fields,
           implementation,
+          parameters: effectiveParams,
         },
         test_data: testCase.data,
         expected_result: testCase.expectedResult,
@@ -723,6 +841,111 @@ json.dumps(_out)
                   rows={3}
                   className="w-full px-3 py-2 border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-content-secondary">Parameters</label>
+                  <button
+                    onClick={addParameterDefinition}
+                    className="flex items-center px-2 py-1 text-xs text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-md hover:bg-amber-500/10"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Parameter
+                  </button>
+                </div>
+                {getParameterDefinitions(editedFunc).length === 0 ? (
+                  <p className="text-xs text-content-tertiary">
+                    No parameters. Add one to make thresholds configurable — the code reads them via <code className="font-mono">params["name"]</code>.
+                  </p>
+                ) : (
+                  <div className="space-y-3 border border-amber-500/30 bg-amber-500/5 rounded-md p-3">
+                    {getParameterDefinitions(editedFunc).map((decl, declIndex) => {
+                      const configured = editedFunc.configuredParams?.[decl.name];
+                      const value = configured !== undefined ? configured : decl.default;
+                      const smallInput = "px-2 py-1 text-xs border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500";
+                      return (
+                        <div key={declIndex} className="space-y-1.5 pb-2 border-b border-amber-500/20 last:border-b-0 last:pb-0">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={decl.name}
+                              onChange={(e) => updateParameterDefinition(declIndex, { name: e.target.value })}
+                              placeholder="name"
+                              className={`${smallInput} w-32 font-mono`}
+                              title="Parameter name — read in code as params[name]"
+                            />
+                            <select
+                              value={decl.type}
+                              onChange={(e) => updateParameterDefinition(declIndex, { type: e.target.value as ValidationParameterDefinition['type'] })}
+                              className={smallInput}
+                            >
+                              <option value="number">number</option>
+                              <option value="string">string</option>
+                              <option value="boolean">boolean</option>
+                              <option value="enum">enum</option>
+                            </select>
+                            <div className="flex-1 flex items-center space-x-1">
+                              <span className="text-xs text-content-tertiary">Value:</span>
+                              <div className="flex-1">
+                                {renderParamInput(decl, value, (raw) => updateConfiguredParam(decl, raw))}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeParameterDefinition(declIndex)}
+                              className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                              title="Remove parameter"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={decl.default ?? ''}
+                              onChange={(e) => updateParameterDefinition(declIndex, { default: coerceParamValue(decl, e.target.value) })}
+                              placeholder="default"
+                              className={`${smallInput} w-24`}
+                              title="Default value used when no value is configured"
+                            />
+                            {decl.type === 'number' && (
+                              <input
+                                type="text"
+                                value={decl.unit ?? ''}
+                                onChange={(e) => updateParameterDefinition(declIndex, { unit: e.target.value || undefined })}
+                                placeholder="unit"
+                                className={`${smallInput} w-16`}
+                                title="Unit shown next to the value (e.g. ms)"
+                              />
+                            )}
+                            {decl.type === 'enum' && (
+                              <input
+                                type="text"
+                                value={(decl.options || []).join(', ')}
+                                onChange={(e) => updateParameterDefinition(declIndex, {
+                                  options: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                                })}
+                                placeholder="option1, option2"
+                                className={`${smallInput} w-40`}
+                                title="Allowed values, comma-separated"
+                              />
+                            )}
+                            <input
+                              type="text"
+                              value={decl.description ?? ''}
+                              onChange={(e) => updateParameterDefinition(declIndex, { description: e.target.value || undefined })}
+                              placeholder="description"
+                              className={`${smallInput} flex-1`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="text-xs text-content-tertiary pt-1">
+                      Values are available to the code as <code className="font-mono">params["name"]</code>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -878,6 +1101,29 @@ json.dumps(_out)
                           </select>
                         </div>
                       </div>
+                      {getParameterDefinitions(editedFunc).length > 0 && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-content-tertiary font-medium" title="Override parameter values for this test case only. Blank = use the configured value.">
+                            Param overrides:
+                          </span>
+                          {getParameterDefinitions(editedFunc).map(decl => {
+                            const effective = getEffectiveParams(editedFunc)[decl.name];
+                            return (
+                              <div key={decl.name} className="flex items-center space-x-1">
+                                <span className="text-xs text-content-tertiary font-mono">{decl.name}</span>
+                                <div className="w-24">
+                                  {renderParamInput(
+                                    decl,
+                                    testCase.params?.[decl.name],
+                                    (raw) => updateTestCaseParamOverride(testIndex, testCase, decl, raw),
+                                    formatParamValue(effective)
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2">
