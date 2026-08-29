@@ -189,12 +189,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.24764
+          "value": 0.24764,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 15.61114
+          "value": 15.61114,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -448,12 +450,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 3.00503
+          "value": 3.00503,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 27.11196
+          "value": 27.11196,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -713,12 +717,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.22665
+          "value": 0.22665,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 59.95616
+          "value": 59.95616,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -967,12 +973,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.77858
+          "value": 0.77858,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 78.97713
+          "value": 78.97713,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -1226,12 +1234,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.77858
+          "value": 0.77858,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 78.97713
+          "value": 78.97713,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -1485,12 +1495,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.77858
+          "value": 0.77858,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 78.97713
+          "value": 78.97713,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -1748,12 +1760,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 1.06586
+          "value": 1.06586,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 63.01329
+          "value": 63.01329,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -2345,12 +2359,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.7893
+          "value": 0.7893,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 78.97715
+          "value": 78.97715,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -2602,12 +2618,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.57169
+          "value": 0.57169,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 63.62748
+          "value": 63.62748,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -2851,12 +2869,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.77858
+          "value": 0.77858,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 78.97713
+          "value": 78.97713,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",

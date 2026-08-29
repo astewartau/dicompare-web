@@ -157,12 +157,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.17069
+          "value": 0.17069,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -350,12 +352,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.0681
+          "value": 0.0681,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -534,12 +538,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.03299
+          "value": 0.03299,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -751,12 +757,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.08302
+          "value": 0.08302,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -1046,12 +1054,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.03788
+          "value": 0.03788,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -1226,12 +1236,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.26572
+          "value": 0.26572,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -2142,12 +2154,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.13485
+          "value": 0.13485,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -2345,12 +2359,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.13485
+          "value": 0.13485,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -2541,12 +2557,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.17069
+          "value": 0.17069,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -2732,12 +2750,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.06807
+          "value": 0.06807,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -2926,12 +2946,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.06805
+          "value": 0.06805,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
@@ -3119,12 +3141,14 @@
         {
           "field": "SAR",
           "tag": "0018,1316",
-          "value": 0.06814
+          "value": 0.06814,
+          "severity": "warning"
         },
         {
           "field": "dBdt",
           "tag": "0018,1318",
-          "value": 0
+          "value": 0,
+          "severity": "warning"
         },
         {
           "field": "NumberOfAverages",
