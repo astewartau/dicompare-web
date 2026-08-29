@@ -61,6 +61,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
         inferDataTypeFromValue(field.value)) as FieldDataType,
       value: initialValue,
       validationRule: rule,
+      severity: (field.severity ?? 'error') as 'error' | 'warning',
     };
   });
 
@@ -180,6 +181,8 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
     updates.value = fieldValue;
     updates.validationRule = validationRule;
+    // Persist only the non-default severity; clear it when back to 'error'.
+    updates.severity = formData.severity === 'warning' ? 'warning' : undefined;
 
     onSave(updates);
   };
@@ -576,6 +579,35 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
               ))}
             </div>
           )}
+
+          {/* Constraint severity */}
+          <div>
+            <label className="block text-sm font-medium text-content-primary mb-1">
+              If this constraint is not met
+            </label>
+            <div className="flex gap-2">
+              {([
+                ['error', 'Fail (requirement)'],
+                ['warning', 'Warn (reference only)'],
+              ] as const).map(([sev, label]) => (
+                <button
+                  key={sev}
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, severity: sev }))}
+                  className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
+                    formData.severity === sev
+                      ? 'border-medical-500 bg-medical-50 dark:bg-medical-900/30 text-medical-700 dark:text-medical-300 font-medium'
+                      : 'border-border text-content-secondary hover:bg-surface-secondary'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-content-tertiary">
+              Reference-only records what the reference protocol used without failing data that differs.
+            </p>
+          </div>
         </div>
 
         {/* Compact Footer */}

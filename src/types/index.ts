@@ -1,4 +1,9 @@
 // DICOM Field Types
+// Compliance severity when a field constraint is not met. 'error' (default)
+// marks it a requirement; 'warning' records it as reference information —
+// the value describes what the reference used, but differing is still compliant.
+export type FieldSeverity = 'error' | 'warning';
+
 export interface DicomField {
   tag: string | null;  // null for custom/derived fields without DICOM tags
   name: string;
@@ -7,6 +12,7 @@ export interface DicomField {
   vr: string; // Value Representation
   level: 'acquisition' | 'series';
   validationRule?: ValidationRule;
+  severity?: FieldSeverity; // omitted = 'error' (a requirement)
   seriesName?: string; // For series-level fields, which series they belong to
   fieldType?: 'standard' | 'derived' | 'private' | 'custom'; // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
@@ -31,6 +37,7 @@ export interface SeriesField {
   keyword?: string;  // DICOM keyword (e.g. "EchoTime" vs full name "Echo Time")
   value: any;
   validationRule?: ValidationRule;
+  severity?: FieldSeverity; // omitted = 'error' (a requirement)
   fieldType?: 'standard' | 'derived' | 'private' | 'custom';  // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
 }

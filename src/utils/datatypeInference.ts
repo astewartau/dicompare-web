@@ -221,6 +221,7 @@ export function processSchemaFieldForUI(schemaField: any): any {
     level: schemaField.level || 'acquisition',
     dataType,
     validationRule,
+    ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {}),
     fieldType  // Preserve explicit field type or infer from tag
   };
 }
@@ -236,6 +237,7 @@ export function processSchemaSeriesFieldValue(schemaField: any, fieldName?: stri
     value: schemaField.value,
     field: fieldName || schemaField.field || schemaField.name,
     dataType,
-    validationRule
+    validationRule,
+    ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {})
   };
 }

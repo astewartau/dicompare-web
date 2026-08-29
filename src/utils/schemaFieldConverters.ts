@@ -12,6 +12,7 @@ export interface SchemaFieldOutput {
   contains?: string;
   contains_any?: any[];
   contains_all?: any[];
+  severity?: 'error' | 'warning';
 }
 
 /**
@@ -48,6 +49,11 @@ export function fieldToSchemaField(field: DicomField | SeriesField): SchemaField
     if (field.validationRule.type === 'contains_all' && field.validationRule.contains_all) {
       schemaField.contains_all = field.validationRule.contains_all;
     }
+  }
+
+  // Only the non-default severity is serialized (omitted = 'error').
+  if (field.severity === 'warning') {
+    schemaField.severity = 'warning';
   }
 
   return schemaField;
