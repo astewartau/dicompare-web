@@ -730,10 +730,27 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                     <p className="text-xs font-medium text-content-primary break-words">{getDisplayName(func)}</p>
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       {(func.customFields || func.fields).map(field => (
-                                        <span key={field} className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs rounded">
+                                        <span
+                                          key={field}
+                                          title={`${field} — required by this rule`}
+                                          className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs rounded"
+                                        >
                                           {field}
                                         </span>
                                       ))}
+                                      {/* Fields the rule reads when present; absence is not an error.
+                                          Hollow to match the field tables' reference-only dot. */}
+                                      {(func.optional_fields || [])
+                                        .filter(field => !(func.customFields || func.fields).includes(field))
+                                        .map(field => (
+                                          <span
+                                            key={field}
+                                            title={`${field} — optional; used by this rule when present`}
+                                            className="px-1.5 py-0.5 border border-dashed border-amber-500/60 text-amber-600 dark:text-amber-400 text-xs rounded"
+                                          >
+                                            {field}
+                                          </span>
+                                        ))}
                                     </div>
                                     {ruleCode && (
                                       <button
