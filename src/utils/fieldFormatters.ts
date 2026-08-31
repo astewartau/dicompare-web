@@ -182,14 +182,19 @@ export function formatValidationRule(rule?: ValidationRule): string {
 }
 
 /**
- * Format a range constraint using mathematical notation.
+ * Format a range constraint.
  * - min only: "≥ min"
  * - max only: "≤ max"
- * - both: "[min, max]"
+ * - both: "min to max"
+ *
+ * Deliberately not interval notation: a list value formats as "[5, 8]", so a
+ * range printed the same way was indistinguishable from a two-element list.
+ * "to" also survives negative bounds, where an en dash ("-5 – 8") reads as
+ * arithmetic.
  */
 export function formatRangeConstraint(min?: number, max?: number): string {
   if (min !== undefined && min !== null && max !== undefined && max !== null) {
-    return `[${min}, ${max}]`;
+    return `${min} to ${max}`;
   } else if (min !== undefined && min !== null) {
     return `≥ ${min}`;
   } else if (max !== undefined && max !== null) {
