@@ -6,6 +6,7 @@ import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWork
 import { normalizeTag } from '../../utils/stringHelpers';
 import FieldTable from './FieldTable';
 import SeriesTable from './SeriesTable';
+import { FieldSeverityLegend } from './FieldSeverityIndicator';
 import DicomFieldSelector from '../common/DicomFieldSelector';
 import InlineTagInput from '../common/InlineTagInput';
 import { useTagSuggestions } from '../../hooks/useTagSuggestions';
@@ -51,6 +52,7 @@ interface AcquisitionTableProps {
   onSeriesAdd: () => void;
   onSeriesDelete: (seriesIndex: number) => void;
   onSeriesNameUpdate: (seriesIndex: number, name: string) => void;
+  onSeriesNotesUpdate?: (seriesIndex: number, notes: string) => void;
   // New validation function handlers
   onValidationFunctionAdd?: (func: SelectedValidationFunction) => void;
   onValidationFunctionUpdate?: (index: number, func: SelectedValidationFunction) => void;
@@ -91,6 +93,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   onSeriesAdd,
   onSeriesDelete,
   onSeriesNameUpdate,
+  onSeriesNotesUpdate,
   onValidationFunctionAdd,
   onValidationFunctionUpdate,
   onValidationFunctionDelete,
@@ -128,6 +131,15 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       } else {
         return Object.keys(s.fields).length > 0;
       }
+    });
+
+  // The dots next to field names only need decoding when a schema actually
+  // mixes requirements with reference-only constraints.
+  const hasReferenceOnlyFields =
+    acquisition.acquisitionFields.some(f => f.severity === 'warning') ||
+    (acquisition.series || []).some(s => {
+      const fields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+      return (fields as any[]).some(f => f?.severity === 'warning');
     });
 
   const validationFunctions = acquisition.validationFunctions || [];
@@ -872,9 +884,16 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 onSeriesDelete={onSeriesDelete}
                 onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'acquisition')}
                 onSeriesNameUpdate={onSeriesNameUpdate}
+                onSeriesNotesUpdate={onSeriesNotesUpdate}
                 onSeriesView={onSeriesView}
                 onSeriesViewTestData={onSeriesViewTestData}
               />
+            </div>
+          )}
+
+          {hasReferenceOnlyFields && (
+            <div>
+              <FieldSeverityLegend />
             </div>
           )}
 

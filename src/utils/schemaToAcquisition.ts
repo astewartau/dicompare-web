@@ -114,10 +114,13 @@ export const convertSchemaToAcquisition = async (
             tag: processedField.tag,
             value: processedField.value ?? field.defaultValue ?? '',
             validationRule: processedField.validationRule || { type: 'exact' as const },
+            severity: processedField.severity,
+            // No notes: rationale on a series is carried by series.notes below.
             fieldType: processedField.fieldType || field.fieldType  // Preserve field type (standard/derived)
           };
         }),
         images: series.images || [],
+        notes: series.notes,
       })) || [],
       validationFunctions: Array.isArray(acquisitionData.rules)
         ? acquisitionData.rules.map(schemaRuleToValidationFunction)
@@ -226,6 +229,8 @@ export const convertRawAcquisitionToContext = (
             name: f.field || f.name,
             value: f.value,
             validationRule,
+            severity: f.severity === 'warning' ? 'warning' : undefined,
+            // No notes: rationale on a series is carried by series.notes below.
             fieldType: f.fieldType
           });
         });
@@ -235,6 +240,7 @@ export const convertRawAcquisitionToContext = (
         name: series.name,
         fields: seriesFields,
         images: series.images || [],
+        notes: series.notes,
       };
     });
   }

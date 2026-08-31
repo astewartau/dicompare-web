@@ -765,6 +765,7 @@ const SchemaViewerPage: React.FC = () => {
                           onSeriesAdd={noop}
                           onSeriesDelete={noop}
                           onSeriesNameUpdate={noop}
+                          onSeriesNotesUpdate={noop}
                         />
                       </div>
                     );

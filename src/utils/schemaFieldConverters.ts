@@ -13,6 +13,7 @@ export interface SchemaFieldOutput {
   contains_any?: any[];
   contains_all?: any[];
   severity?: 'error' | 'warning';
+  notes?: string;
 }
 
 /**
@@ -23,7 +24,11 @@ export interface SchemaFieldOutput {
  * This unified function handles both acquisition-level (DicomField) and series-level (SeriesField)
  * fields since they share the same relevant properties for schema conversion.
  */
-export function fieldToSchemaField(field: DicomField | SeriesField): SchemaFieldOutput {
+export function fieldToSchemaField(
+  field: DicomField | SeriesField,
+  options: { includeNotes?: boolean } = {}
+): SchemaFieldOutput {
+  const { includeNotes = true } = options;
   const schemaField: SchemaFieldOutput = {
     field: field.name || field.keyword || field.tag || ''
   };
@@ -56,6 +61,15 @@ export function fieldToSchemaField(field: DicomField | SeriesField): SchemaField
     schemaField.severity = 'warning';
   }
 
+  // Series fields pass includeNotes: false. Dropping it here rather than
+  // relying on SeriesField's type not declaring it, because a note can still
+  // reach this at runtime from a hand-edited schema — and the metaschema
+  // rejects the key on a series field, so writing it would emit invalid JSON.
+  const notes = includeNotes && 'notes' in field ? field.notes : undefined;
+  if (notes && notes.trim()) {
+    schemaField.notes = notes.trim();
+  }
+
   return schemaField;
 }
 
@@ -69,8 +83,10 @@ export function acquisitionFieldToSchemaField(field: DicomField): SchemaFieldOut
 
 /**
  * Convert a series-level SeriesField to schema field format.
- * Alias for fieldToSchemaField for semantic clarity.
+ *
+ * Same as fieldToSchemaField except notes are dropped — a series records its
+ * rationale once, on the series, not per field.
  */
 export function seriesFieldToSchemaField(field: SeriesField): SchemaFieldOutput {
-  return fieldToSchemaField(field);
+  return fieldToSchemaField(field, { includeNotes: false });
 }

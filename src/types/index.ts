@@ -13,6 +13,9 @@ export interface DicomField {
   level: 'acquisition' | 'series';
   validationRule?: ValidationRule;
   severity?: FieldSeverity; // omitted = 'error' (a requirement)
+  // Free-text rationale for this constraint — why this value, or what the
+  // consequence of deviating is. Documentation only; never affects validation.
+  notes?: string;
   seriesName?: string; // For series-level fields, which series they belong to
   fieldType?: 'standard' | 'derived' | 'private' | 'custom'; // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
@@ -38,6 +41,9 @@ export interface SeriesField {
   value: any;
   validationRule?: ValidationRule;
   severity?: FieldSeverity; // omitted = 'error' (a requirement)
+  // Deliberately no `notes` here. Rationale on a series is recorded once
+  // against the series (see Series.notes) — the series is the unit a reader
+  // reasons about, and per-field notes across a wide table were unreadable.
   fieldType?: 'standard' | 'derived' | 'private' | 'custom';  // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
 }
@@ -46,6 +52,8 @@ export interface Series {
   name: string;
   fields: SeriesField[];
   images?: SchemaImage[];
+  // Rationale for this series as a whole, shown under the series name.
+  notes?: string;
 }
 
 // Validation Functions Types (imported from validation components)

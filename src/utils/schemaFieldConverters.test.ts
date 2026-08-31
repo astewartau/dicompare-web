@@ -1,5 +1,5 @@
-import { fieldToSchemaField } from './schemaFieldConverters';
-import type { DicomField } from '../types';
+import { fieldToSchemaField, seriesFieldToSchemaField } from './schemaFieldConverters';
+import type { DicomField, SeriesField } from '../types';
 
 const baseField = (overrides: Partial<DicomField>): DicomField => ({
   tag: '0018,0081',
@@ -30,5 +30,33 @@ describe('fieldToSchemaField severity', () => {
     }));
     expect(out.value).toBe(66);
     expect(out.severity).toBe('warning');
+  });
+});
+
+describe('fieldToSchemaField notes', () => {
+  test('serializes a trimmed note', () => {
+    const out = fieldToSchemaField(baseField({ notes: '  Vendor requires 3T for SNR.  ' }));
+    expect(out.notes).toBe('Vendor requires 3T for SNR.');
+  });
+
+  test('omits absent or whitespace-only notes', () => {
+    expect(fieldToSchemaField(baseField({})).notes).toBeUndefined();
+    expect(fieldToSchemaField(baseField({ notes: '   ' })).notes).toBeUndefined();
+  });
+
+  // Notes are an acquisition-field concept only; on a series the rationale is
+  // recorded once against the series itself. The metaschema rejects the key on
+  // a series field, so writing one here would emit an invalid schema.
+  test('never writes a note onto a series field', () => {
+    const seriesField = {
+      tag: '0018,1314',
+      name: 'FlipAngle',
+      value: 9,
+      notes: 'Ernst angle',
+    } as SeriesField & { notes: string };
+
+    expect(seriesFieldToSchemaField(seriesField).notes).toBeUndefined();
+    // ...even though the same object keeps its note on the acquisition path.
+    expect(fieldToSchemaField(seriesField).notes).toBe('Ernst angle');
   });
 });

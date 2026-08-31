@@ -7,7 +7,7 @@ import type { WorkerRequest, WorkerResponse, PendingRequest, ProgressPayload } f
 import { SchemaTemplate } from '../types/schema';
 import { Acquisition as UIAcquisition, DicomField } from '../types';
 import { FileObject } from '../utils/fileUploadUtils';
-import { fieldToSchemaField } from '../utils/schemaFieldConverters';
+import { fieldToSchemaField, seriesFieldToSchemaField } from '../utils/schemaFieldConverters';
 import { getEffectiveParams, getParameterDefinitions } from '../utils/validationParams';
 
 // Reject a request if the worker goes completely silent this long — no
@@ -467,9 +467,12 @@ class DicompareWorkerAPI {
           name: series.name,
           fields: []
         };
+        if (series.notes && series.notes.trim()) {
+          seriesEntry.notes = series.notes.trim();
+        }
         if (series.fields) {
           for (const field of series.fields) {
-            seriesEntry.fields.push(fieldToSchemaField(field));
+            seriesEntry.fields.push(seriesFieldToSchemaField(field));
           }
         }
         acqEntry.series.push(seriesEntry);

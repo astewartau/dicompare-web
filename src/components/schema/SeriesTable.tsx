@@ -7,6 +7,8 @@ import { formatSeriesFieldValue, formatFieldTypeInfo } from '../../utils/fieldFo
 import CustomTooltip from '../common/CustomTooltip';
 import StatusIcon from '../common/StatusIcon';
 import FieldEditModal from './FieldEditModal';
+import FieldSeverityIndicator, { isColumnReferenceOnly } from './FieldSeverityIndicator';
+import { FieldNoteMarker } from './FieldNote';
 
 interface SeriesTableProps {
   // seriesFields removed - now embedded in series[].fields[]
@@ -22,6 +24,7 @@ interface SeriesTableProps {
   onSeriesDelete: (seriesIndex: number) => void;
   onFieldConvert: (fieldTag: string) => void;
   onSeriesNameUpdate?: (seriesIndex: number, name: string) => void;
+  onSeriesNotesUpdate?: (seriesIndex: number, notes: string) => void;
   onSeriesView?: (seriesIndex: number, seriesName: string) => void;
   onSeriesViewTestData?: (seriesIndex: number, seriesName: string) => void;
 }
@@ -38,6 +41,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   onSeriesDelete,
   onFieldConvert,
   onSeriesNameUpdate,
+  onSeriesNotesUpdate,
   onSeriesView,
   onSeriesViewTestData,
 }) => {
@@ -87,7 +91,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
       name: fieldData.name || fieldData.field || tag,
       keyword: fieldData.keyword,
       value: fieldData.value,
-      validationRule: fieldData.validationRule
+      validationRule: fieldData.validationRule,
+      severity: fieldData.severity
     }));
   };
 
@@ -123,6 +128,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   // Use tag or name as key (for derived fields that have null tags)
   const allFields: SeriesField[] = [];
   const fieldMap = new Map<string, SeriesField>();
+  const severitiesByField = new Map<string, (SeriesField['severity'])[]>();
 
   series.forEach(s => {
     const fieldsArray = getFieldsArray(s.fields);
@@ -132,6 +138,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
         fieldMap.set(fieldKey, f);
         allFields.push(f);
       }
+      severitiesByField.set(fieldKey, [...(severitiesByField.get(fieldKey) ?? []), f.severity]);
     });
   });
 
@@ -153,8 +160,17 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{field.keyword || field.name}</p>
-                      <p className="text-xs font-normal text-content-muted font-mono">
+                      <p className="font-medium truncate flex items-center gap-1.5">
+                        <FieldSeverityIndicator
+                          severity={
+                            isColumnReferenceOnly(severitiesByField.get(field.tag || field.name) ?? [])
+                              ? 'warning'
+                              : 'error'
+                          }
+                        />
+                        <span className="truncate">{field.keyword || field.name}</span>
+                      </p>
+                      <p className="text-xs font-normal text-content-muted font-mono pl-3">
                         {field.fieldType === 'derived' ? 'Derived field' :
                          field.fieldType === 'custom' ? 'Custom field' :
                          field.fieldType === 'private' ? 'Private field' :
@@ -210,21 +226,46 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                   isEditMode ? 'hover:bg-surface-hover transition-colors' : ''
                 }`}
               >
-                <td className="px-2 py-1.5 whitespace-nowrap font-medium text-content-primary sticky left-0 bg-inherit min-w-[140px]">
-                  {isEditMode && onSeriesNameUpdate ? (
+                <td className={`px-2 py-1.5 font-medium text-content-primary sticky left-0 bg-inherit min-w-[140px] ${
+                  isEditMode && onSeriesNotesUpdate ? 'max-w-[240px] whitespace-normal align-top' : 'whitespace-nowrap'
+                }`}>
+                  <span className="flex items-center gap-1.5">
+                    {isEditMode && onSeriesNameUpdate ? (
+                      <input
+                        type="text"
+                        value={ser.name}
+                        onChange={(e) => onSeriesNameUpdate(seriesIndex, e.target.value)}
+                        className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-brand-500 rounded px-1 py-0.5 -mx-1 -my-0.5 text-xs w-full text-content-primary"
+                        onBlur={(e) => {
+                          if (!e.target.value.trim()) {
+                            onSeriesNameUpdate(seriesIndex, `Series ${String(seriesIndex + 1).padStart(2, '0')}`);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="text-xs">{ser.name}</span>
+                    )}
+                    {/* Read-only: the series rationale lives in a hover tooltip, same as field notes. */}
+                    {!isEditMode && ser.notes && <FieldNoteMarker note={ser.notes} />}
+                  </span>
+                  {/* Edit mode gets an inline box so the note is authorable in
+                      place. A single-line input, not a textarea: the height stays
+                      put as you type, and Enter means "done" rather than a newline. */}
+                  {isEditMode && onSeriesNotesUpdate && (
                     <input
                       type="text"
-                      value={ser.name}
-                      onChange={(e) => onSeriesNameUpdate(seriesIndex, e.target.value)}
-                      className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-brand-500 rounded px-1 py-0.5 -mx-1 -my-0.5 text-xs w-full text-content-primary"
-                      onBlur={(e) => {
-                        if (!e.target.value.trim()) {
-                          onSeriesNameUpdate(seriesIndex, `Series ${String(seriesIndex + 1).padStart(2, '0')}`);
-                        }
+                      value={ser.notes || ''}
+                      onChange={(e) => onSeriesNotesUpdate(seriesIndex, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
                       }}
+                      onBlur={(e) => {
+                        const trimmed = e.target.value.trim();
+                        if (trimmed !== e.target.value) onSeriesNotesUpdate(seriesIndex, trimmed);
+                      }}
+                      placeholder="Add a note…"
+                      className="mt-0.5 w-full bg-transparent border border-transparent hover:border-border focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded px-1 py-0.5 -mx-1 text-xs italic font-normal text-content-tertiary placeholder:text-content-muted"
                     />
-                  ) : (
-                    <span className="text-xs">{ser.name}</span>
                   )}
                 </td>
                 {allFields.map((headerField) => {
@@ -380,7 +421,10 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 value: existingField.value,
                 vr: 'UN',
                 level: 'series' as const,
-                validationRule: existingField.validationRule
+                validationRule: existingField.validationRule,
+                // Without this the toggle always opens on 'Fail', so a
+                // reference-only column looks like a requirement.
+                severity: existingField.severity
               };
             }
             // Otherwise create a new field with defaults
@@ -416,8 +460,29 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
             if ('validationRule' in updates && updates.validationRule !== undefined) {
               fieldUpdate.validationRule = updates.validationRule;
             }
+            if ('severity' in updates) {
+              fieldUpdate.severity = updates.severity;
+            }
 
             onSeriesUpdate(editingCell.seriesIndex, fieldTag, fieldUpdate);
+
+            // Severity is presented per column — the header carries one dot for
+            // the whole field — so changing it on one cell has to apply to every
+            // series, or the header keeps reporting the old state.
+            if ('severity' in updates) {
+              displaySeries.forEach((otherSeries, otherIndex) => {
+                if (otherIndex === editingCell.seriesIndex) return;
+                const otherFields = getFieldsArray(otherSeries.fields);
+                const match = otherFields.find(f => (f.tag ?? f.name) === fieldTag);
+                if (!match) return;
+                onSeriesUpdate(otherIndex, fieldTag, {
+                  name: match.name,
+                  tag: match.tag ?? match.name,
+                  severity: updates.severity,
+                });
+              });
+            }
+
             setEditingCell(null);
           }}
           onClose={() => setEditingCell(null)}

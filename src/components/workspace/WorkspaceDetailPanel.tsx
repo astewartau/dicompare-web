@@ -824,6 +824,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             onSeriesAdd={() => workspace.addSeries(selectedItem.id)}
             onSeriesDelete={(seriesIndex) => workspace.deleteSeries(selectedItem.id, seriesIndex)}
             onSeriesNameUpdate={(seriesIndex, name) => workspace.updateSeriesName(selectedItem.id, seriesIndex, name)}
+            onSeriesNotesUpdate={(seriesIndex, notes) => workspace.updateSeriesNotes(selectedItem.id, seriesIndex, notes)}
             onValidationFunctionAdd={(func) => workspace.addValidationFunction(selectedItem.id, func)}
             onValidationFunctionUpdate={(index, func) => workspace.updateValidationFunction(selectedItem.id, index, func)}
             onValidationFunctionDelete={(index) => workspace.deleteValidationFunction(selectedItem.id, index)}

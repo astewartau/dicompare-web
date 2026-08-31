@@ -303,7 +303,8 @@ export function useWorkspaceEditing(
           tag: fieldTag,
           name: updates.name || fieldTag,
           value: updates.value || '',
-          validationRule: updates.validationRule
+          validationRule: updates.validationRule,
+          severity: updates.severity
         };
         updatedSeries[seriesIndex].fields.push(newField);
       }
@@ -390,6 +391,28 @@ export function useWorkspaceEditing(
     }));
   }, [setItems]);
 
+  // Update the rationale attached to a series. Empty clears it.
+  //
+  // Stored verbatim rather than trimmed: this runs on every keystroke, so
+  // trimming here would eat the space the moment you typed it and make the
+  // field look broken. Trimming happens once, at serialization.
+  const updateSeriesNotes = useCallback((id: string, seriesIndex: number, notes: string) => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+
+      const acq = item.acquisition;
+      const updatedSeries = [...(acq.series || [])];
+      if (updatedSeries[seriesIndex]) {
+        updatedSeries[seriesIndex] = {
+          ...updatedSeries[seriesIndex],
+          notes: notes || undefined,
+        };
+      }
+
+      return { ...item, acquisition: { ...acq, series: updatedSeries } };
+    }));
+  }, [setItems]);
+
   // Add validation function
   const addValidationFunction = useCallback((id: string, func: SelectedValidationFunction) => {
     setItems(prev => prev.map(item =>
@@ -439,6 +462,7 @@ export function useWorkspaceEditing(
     addSeries,
     deleteSeries,
     updateSeriesName,
+    updateSeriesNotes,
     addValidationFunction,
     updateValidationFunction,
     deleteValidationFunction,

@@ -62,6 +62,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
       value: initialValue,
       validationRule: rule,
       severity: (field.severity ?? 'error') as 'error' | 'warning',
+      notes: field.notes ?? '',
     };
   });
 
@@ -183,6 +184,12 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
     updates.validationRule = validationRule;
     // Persist only the non-default severity; clear it when back to 'error'.
     updates.severity = formData.severity === 'warning' ? 'warning' : undefined;
+    // Blank notes are cleared rather than stored as an empty string. Series
+    // values have no note editor, so leave whatever the schema already carried
+    // rather than writing undefined over it.
+    if (!isSeriesValue) {
+      updates.notes = formData.notes.trim() || undefined;
+    }
 
     onSave(updates);
   };
@@ -608,6 +615,31 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
               Reference-only records what the reference protocol used without failing data that differs.
             </p>
           </div>
+
+          {/* Rationale, surfaced on hover in the field tables. Not offered for a
+              series-specific value: a series is documented by its own note, so a
+              note per cell would be one rationale per value with nowhere to read it. */}
+          {!isSeriesValue && (
+            <div>
+              <label
+                htmlFor="field-notes"
+                className="block text-sm font-medium text-content-primary mb-1"
+              >
+                Note <span className="font-normal text-content-tertiary">(optional)</span>
+              </label>
+              <textarea
+                id="field-notes"
+                rows={3}
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Why this value, or what happens if it differs…"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-primary text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
+              />
+              <p className="mt-1 text-xs text-content-tertiary">
+                Shown on hover next to the field name. Documentation only — it does not affect validation.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Compact Footer */}

@@ -222,6 +222,7 @@ export function processSchemaFieldForUI(schemaField: any): any {
     dataType,
     validationRule,
     ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {}),
+    ...(schemaField.notes ? { notes: schemaField.notes as string } : {}),
     fieldType  // Preserve explicit field type or infer from tag
   };
 }

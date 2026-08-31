@@ -7,6 +7,8 @@ import { ComplianceFieldResult } from '../../types/schema';
 import CustomTooltip from '../common/CustomTooltip';
 import StatusIcon from '../common/StatusIcon';
 import FieldEditModal from './FieldEditModal';
+import FieldSeverityIndicator from './FieldSeverityIndicator';
+import { FieldNoteMarker } from './FieldNote';
 
 interface FieldTableProps {
   fields: DicomField[];
@@ -170,10 +172,12 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 >
                 <td className="px-2 py-1.5">
                   <div>
-                    <p className="text-xs font-medium text-content-primary">
-                      {field.keyword || field.name}
+                    <p className="text-xs font-medium text-content-primary flex items-center gap-1.5">
+                      <FieldSeverityIndicator severity={field.severity} />
+                      <span>{field.keyword || field.name}</span>
+                      {field.notes && <FieldNoteMarker note={field.notes} />}
                     </p>
-                    <p className="text-xs text-content-tertiary font-mono">
+                    <p className="text-xs text-content-tertiary font-mono pl-3">
                       {field.fieldType === 'derived' ? 'Derived field' :
                        field.fieldType === 'custom' ? 'Custom field' :
                        field.fieldType === 'private' ? 'Private field' :
