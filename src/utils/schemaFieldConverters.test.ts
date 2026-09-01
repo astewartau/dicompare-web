@@ -60,3 +60,30 @@ describe('fieldToSchemaField notes', () => {
     expect(fieldToSchemaField(seriesField).notes).toBe('Ernst angle');
   });
 });
+
+describe('fieldToSchemaField custom messages', () => {
+  test('serializes trimmed warning/error messages', () => {
+    const out = fieldToSchemaField(baseField({
+      warningMessage: '  %V is a bit off  ',
+      errorMessage: '%V is wrong',
+    }));
+    expect(out.warningMessage).toBe('%V is a bit off');
+    expect(out.errorMessage).toBe('%V is wrong');
+  });
+
+  test('omits absent or whitespace-only messages', () => {
+    const out = fieldToSchemaField(baseField({ warningMessage: '   ', errorMessage: '' }));
+    expect(out.warningMessage).toBeUndefined();
+    expect(out.errorMessage).toBeUndefined();
+  });
+
+  // Messages are orthogonal to the constraint representation — they ride along on
+  // graded and series fields too.
+  test('serializes messages on a series field', () => {
+    const out = seriesFieldToSchemaField({
+      tag: '0018,0081', name: 'EchoTime', value: 10,
+      errorMessage: 'no echo near 10ms',
+    } as SeriesField);
+    expect(out.errorMessage).toBe('no echo near 10ms');
+  });
+});

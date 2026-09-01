@@ -3,6 +3,8 @@ import { Trash2, ArrowRightLeft, Loader, Eye, EyeOff, Pencil } from 'lucide-reac
 import { DicomField, Acquisition } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { formatFieldValue, formatFieldTypeInfo, formatFieldDisplay } from '../../utils/fieldFormatters';
+import FieldConstraintText from './FieldConstraintText';
+import { gradedSeverity } from '../common/constraintModel';
 import { ComplianceFieldResult } from '../../types/schema';
 import CustomTooltip from '../common/CustomTooltip';
 import StatusIcon from '../common/StatusIcon';
@@ -158,7 +160,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
               const explicitDataType = (field as any).dataType;
               const inferredDataType = inferDataTypeFromValue(field.value);
               const finalDataType = explicitDataType || inferredDataType;
-              const fieldTypeDisplay = formatFieldTypeInfo(finalDataType, field.validationRule);
+              const fieldTypeDisplay = formatFieldTypeInfo(finalDataType, field.validationRule, field.graded);
 
               // Pre-calculate compliance result (will be used if needed in render)
               const complianceResult = isComplianceMode ? getFieldComplianceResult(field) : null;
@@ -173,7 +175,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 <td className="px-2 py-1.5">
                   <div>
                     <p className="text-xs font-medium text-content-primary flex items-center gap-1.5">
-                      <FieldSeverityIndicator severity={field.severity} />
+                      <FieldSeverityIndicator severity={field.graded ? gradedSeverity(field.graded) : field.severity} />
                       <span>{field.keyword || field.name}</span>
                       {field.notes && <FieldNoteMarker note={field.notes} />}
                     </p>
@@ -191,8 +193,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                     onClick={() => isEditMode && setEditingField(field)}
                     data-tutorial={index === 0 && isEditMode ? 'field-value-cell' : undefined}
                   >
-                    <p className="text-xs text-content-primary break-words">{formatFieldValue(field)}</p>
-                    <p className="text-xs text-content-tertiary mt-0.5">{fieldTypeDisplay}</p>
+                    <FieldConstraintText graded={field.graded} value={formatFieldValue(field)} typeInfo={fieldTypeDisplay} />
                   </div>
                 </td>
                 {isComplianceMode && (

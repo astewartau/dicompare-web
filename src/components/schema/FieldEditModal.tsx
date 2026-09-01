@@ -4,6 +4,21 @@ import Modal from '../common/Modal';
 import { DicomField, FieldDataType, ValidationConstraint, ValidationRule } from '../../types';
 import { inferDataTypeFromValue, convertValueToDataType } from '../../utils/datatypeInference';
 import { lintField } from '../../utils/schemaLint';
+import ConstraintBandEditor from '../common/ConstraintBandEditor';
+import { GradedConstraint, fromSchemaField, hasTarget, num, gradedSeverity, canWarn, canError } from '../common/constraintModel';
+
+// A scalar-number field's constraint as a GradedConstraint (the number-line model).
+// Prefer an existing `graded`; otherwise derive it from the legacy value/rule/severity.
+function fieldToGraded(field: DicomField): GradedConstraint {
+  if (field.graded) return field.graded;
+  const r = field.validationRule;
+  const s: any = {};
+  if (r?.type === 'range') { if (r.min !== undefined) s.min = r.min; if (r.max !== undefined) s.max = r.max; }
+  else if (r?.type === 'tolerance') { s.value = field.value; s.tolerance = r.tolerance; }
+  else if (typeof field.value === 'number') { s.value = field.value; }
+  if (field.severity === 'warning') s.severity = 'warning';
+  return fromSchemaField(s) ?? { value: typeof field.value === 'number' ? field.value : 0 };
+}
 
 interface FieldEditModalProps {
   field: DicomField;
@@ -63,6 +78,8 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
       validationRule: rule,
       severity: (field.severity ?? 'error') as 'error' | 'warning',
       notes: field.notes ?? '',
+      warningMessage: field.warningMessage ?? '',
+      errorMessage: field.errorMessage ?? '',
     };
   });
 
@@ -75,6 +92,23 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
     const val = formData.validationRule.value;
     return Array.isArray(val) ? val.join(', ') : (val?.toString() || '');
   });
+
+  // The number-line editor owns scalar numeric constraints. It is bound to a
+  // GradedConstraint that supersedes the validationRule/severity pills for that field.
+  const [graded, setGraded] = useState<GradedConstraint>(() => fieldToGraded(field));
+  const useBandEditor = formData.dataType === 'number';
+
+  // Whether a warning / error outcome is even possible for the current constraint —
+  // only then is the corresponding custom message offered. Graded fields read it off
+  // the number line; other types have a single outcome set by severity (with a
+  // list_number graded warn band being the one case that can both warn and fail).
+  const listWarnBand = formData.dataType === 'list_number'
+    && formData.validationRule.type === 'tolerance'
+    && num(formData.validationRule.errorTolerance)
+    && num(formData.validationRule.tolerance)
+    && formData.validationRule.errorTolerance! > formData.validationRule.tolerance!;
+  const warnPossible = useBandEditor ? canWarn(graded) : (formData.severity === 'warning' || listWarnBand);
+  const errorPossible = useBandEditor ? canError(graded) : (formData.severity !== 'warning' || listWarnBand);
 
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
@@ -146,6 +180,27 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   };
 
   const handleSave = () => {
+    // The band editor keeps its own always-valid GradedConstraint, so it bypasses
+    // the legacy field/constraint validation entirely.
+    if (useBandEditor) {
+      onSave({
+        graded,
+        // Keep a representative scalar in `value` for callers/back-compat display;
+        // the graded constraint is authoritative for validation and serialization.
+        value: graded.value ?? graded.min ?? graded.max ?? graded.reference,
+        validationRule: undefined,
+        // Mirror the constraint's implied severity so the table's Required/Reference
+        // dot matches it (reference-only / advisory constraints never fail).
+        severity: gradedSeverity(graded),
+        // Only keep a message for an outcome the constraint can actually produce.
+        warningMessage: canWarn(graded) ? (formData.warningMessage.trim() || undefined) : undefined,
+        errorMessage: canError(graded) ? (formData.errorMessage.trim() || undefined) : undefined,
+        // Series values have no note editor (a series is documented once, on itself).
+        ...(isSeriesValue ? {} : { notes: formData.notes.trim() || undefined }),
+      });
+      return;
+    }
+
     if (!validateForm()) {
       return;
     }
@@ -182,8 +237,15 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
     updates.value = fieldValue;
     updates.validationRule = validationRule;
+    // Leaving the band editor (e.g. switching Number → String) drops any graded
+    // constraint so the legacy value/rule below become authoritative again.
+    updates.graded = undefined;
     // Persist only the non-default severity; clear it when back to 'error'.
     updates.severity = formData.severity === 'warning' ? 'warning' : undefined;
+    // Keep only the message for an outcome this constraint can produce (a warning
+    // for advisory / list warn band, an error for a requirement).
+    updates.warningMessage = warnPossible ? (formData.warningMessage.trim() || undefined) : undefined;
+    updates.errorMessage = errorPossible ? (formData.errorMessage.trim() || undefined) : undefined;
     // Blank notes are cleared rather than stored as an empty string. Series
     // values have no note editor, so leave whatever the schema already carried
     // rather than writing undefined over it.
@@ -195,12 +257,20 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   };
 
   const handleDataTypeChange = (newDataType: FieldDataType) => {
-    setFormData(prev => ({
-      ...prev,
-      dataType: newDataType,
-      // Convert current value to the new data type
-      value: convertValueToDataType(prev.value, newDataType),
-    }));
+    setFormData(prev => {
+      const converted = convertValueToDataType(prev.value, newDataType);
+      // Switching to a scalar number hands the field to the band editor; seed its
+      // constraint from the just-converted value so it opens on that number.
+      if (newDataType === 'number') {
+        setGraded(g => (hasTarget(g) || num(g.reference) ? g
+          : { value: typeof converted === 'number' && !isNaN(converted) ? converted : 0 }));
+      }
+      return {
+        ...prev,
+        dataType: newDataType,
+        value: converted,
+      };
+    });
   };
 
   const handleConstraintChange = (newConstraint: ValidationConstraint) => {
@@ -369,28 +439,41 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-content-secondary mb-1.5">Validation</label>
-              <div className="flex flex-wrap gap-1.5">
-                {availableConstraints.map(c => (
-                  <button
-                    key={c.value}
-                    onClick={() => handleConstraintChange(c.value)}
-                    className={`px-2.5 py-1 text-xs rounded-md transition-all ${
-                      formData.validationRule.type === c.value
-                        ? 'bg-brand-600 text-white shadow-sm'
-                        : 'bg-surface-secondary text-content-secondary hover:bg-surface-hover hover:text-content-primary'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
+            {!useBandEditor && (
+              <div>
+                <label className="block text-xs font-medium text-content-secondary mb-1.5">Validation</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableConstraints.map(c => (
+                    <button
+                      key={c.value}
+                      onClick={() => handleConstraintChange(c.value)}
+                      className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                        formData.validationRule.type === c.value
+                          ? 'bg-brand-600 text-white shadow-sm'
+                          : 'bg-surface-secondary text-content-secondary hover:bg-surface-hover hover:text-content-primary'
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
+          {/* Scalar numeric fields use the number-line editor: it carries the target
+              (exact / range / tolerance), graded warning/error bands, and an optional
+              reference marker, replacing the constraint pills + severity toggle. */}
+          {useBandEditor && (
+            <ConstraintBandEditor
+              fieldName={field.name}
+              value={graded}
+              onChange={setGraded}
+            />
+          )}
+
           {/* Value Input - contextual based on constraint */}
-          {formData.validationRule.type === 'exact' && (
+          {!useBandEditor && formData.validationRule.type === 'exact' && (
             <div>
               <label className="block text-xs font-medium text-content-secondary mb-1.5">Value</label>
               {formData.dataType === 'json' ? (
@@ -454,7 +537,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             </div>
           )}
 
-          {formData.validationRule.type === 'tolerance' && (
+          {!useBandEditor && formData.validationRule.type === 'tolerance' && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className={formData.dataType === 'list_number' ? 'col-span-2' : ''}>
@@ -493,6 +576,25 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                     placeholder="50"
                   />
                 </div>
+                {/* A list of numbers can't use the one-axis number line, so its
+                    optional graded warn band is a plain input: inside ± Tolerance
+                    passes, out to ± Warn tolerance warns, beyond that fails. */}
+                {formData.dataType === 'list_number' && (
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-content-secondary mb-1.5">
+                      ± Warn tolerance <span className="font-normal text-content-tertiary">(optional)</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.validationRule.errorTolerance ?? ''}
+                      onChange={(e) => handleConstraintValueChange({ errorTolerance: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                      min="0"
+                      step="any"
+                      className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                      placeholder="Wider band that warns instead of failing"
+                    />
+                  </div>
+                )}
               </div>
               {formData.dataType === 'list_number' && Array.isArray(formData.validationRule.value) && formData.validationRule.value.length > 0 && (
                 <div className="flex flex-wrap gap-1">
@@ -507,7 +609,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             </div>
           )}
 
-          {formData.validationRule.type === 'range' && (
+          {!useBandEditor && formData.validationRule.type === 'range' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-content-secondary mb-1.5">Min</label>
@@ -576,7 +678,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
           )}
 
           {/* Authoring hints (non-blocking) */}
-          {lintWarnings.length > 0 && (
+          {!useBandEditor && lintWarnings.length > 0 && (
             <div className="rounded-lg border border-amber-300 dark:border-amber-800/70 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-1">
               {lintWarnings.map((w) => (
                 <p key={w.code} className="text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
@@ -587,7 +689,10 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             </div>
           )}
 
-          {/* Constraint severity */}
+          {/* Constraint severity — the band editor encodes severity graphically
+              (target = pass, bands = warn/error, reference-only = advisory), so it
+              owns this for scalar numbers and the toggle is hidden. */}
+          {!useBandEditor && (
           <div>
             <label className="block text-sm font-medium text-content-primary mb-1">
               If this constraint is not met
@@ -611,10 +716,49 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-xs text-content-tertiary">
-              Reference-only records what the reference protocol used without failing data that differs.
-            </p>
           </div>
+          )}
+
+          {/* Custom compliance messages. Only the outcomes this constraint can
+              actually produce are offered (a requirement → error, an advisory /
+              graded warn band → warning). '%V' is filled with the value found. */}
+          {(errorPossible || warnPossible) && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-content-primary">
+                Custom messages <span className="font-normal text-content-tertiary">(optional)</span>
+              </label>
+              {errorPossible && (
+                <div>
+                  <label htmlFor="field-error-message" className="block text-xs font-medium text-content-secondary mb-1">
+                    On failure
+                  </label>
+                  <input
+                    id="field-error-message"
+                    type="text"
+                    value={formData.errorMessage}
+                    onChange={(e) => setFormData(prev => ({ ...prev, errorMessage: e.target.value }))}
+                    placeholder="e.g. %V is not the required value"
+                    className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary placeholder:text-content-muted focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  />
+                </div>
+              )}
+              {warnPossible && (
+                <div>
+                  <label htmlFor="field-warning-message" className="block text-xs font-medium text-content-secondary mb-1">
+                    On warning
+                  </label>
+                  <input
+                    id="field-warning-message"
+                    type="text"
+                    value={formData.warningMessage}
+                    onChange={(e) => setFormData(prev => ({ ...prev, warningMessage: e.target.value }))}
+                    placeholder="e.g. %V is outside the preferred range"
+                    className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary placeholder:text-content-muted focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Rationale, surfaced on hover in the field tables. Not offered for a
               series-specific value: a series is documented by its own note, so a
@@ -635,9 +779,6 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                 placeholder="Why this value, or what happens if it differs…"
                 className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-primary text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
               />
-              <p className="mt-1 text-xs text-content-tertiary">
-                Shown on hover next to the field name. Documentation only — it does not affect validation.
-              </p>
             </div>
           )}
         </div>

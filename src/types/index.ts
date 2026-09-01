@@ -1,3 +1,5 @@
+import type { GradedConstraint } from '../components/common/constraintModel';
+
 // DICOM Field Types
 // Compliance severity when a field constraint is not met. 'error' (default)
 // marks it a requirement; 'warning' records it as reference information —
@@ -13,9 +15,19 @@ export interface DicomField {
   level: 'acquisition' | 'series';
   validationRule?: ValidationRule;
   severity?: FieldSeverity; // omitted = 'error' (a requirement)
+  // Scalar numeric fields carry a graded constraint (the number-line editor's
+  // model); it is the source of truth for those and supersedes validationRule/
+  // severity. Non-numeric fields leave it undefined and use validationRule.
+  graded?: GradedConstraint;
   // Free-text rationale for this constraint — why this value, or what the
   // consequence of deviating is. Documentation only; never affects validation.
   notes?: string;
+  // Custom compliance messages shown when this field warns / fails, overriding
+  // the auto-generated text. '%V' is replaced with the actual value(s) found.
+  // Only the applicable one(s) are offered: a required (error) constraint takes
+  // an errorMessage, an advisory/graded warn outcome takes a warningMessage.
+  warningMessage?: string;
+  errorMessage?: string;
   seriesName?: string; // For series-level fields, which series they belong to
   fieldType?: 'standard' | 'derived' | 'private' | 'custom'; // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
@@ -41,6 +53,10 @@ export interface SeriesField {
   value: any;
   validationRule?: ValidationRule;
   severity?: FieldSeverity; // omitted = 'error' (a requirement)
+  graded?: GradedConstraint; // scalar numeric series fields (see DicomField.graded)
+  // Custom warn/fail compliance messages (see DicomField). '%V' → value(s) found.
+  warningMessage?: string;
+  errorMessage?: string;
   // Deliberately no `notes` here. Rationale on a series is recorded once
   // against the series (see Series.notes) — the series is the unit a reader
   // reasons about, and per-field notes across a wide table were unreadable.
@@ -144,6 +160,7 @@ export interface ValidationRule {
   max?: number;
   pattern?: string;
   tolerance?: number;
+  errorTolerance?: number; // graded tolerance for list_number fields (warn band)
   contains?: string;
   substring?: string; // Alias for contains
   contains_any?: any[]; // Array of values for contains_any constraint (substrings for strings, elements for lists)

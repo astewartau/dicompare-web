@@ -1,5 +1,6 @@
 import { DicomField, SeriesField, ValidationRule } from '../types';
 import { FieldValue, validateFieldValue, extractFieldValue } from '../types/fieldValues';
+import { describeConstraint, shape, type GradedConstraint } from '../components/common/constraintModel';
 
 /**
  * Build a ValidationRule object from raw schema field properties.
@@ -95,6 +96,11 @@ function formatTypedValue(fieldValue: FieldValue): string {
 
 // Backward compatibility - formatFieldValue for DicomField
 export function formatFieldValue(field: DicomField): string {
+  // Scalar numeric fields carry a graded constraint: render its concise target
+  // (e.g. "≥ 3", "3 to 3.5", "3 ± 0.5") rather than the raw value/legacy rule.
+  if (field.graded) {
+    return describeConstraint(field.graded).target;
+  }
   return formatFieldDisplay(field.value, field.validationRule, { showValue: true, showConstraint: true });
 }
 
@@ -203,10 +209,17 @@ export function formatRangeConstraint(min?: number, max?: number): string {
   return 'range (not set)';
 }
 
-export function formatFieldTypeInfo(dataType: string, validationRule?: ValidationRule): string {
+export function formatFieldTypeInfo(
+  dataType: string,
+  validationRule?: ValidationRule,
+  graded?: GradedConstraint,
+): string {
   const formattedType = formatDataType(dataType);
-  // Show only constraint type name (values shown in the value display)
-  const constraintType = validationRule?.type || 'exact';
+  // A graded scalar owns its constraint; derive the label from its shape since it
+  // clears validationRule ('any' for a presence-only / allow-any field).
+  const constraintType = graded
+    ? (shape(graded) === 'any' ? 'exact' : shape(graded))
+    : (validationRule?.type || 'exact');
   const formattedConstraint = constraintType.replace(/_/g, ' ');
   return `${formattedType} • ${formattedConstraint}`;
 }

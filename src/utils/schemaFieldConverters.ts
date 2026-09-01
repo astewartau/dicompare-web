@@ -1,4 +1,5 @@
 import type { DicomField, SeriesField } from '../types';
+import { toSchemaField } from '../components/common/constraintModel';
 
 /**
  * Schema field format used by the Python dicompare library.
@@ -8,12 +9,20 @@ export interface SchemaFieldOutput {
   field: string;
   tag?: string;
   value?: any;
+  min?: number;
+  max?: number;
   tolerance?: number;
+  errorMin?: number;
+  errorMax?: number;
+  errorTolerance?: number;
+  reference?: number;
   contains?: string;
   contains_any?: any[];
   contains_all?: any[];
   severity?: 'error' | 'warning';
   notes?: string;
+  warningMessage?: string;
+  errorMessage?: string;
 }
 
 /**
@@ -37,28 +46,41 @@ export function fieldToSchemaField(
     schemaField.tag = field.tag;
   }
 
-  if (field.value !== undefined && field.value !== null && field.value !== '') {
-    schemaField.value = field.value;
+  // Scalar numeric fields are the graded editor's domain: its constraint (value /
+  // min / max / tolerance / error edges / reference / severity) is authoritative.
+  if (field.graded) {
+    Object.assign(schemaField, toSchemaField(field.graded));
+  } else {
+    if (field.value !== undefined && field.value !== null && field.value !== '') {
+      schemaField.value = field.value;
+    }
+    if (field.validationRule) {
+      const r = field.validationRule;
+      if (r.type === 'tolerance' && r.tolerance !== undefined) {
+        schemaField.tolerance = r.tolerance;
+        if (r.errorTolerance !== undefined) schemaField.errorTolerance = r.errorTolerance; // list_number warn band
+      }
+      if (r.type === 'range') { // previously dropped — range constraints were silently lost
+        if (r.min !== undefined) schemaField.min = r.min;
+        if (r.max !== undefined) schemaField.max = r.max;
+      }
+      if (r.type === 'contains' && r.contains) schemaField.contains = r.contains;
+      if (r.type === 'contains_any' && r.contains_any) schemaField.contains_any = r.contains_any;
+      if (r.type === 'contains_all' && r.contains_all) schemaField.contains_all = r.contains_all;
+    }
+    // Only the non-default severity is serialized (omitted = 'error').
+    if (field.severity === 'warning') {
+      schemaField.severity = 'warning';
+    }
   }
 
-  if (field.validationRule) {
-    if (field.validationRule.type === 'tolerance' && field.validationRule.tolerance !== undefined) {
-      schemaField.tolerance = field.validationRule.tolerance;
-    }
-    if (field.validationRule.type === 'contains' && field.validationRule.contains) {
-      schemaField.contains = field.validationRule.contains;
-    }
-    if (field.validationRule.type === 'contains_any' && field.validationRule.contains_any) {
-      schemaField.contains_any = field.validationRule.contains_any;
-    }
-    if (field.validationRule.type === 'contains_all' && field.validationRule.contains_all) {
-      schemaField.contains_all = field.validationRule.contains_all;
-    }
+  // Custom compliance messages are orthogonal to how the constraint is stored
+  // (graded or legacy) — they apply whenever the field warns / fails.
+  if (field.warningMessage && field.warningMessage.trim()) {
+    schemaField.warningMessage = field.warningMessage.trim();
   }
-
-  // Only the non-default severity is serialized (omitted = 'error').
-  if (field.severity === 'warning') {
-    schemaField.severity = 'warning';
+  if (field.errorMessage && field.errorMessage.trim()) {
+    schemaField.errorMessage = field.errorMessage.trim();
   }
 
   // Series fields pass includeNotes: false. Dropping it here rather than

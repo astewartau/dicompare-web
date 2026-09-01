@@ -7,6 +7,7 @@ import { formatSeriesFieldValue, formatFieldTypeInfo } from '../../utils/fieldFo
 import CustomTooltip from '../common/CustomTooltip';
 import StatusIcon from '../common/StatusIcon';
 import FieldEditModal from './FieldEditModal';
+import FieldConstraintText from './FieldConstraintText';
 import FieldSeverityIndicator, { isColumnReferenceOnly } from './FieldSeverityIndicator';
 import { FieldNoteMarker } from './FieldNote';
 
@@ -299,16 +300,18 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <p className="text-xs text-content-primary break-words">
-                              {seriesField ? formatSeriesFieldValue(seriesField.value, seriesField.validationRule) : '-'}
-                            </p>
-                            {seriesField && (
-                              <p className="text-xs text-content-tertiary mt-0.5">
-                                {formatFieldTypeInfo(
+                            {seriesField ? (
+                              <FieldConstraintText
+                                graded={seriesField.graded}
+                                value={formatSeriesFieldValue(seriesField.value, seriesField.validationRule)}
+                                typeInfo={formatFieldTypeInfo(
                                   inferDataTypeFromValue(seriesField.value),
-                                  seriesField.validationRule
+                                  seriesField.validationRule,
+                                  seriesField.graded
                                 )}
-                              </p>
+                              />
+                            ) : (
+                              <p className="text-xs text-content-primary break-words">-</p>
                             )}
                           </div>
                         </div>
@@ -424,7 +427,11 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 validationRule: existingField.validationRule,
                 // Without this the toggle always opens on 'Fail', so a
                 // reference-only column looks like a requirement.
-                severity: existingField.severity
+                severity: existingField.severity,
+                // Scalar numeric series cells edit through the number-line control.
+                graded: existingField.graded,
+                warningMessage: existingField.warningMessage,
+                errorMessage: existingField.errorMessage
               };
             }
             // Otherwise create a new field with defaults
@@ -457,11 +464,23 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
             if ('value' in updates && updates.value !== undefined) {
               fieldUpdate.value = updates.value;
             }
-            if ('validationRule' in updates && updates.validationRule !== undefined) {
+            // The number-line editor owns numeric cells: its graded constraint is
+            // authoritative, so store it and drop the legacy validationRule.
+            if ('graded' in updates) {
+              fieldUpdate.graded = updates.graded;
+              fieldUpdate.validationRule = updates.graded ? undefined : updates.validationRule;
+            } else if ('validationRule' in updates && updates.validationRule !== undefined) {
               fieldUpdate.validationRule = updates.validationRule;
             }
             if ('severity' in updates) {
               fieldUpdate.severity = updates.severity;
+            }
+            // Custom warn/fail messages (with %V) for this series cell.
+            if ('warningMessage' in updates) {
+              fieldUpdate.warningMessage = updates.warningMessage;
+            }
+            if ('errorMessage' in updates) {
+              fieldUpdate.errorMessage = updates.errorMessage;
             }
 
             onSeriesUpdate(editingCell.seriesIndex, fieldTag, fieldUpdate);

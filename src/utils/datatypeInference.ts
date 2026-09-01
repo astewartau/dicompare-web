@@ -1,4 +1,5 @@
 import { FieldDataType, ValidationRule } from '../types';
+import { fromSchemaField } from '../components/common/constraintModel';
 import { getDataTypeFromVR } from './vrMapping';
 import { searchDicomFields, suggestDataType } from '../services/dicomFieldService';
 
@@ -197,6 +198,9 @@ export function processSchemaFieldForUI(schemaField: any): any {
   }
 
   const validationRule = buildValidationRuleFromSchema(schemaField);
+  // Scalar numeric fields carry a graded constraint (number-line editor model).
+  // list_number / strings return null from fromSchemaField and keep validationRule.
+  const graded = dataType === 'number' ? fromSchemaField(schemaField) : null;
 
   // Determine fieldType: use explicit fieldType if provided, otherwise infer from tag value
   // Tag values can be: standard DICOM format (XXXX,XXXX), or special values: "derived", "private", "custom"
@@ -221,8 +225,11 @@ export function processSchemaFieldForUI(schemaField: any): any {
     level: schemaField.level || 'acquisition',
     dataType,
     validationRule,
+    ...(graded ? { graded } : {}),
     ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {}),
     ...(schemaField.notes ? { notes: schemaField.notes as string } : {}),
+    ...(schemaField.warningMessage ? { warningMessage: schemaField.warningMessage as string } : {}),
+    ...(schemaField.errorMessage ? { errorMessage: schemaField.errorMessage as string } : {}),
     fieldType  // Preserve explicit field type or infer from tag
   };
 }
@@ -234,11 +241,16 @@ export function processSchemaSeriesFieldValue(schemaField: any, fieldName?: stri
   const dataType = inferDataTypeFromField(schemaField);
   const validationRule = buildValidationRuleFromSchema(schemaField);
 
+  const graded = dataType === 'number' ? fromSchemaField(schemaField) : null;
+
   return {
     value: schemaField.value,
     field: fieldName || schemaField.field || schemaField.name,
     dataType,
     validationRule,
-    ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {})
+    ...(graded ? { graded } : {}),
+    ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {}),
+    ...(schemaField.warningMessage ? { warningMessage: schemaField.warningMessage as string } : {}),
+    ...(schemaField.errorMessage ? { errorMessage: schemaField.errorMessage as string } : {})
   };
 }
