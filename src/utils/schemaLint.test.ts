@@ -1,4 +1,15 @@
-import { lintField } from './schemaLint';
+import { lintField, getFieldVocabulary } from './schemaLint';
+
+describe('getFieldVocabulary', () => {
+  test('returns the enum vocabulary for an enumerated field', () => {
+    expect(getFieldVocabulary('CoilCombinationMethod')).toEqual(['Sum of Squares', 'Adaptive Combine']);
+  });
+
+  test('returns undefined for a non-enumerated field', () => {
+    expect(getFieldVocabulary('EchoTime')).toBeUndefined();
+    expect(getFieldVocabulary(undefined)).toBeUndefined();
+  });
+});
 
 describe('lintField', () => {
   test('warns on exact match on a floating-point value', () => {

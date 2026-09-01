@@ -55,6 +55,15 @@ const ENUMERATED_CS_FIELDS: Record<string, string[]> = Object.fromEntries(
 
 const DISPLAY_STRING_PATTERN = /(>>|<<|→|←|->|<-)/;
 
+/**
+ * The canonical set of allowed values (enum vocabulary) for a field, or undefined
+ * if the field is not enumerated. Sourced from the dicompare registry, so it stays
+ * in sync with the Python single source of truth. Used to drive dropdown value entry.
+ */
+export function getFieldVocabulary(keyword?: string, name?: string): string[] | undefined {
+  return ENUMERATED_CS_FIELDS[keyword || name || ''];
+}
+
 function fieldKey(field: LintableField): string {
   return field.keyword || field.name || '';
 }

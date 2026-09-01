@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import Modal from '../common/Modal';
 import { DicomField, FieldDataType, ValidationConstraint, ValidationRule } from '../../types';
-import { inferDataTypeFromValue, convertValueToDataType } from '../../utils/datatypeInference';
-import { lintField } from '../../utils/schemaLint';
+import { inferDataTypeFromValue, inferDataTypeFromField, convertValueToDataType } from '../../utils/datatypeInference';
+import { lintField, getFieldVocabulary } from '../../utils/schemaLint';
 import ConstraintBandEditor from '../common/ConstraintBandEditor';
 import { GradedConstraint, fromSchemaField, hasTarget, num, gradedSeverity, canWarn, canError } from '../common/constraintModel';
 
@@ -71,9 +71,21 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
     return {
       name: field.name,
+      // A field's type must be inferred from its constraint, not just its scalar
+      // `value`: a `range` constraint keeps its numbers in validationRule.min/max
+      // and leaves `value` empty, so value-only inference would wrongly report
+      // `string`. inferDataTypeFromField reads the constraint keys when no value
+      // is present, matching how the table derives the type.
       dataType: (isSeriesValue ?
         inferDataTypeFromValue(typeof value === 'object' && value?.value !== undefined ? value.value : value) :
-        inferDataTypeFromValue(field.value)) as FieldDataType,
+        inferDataTypeFromField({
+          value: field.value,
+          min: field.validationRule?.min,
+          max: field.validationRule?.max,
+          contains: field.validationRule?.contains,
+          contains_any: field.validationRule?.contains_any,
+          contains_all: field.validationRule?.contains_all,
+        })) as FieldDataType,
       value: initialValue,
       validationRule: rule,
       severity: (field.severity ?? 'error') as 'error' | 'warning',
@@ -385,6 +397,25 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
   const needsListInput = ['contains_any', 'contains_all'].includes(formData.validationRule.type) ||
     formData.dataType === 'list_string' || formData.dataType === 'list_number';
 
+  // Enumerated fields (e.g. CoilCombinationMethod) publish their allowed values as a
+  // vocabulary in the registry — the single source of truth. When present we drive
+  // value entry from a dropdown / chip picker instead of free text so only valid
+  // values can be authored. Numeric enums are owned by the band editor, so this
+  // only applies to string values.
+  const vocabulary = getFieldVocabulary(field.keyword, field.name);
+  const useEnumInput = !!vocabulary && !useBandEditor && formData.dataType === 'string';
+
+  // Toggle membership of an option in a multi-select (contains_any / contains_all).
+  const toggleEnumValue = (option: string) => {
+    setFormData(prev => {
+      const current = Array.isArray(prev.value) ? prev.value : [];
+      const next = current.includes(option)
+        ? current.filter((v: any) => v !== option)
+        : [...current, option];
+      return { ...prev, value: next };
+    });
+  };
+
   // Non-blocking authoring hints (brittle exact matches, non-enumerated values, …)
   const lintWarnings = lintField({
     keyword: field.keyword,
@@ -524,6 +555,17 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
                   className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                   placeholder="Enter number"
                 />
+              ) : useEnumInput ? (
+                <select
+                  value={typeof formData.value === 'string' ? formData.value : ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, value: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                >
+                  <option value="">Select value…</option>
+                  {vocabulary!.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
               ) : (
                 <input
                   type="text"
@@ -656,22 +698,47 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
               <label className="block text-xs font-medium text-content-secondary mb-1.5">
                 {formData.validationRule.type === 'contains_any' ? 'Match any of' : 'Must contain all'}
               </label>
-              <input
-                type="text"
-                value={listInput}
-                onChange={(e) => setListInput(e.target.value)}
-                onBlur={handleListBlur}
-                className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                placeholder="value1, value2, value3"
-              />
-              {Array.isArray(formData.value) && formData.value.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {formData.value.map((v: any, i: number) => (
-                    <span key={i} className="px-2 py-0.5 bg-brand-500/10 text-brand-700 dark:text-brand-300 text-xs rounded-full">
-                      {String(v)}
-                    </span>
-                  ))}
+              {useEnumInput ? (
+                // Enum multi-select: pick from the field's known vocabulary.
+                <div className="flex flex-wrap gap-1.5">
+                  {vocabulary!.map(opt => {
+                    const selected = Array.isArray(formData.value) && formData.value.includes(opt);
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => toggleEnumValue(opt)}
+                        className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                          selected
+                            ? 'bg-brand-600 text-white shadow-sm'
+                            : 'bg-surface-secondary text-content-secondary hover:bg-surface-hover hover:text-content-primary'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
                 </div>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={listInput}
+                    onChange={(e) => setListInput(e.target.value)}
+                    onBlur={handleListBlur}
+                    className="w-full px-3 py-2 text-sm border border-border-secondary rounded-lg bg-surface-primary text-content-primary focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    placeholder="value1, value2, value3"
+                  />
+                  {Array.isArray(formData.value) && formData.value.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {formData.value.map((v: any, i: number) => (
+                        <span key={i} className="px-2 py-0.5 bg-brand-500/10 text-brand-700 dark:text-brand-300 text-xs rounded-full">
+                          {String(v)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
               {errors.constraint && <p className="text-red-500 text-xs mt-1">{errors.constraint}</p>}
             </div>
