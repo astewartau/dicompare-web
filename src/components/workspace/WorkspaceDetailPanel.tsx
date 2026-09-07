@@ -814,6 +814,9 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             }
             getSchemaContent={getSchemaContent}
             hideHeader={true}
+            // Required/reference-only dots describe schema constraints. Test
+            // data on its own has no schema, so there is nothing to mark.
+            showSeverity={hasSchema}
             onUpdate={(key, value) => onUpdateAcquisition({ [key]: value })}
             onDelete={onRemove}
             onFieldUpdate={(fieldTag, updates) => workspace.updateField(selectedItem.id, fieldTag, updates)}
