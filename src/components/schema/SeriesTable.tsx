@@ -18,6 +18,8 @@ interface SeriesTableProps {
   incompleteFields?: Set<string>;
   acquisitionId?: string;
   mode?: 'edit' | 'view' | 'compliance';
+  // Severity dots describe schema constraints; plain test data has none.
+  showSeverity?: boolean;
   // Compliance-specific props
   complianceResults?: any[];
   onSeriesUpdate: (seriesIndex: number, fieldTag: string, updates: Partial<SeriesField>) => void;
@@ -36,6 +38,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   incompleteFields = new Set(),
   acquisitionId = '',
   mode = 'edit',
+  showSeverity = true,
   complianceResults = [],
   onSeriesUpdate,
   onSeriesAdd,
@@ -161,17 +164,22 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate flex items-center gap-1.5">
-                        <FieldSeverityIndicator
-                          severity={
-                            isColumnReferenceOnly(severitiesByField.get(field.tag || field.name) ?? [])
-                              ? 'warning'
-                              : 'error'
-                          }
-                        />
+                      {/* A div, not a p: the severity dot is tooltip-wrapped,
+                          and a tooltip's wrapper is a block element, which a
+                          paragraph cannot legally contain. */}
+                      <div className="font-medium truncate flex items-center gap-1.5">
+                        {showSeverity && (
+                          <FieldSeverityIndicator
+                            severity={
+                              isColumnReferenceOnly(severitiesByField.get(field.tag || field.name) ?? [])
+                                ? 'warning'
+                                : 'error'
+                            }
+                          />
+                        )}
                         <span className="truncate">{field.keyword || field.name}</span>
-                      </p>
-                      <p className="text-xs font-normal text-content-muted font-mono pl-3">
+                      </div>
+                      <p className={`text-xs font-normal text-content-muted font-mono ${showSeverity ? 'pl-3' : ''}`}>
                         {field.fieldType === 'derived' ? 'Derived field' :
                          field.fieldType === 'custom' ? 'Custom field' :
                          field.fieldType === 'private' ? 'Private field' :

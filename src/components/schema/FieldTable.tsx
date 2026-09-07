@@ -18,6 +18,8 @@ interface FieldTableProps {
   incompleteFields?: Set<string>;
   acquisitionId?: string;
   mode?: 'edit' | 'view' | 'compliance';
+  // Severity dots describe schema constraints; plain test data has none.
+  showSeverity?: boolean;
   // Compliance-specific props
   schemaId?: string;
   schemaAcquisitionId?: string;
@@ -38,6 +40,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
   incompleteFields = new Set(),
   acquisitionId = '',
   mode = 'edit',
+  showSeverity = true,
   schemaId,
   schemaAcquisitionId,
   acquisition,
@@ -174,12 +177,17 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 >
                 <td className="px-2 py-1.5">
                   <div>
-                    <p className="text-xs font-medium text-content-primary flex items-center gap-1.5">
-                      <FieldSeverityIndicator severity={field.graded ? gradedSeverity(field.graded) : field.severity} />
+                    {/* A div, not a p: the severity dot and note marker are
+                        tooltip-wrapped, and a tooltip's wrapper is a block
+                        element, which a paragraph cannot legally contain. */}
+                    <div className="text-xs font-medium text-content-primary flex items-center gap-1.5">
+                      {showSeverity && (
+                        <FieldSeverityIndicator severity={field.graded ? gradedSeverity(field.graded) : field.severity} />
+                      )}
                       <span>{field.keyword || field.name}</span>
                       {field.notes && <FieldNoteMarker note={field.notes} />}
-                    </p>
-                    <p className="text-xs text-content-tertiary font-mono pl-3">
+                    </div>
+                    <p className={`text-xs text-content-tertiary font-mono ${showSeverity ? 'pl-3' : ''}`}>
                       {field.fieldType === 'derived' ? 'Derived field' :
                        field.fieldType === 'custom' ? 'Custom field' :
                        field.fieldType === 'private' ? 'Private field' :

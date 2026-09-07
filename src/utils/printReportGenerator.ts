@@ -155,7 +155,7 @@ export async function generatePrintReportHtml(options: PrintReportOptions): Prom
 
   // Build HTML sections (respecting section options)
   const fieldsHtml = sec.fieldsTable ? buildFieldsHtml(fields, isComplianceMode, isDataOnly, complianceResults) : '';
-  const seriesHtml = sec.seriesTable ? buildSeriesHtml(series, isComplianceMode, complianceResults) : '';
+  const seriesHtml = sec.seriesTable ? buildSeriesHtml(series, isComplianceMode, complianceResults, isDataOnly) : '';
   const uncheckedFieldsHtml = sec.uncheckedFields ? buildUncheckedFieldsHtml(isComplianceMode, realAcquisition, fields, series) : '';
   const uncheckedSeriesFieldsHtml = sec.uncheckedSeriesFields ? buildUncheckedSeriesFieldsHtml(isComplianceMode, realAcquisition, fields, series) : '';
   const rulesHtml = sec.validationRules ? buildRulesHtml(validationFunctions, isComplianceMode, complianceResults) : '';
@@ -211,7 +211,8 @@ export async function generatePrintReportHtml(options: PrintReportOptions): Prom
     uncheckedSeriesFieldsHtml,
     readmeHtml,
     '',
-    sec
+    sec,
+    isDataOnly
   );
 }
 
@@ -474,7 +475,7 @@ function buildFieldsHtml(
 
     return `
       <tr>
-        <td>${renderSeverityDot(f.severity)}<span class="field-name">${escapeHtml(fieldName)}</span>${tag ? ` <code>${escapeHtml(tag)}</code>` : ''}${renderNote(f.notes)}</td>
+        <td>${isDataOnly ? '' : renderSeverityDot(f.severity)}<span class="field-name">${escapeHtml(fieldName)}</span>${tag ? ` <code>${escapeHtml(tag)}</code>` : ''}${renderNote(f.notes)}</td>
         <td>${expectedValue}</td>
         ${isComplianceMode ? `<td>${actualDisplay}</td><td class="${statusClass}">${status}</td>` : ''}
       </tr>
@@ -499,7 +500,8 @@ function buildFieldsHtml(
 function buildSeriesHtml(
   series: any[],
   isComplianceMode: boolean,
-  complianceResults: ComplianceFieldResult[]
+  complianceResults: ComplianceFieldResult[],
+  isDataOnly: boolean = false
 ): string {
   if (series.length === 0) return '';
 
@@ -534,7 +536,7 @@ function buildSeriesHtml(
   };
 
   const headerCells = allSeriesFields.map(f =>
-    `<th>${renderSeverityDot(isColumnReferenceOnly(f.tag || f.name) ? 'warning' : 'error')}<span class="field-name">${escapeHtml(f.keyword || f.name)}</span>${f.tag ? ` <code>${escapeHtml(f.tag)}</code>` : ''}</th>`
+    `<th>${isDataOnly ? '' : renderSeverityDot(isColumnReferenceOnly(f.tag || f.name) ? 'warning' : 'error')}<span class="field-name">${escapeHtml(f.keyword || f.name)}</span>${f.tag ? ` <code>${escapeHtml(f.tag)}</code>` : ''}</th>`
   ).join('');
 
   const rows = series.map((s, i) => {
@@ -832,7 +834,7 @@ function buildRulesHtml(
     const effectiveParams = getEffectiveParams(v);
     const paramsHtml = paramDefs.length > 0
       ? `<div class="rule-fields">${paramDefs.map(p =>
-          `<span class="field-tag-badge">${escapeHtml(`${p.name} = ${formatParamValue(effectiveParams[p.name])}${p.unit && effectiveParams[p.name] != null ? ` ${p.unit}` : ''}`)}</span>`
+          `<span class="param-badge">${escapeHtml(`${p.name} = ${formatParamValue(effectiveParams[p.name])}${p.unit && effectiveParams[p.name] != null ? ` ${p.unit}` : ''}`)}</span>`
         ).join('')}</div>`
       : '';
 
@@ -1044,7 +1046,8 @@ function buildFullHtml(
   uncheckedSeriesFieldsHtml: string,
   readmeHtml: string,
   imagesHtml: string = '',
-  sections?: PrintSectionOptions
+  sections?: PrintSectionOptions,
+  isDataOnly: boolean = false
 ): string {
   const hasContent = fieldsHtml || seriesHtml || rulesHtml || readmeHtml || testNotesHtml || imagesHtml;
   const emptyMessage = hasContent ? '' : '<p style="color: #666;">No fields, series, or validation rules defined.</p>';
@@ -1064,7 +1067,7 @@ function buildFullHtml(
         ${imagesHtml}
         ${testNotesHtml}
         ${rulesHtml}
-        ${fieldsHtml || seriesHtml ? renderSeverityLegend() : ''}
+        ${!isDataOnly && (fieldsHtml || seriesHtml) ? renderSeverityLegend() : ''}
         ${fieldsHtml}
         ${seriesHtml}
         ${uncheckedFieldsHtml}
@@ -1120,7 +1123,10 @@ function getPrintStyles(sections?: PrintSectionOptions): string {
     .sev-legend { margin: 16px 0 0; padding: 6px 10px; background: #fafafa; border: 1px solid #eee; border-radius: 3px; font-size: 10px; color: #666; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     .sev-legend-gap { display: inline-block; width: 16px; }
     .rule-fields { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-    .field-tag-badge { display: inline-block; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; font-size: 10px; border-radius: 3px; }
+    .field-tag-badge { display: inline-block; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; font-size: 10px; border-radius: 3px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    /* Rule parameters sit next to the checked-field badges, so they take the
+       amber the on-screen parameters column uses rather than the field blue. */
+    .param-badge { display: inline-block; padding: 2px 6px; background: #fef3c7; color: #b45309; font-size: 10px; border-radius: 3px; font-family: 'SF Mono', Monaco, 'Courier New', monospace; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 
     .pass { color: #16a34a; font-weight: 500; }
     .fail { color: #dc2626; font-weight: 500; }

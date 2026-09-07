@@ -37,6 +37,9 @@ interface AcquisitionTableProps {
   version?: string;
   authors?: string[];
   hideHeader?: boolean; // Hide the header section (title, version, authors)
+  // Whether the acquisition being shown carries schema constraints. Plain test
+  // data has nothing to require, so its fields get no severity dots.
+  showSeverity?: boolean;
   // Collapse/deselect handlers
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -80,6 +83,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   version,
   authors,
   hideHeader = false,
+  showSeverity = true,
   isCollapsed = false,
   onToggleCollapse,
   onDeselect,
@@ -136,11 +140,12 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   // The dots next to field names only need decoding when a schema actually
   // mixes requirements with reference-only constraints.
   const hasReferenceOnlyFields =
-    acquisition.acquisitionFields.some(f => f.severity === 'warning') ||
-    (acquisition.series || []).some(s => {
-      const fields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
-      return (fields as any[]).some(f => f?.severity === 'warning');
-    });
+    showSeverity &&
+    (acquisition.acquisitionFields.some(f => f.severity === 'warning') ||
+      (acquisition.series || []).some(s => {
+        const fields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+        return (fields as any[]).some(f => f?.severity === 'warning');
+      }));
 
   const validationFunctions = acquisition.validationFunctions || [];
   // Parameters column: always present in edit mode (so parameters are
@@ -874,6 +879,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 acquisition={acquisition}
                 getSchemaContent={getSchemaContent}
                 isDataProcessing={isDataProcessing}
+                showSeverity={showSeverity}
                 complianceResultsProp={allComplianceResults.filter(r =>
                   r.validationType !== 'rule' &&
                   r.validationType !== 'series' &&
@@ -895,6 +901,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 incompleteFields={incompleteFields}
                 acquisitionId={acquisition.id}
                 mode={mode}
+                showSeverity={showSeverity}
                 complianceResults={allComplianceResults.filter(r => r.validationType === 'series')}
                 onSeriesUpdate={onSeriesUpdate}
                 onSeriesAdd={onSeriesAdd}
