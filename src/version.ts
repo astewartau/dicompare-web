@@ -3,4 +3,4 @@
 export const VERSION = '0.15.2';
 
 // dicompare pip package version
-export const DICOMPARE_VERSION = '0.11.0';
+export const DICOMPARE_VERSION = '0.11.1';
