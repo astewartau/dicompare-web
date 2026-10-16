@@ -96,127 +96,31 @@ const mergeRegistryFields = (base: DicomFieldDefinition[]): DicomFieldDefinition
 let cachedFieldList: DicomFieldDefinition[] | null = null;
 let fetchPromise: Promise<DicomFieldDefinition[]> | null = null;
 
-// Fetch DICOM field list from external source
+// Load the DICOM attribute dictionary. It is bundled (src/data/dicomAttributes.json,
+// regenerated with `npm run sync:dicom-attributes`) and imported lazily so the
+// ~0.75 MB list loads only when field search is first used, with no network.
 export const fetchDicomFieldList = async (): Promise<DicomFieldDefinition[]> => {
-  // Return cached data if available
   if (cachedFieldList) {
     return cachedFieldList;
   }
-
-  // Return existing promise if fetch is in progress
-  if (fetchPromise) {
-    return fetchPromise;
-  }
-
-  // Create new fetch promise
-  fetchPromise = new Promise(async (resolve, reject) => {
-    try {
-      const response = await fetch('https://raw.githubusercontent.com/innolitics/dicom-standard/refs/heads/master/standard/attributes.json');
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Transform the official DICOM standard data
-      const fieldList: DicomFieldDefinition[] = data
-        .filter((field: any) => field.retired !== 'Y') // Exclude retired fields
-        .map((field: any) => ({
-          tag: field.tag,
-          name: field.name,
-          keyword: field.keyword,
-          valueRepresentation: field.valueRepresentation,
-          valueMultiplicity: field.valueMultiplicity,
-          retired: field.retired,
-          id: field.id,
-          // Legacy compatibility
-          vr: field.valueRepresentation,
-          description: `${field.name} (${field.valueRepresentation}, ${field.valueMultiplicity})`
-        }));
-
-      // Cache the result, enriched with the dicompare registry (adds derived fields)
-      const merged = mergeRegistryFields(fieldList);
-      cachedFieldList = merged;
-      resolve(merged);
-    } catch (error) {
-      console.warn('Failed to fetch DICOM field list from official standard, using fallback data:', error);
-
-      // Fallback to mock data if external fetch fails
-      const merged = mergeRegistryFields(getFallbackFieldList());
-      cachedFieldList = merged;
-      resolve(merged);
-    } finally {
+  if (!fetchPromise) {
+    fetchPromise = import('../data/dicomAttributes.json').then(({ default: attributes }) => {
+      const fieldList: DicomFieldDefinition[] = attributes.map(field => ({
+        ...field,
+        retired: 'N',
+        // Legacy compatibility
+        vr: field.valueRepresentation,
+        description: `${field.name} (${field.valueRepresentation}, ${field.valueMultiplicity})`
+      }));
+      // Enriched with the dicompare registry (adds derived fields)
+      cachedFieldList = mergeRegistryFields(fieldList);
+      return cachedFieldList;
+    }).finally(() => {
       fetchPromise = null;
-    }
-  });
-
+    });
+  }
   return fetchPromise;
 };
-
-// Fallback field list for offline use or when external source is unavailable
-const getFallbackFieldList = (): DicomFieldDefinition[] => [
-  { tag: '(0008,0008)', name: 'Image Type', keyword: 'ImageType', valueRepresentation: 'CS', valueMultiplicity: '2-n', retired: 'N', id: '00080008', vr: 'CS', description: 'Image identification characteristics' },
-  { tag: '(0008,0060)', name: 'Modality', keyword: 'Modality', valueRepresentation: 'CS', valueMultiplicity: '1', retired: 'N', id: '00080060', vr: 'CS', description: 'Type of equipment that originally acquired the data' },
-  { tag: '(0008,0070)', name: 'Manufacturer', keyword: 'Manufacturer', valueRepresentation: 'LO', valueMultiplicity: '1', retired: 'N', id: '00080070', vr: 'LO', description: 'Manufacturer of the equipment that produced the composite instances' },
-  { tag: '(0018,0081)', name: 'Echo Time', keyword: 'EchoTime', valueRepresentation: 'DS', valueMultiplicity: '1', retired: 'N', id: '00180081', vr: 'DS', description: 'Time in msec between the middle of the excitation pulse and the peak of the echo' },
-  { tag: '0008,0080', name: 'InstitutionName', vr: 'LO', description: 'Institution or organization to which the identified individual is responsible' },
-  { tag: '0008,1010', name: 'StationName', vr: 'SH', description: 'User defined name identifying the machine' },
-  { tag: '0008,1030', name: 'StudyDescription', vr: 'LO', description: 'Institution-generated description or classification of the Study' },
-  { tag: '0008,103E', name: 'SeriesDescription', vr: 'LO', description: 'User provided description of the Series' },
-  { tag: '0008,1090', name: 'ManufacturerModelName', vr: 'LO', description: 'Manufacturer model name of the equipment' },
-  
-  { tag: '0018,0015', name: 'BodyPartExamined', vr: 'CS', description: 'Text description of the part of the body examined' },
-  { tag: '0018,0020', name: 'ScanningSequence', vr: 'CS', description: 'Description of the type of data taken' },
-  { tag: '0018,0021', name: 'SequenceVariant', vr: 'CS', description: 'Variant of the Scanning Sequence' },
-  { tag: '0018,0022', name: 'ScanOptions', vr: 'CS', description: 'Parameters of scanning sequence' },
-  { tag: '0018,0023', name: 'MRAcquisitionType', vr: 'CS', description: 'Identification of data encoding scheme' },
-  { tag: '0018,0024', name: 'SequenceName', vr: 'SH', description: 'User or equipment generated sequence identifier' },
-  
-  { tag: '0018,0050', name: 'SliceThickness', vr: 'DS', description: 'Nominal slice thickness, in mm' },
-  { tag: '0018,0080', name: 'RepetitionTime', vr: 'DS', description: 'The period of time in msec between the beginning of a pulse sequence' },
-  { tag: '0018,0081', name: 'EchoTime', vr: 'DS', description: 'Time in msec between the middle of the excitation pulse and the peak of the echo' },
-  { tag: '0018,0082', name: 'InversionTime', vr: 'DS', description: 'Time in msec after the middle of inverting RF pulse to middle of excitation pulse' },
-  { tag: '0018,0087', name: 'MagneticFieldStrength', vr: 'DS', description: 'Nominal field strength of MR magnet, in Tesla' },
-  { tag: '0018,0088', name: 'SpacingBetweenSlices', vr: 'DS', description: 'Spacing between slices, in mm' },
-  { tag: '0018,0089', name: 'NumberOfPhaseEncodingSteps', vr: 'IS', description: 'Total number of lines in k-space in the phase encoding direction' },
-  { tag: '0018,0095', name: 'PixelBandwidth', vr: 'DS', description: 'Reciprocal of the total sampling period, in hertz per pixel' },
-  
-  { tag: '0018,1000', name: 'DeviceSerialNumber', vr: 'LO', description: 'Manufacturer serial number of the equipment' },
-  { tag: '0018,1020', name: 'SoftwareVersions', vr: 'LO', description: 'Manufacturer software version of the equipment' },
-  { tag: '0018,1250', name: 'ReceiveCoilName', vr: 'SH', description: 'Name of the receive coil used' },
-  { tag: '0018,1314', name: 'FlipAngle', vr: 'DS', description: 'Steady state angle in degrees to which the magnetic vector is flipped' },
-  
-  { tag: '0018,5100', name: 'PatientPosition', vr: 'CS', description: 'Patient position descriptor relative to the equipment' },
-  
-  { tag: '0018,9087', name: 'DiffusionBValue', vr: 'FD', description: 'Diffusion b-value in sec/mm^2' },
-  { tag: '0018,9089', name: 'DiffusionGradientDirectionSequence', vr: 'SQ', description: 'Sequence that describes the diffusion gradient direction' },
-  
-  { tag: '0020,0011', name: 'SeriesNumber', vr: 'IS', description: 'A number that identifies this Series' },
-  { tag: '0020,0012', name: 'AcquisitionNumber', vr: 'IS', description: 'A number identifying the single continuous gathering of data' },
-  { tag: '0020,0013', name: 'InstanceNumber', vr: 'IS', description: 'A number that identifies this image' },
-  { tag: '0020,0032', name: 'ImagePositionPatient', vr: 'DS', description: 'The x, y, and z coordinates of the upper left hand corner of the image' },
-  { tag: '0020,0037', name: 'ImageOrientationPatient', vr: 'DS', description: 'The direction cosines of the first row and the first column' },
-  { tag: '0020,0052', name: 'FrameOfReferenceUID', vr: 'UI', description: 'Uniquely identifies the frame of reference for a Series' },
-  { tag: '0020,1041', name: 'SliceLocation', vr: 'DS', description: 'Relative position of exposure expressed in mm' },
-  
-  { tag: '0028,0002', name: 'SamplesPerPixel', vr: 'US', description: 'Number of samples (planes) in this image' },
-  { tag: '0028,0004', name: 'PhotometricInterpretation', vr: 'CS', description: 'Specifies the intended interpretation of the pixel data' },
-  { tag: '0028,0010', name: 'Rows', vr: 'US', description: 'Number of rows in the image' },
-  { tag: '0028,0011', name: 'Columns', vr: 'US', description: 'Number of columns in the image' },
-  { tag: '0028,0030', name: 'PixelSpacing', vr: 'DS', description: 'Physical distance in the patient between the center of each pixel' },
-  { tag: '0028,0100', name: 'BitsAllocated', vr: 'US', description: 'Number of bits allocated for each pixel sample' },
-  { tag: '0028,0101', name: 'BitsStored', vr: 'US', description: 'Number of bits stored for each pixel sample' },
-  { tag: '0028,0102', name: 'HighBit', vr: 'US', description: 'Most significant bit for pixel sample data' },
-  { tag: '0028,0103', name: 'PixelRepresentation', vr: 'US', description: 'Data representation of the pixel samples' },
-
-  // Additional fields for testing multi-value support
-  { tag: '(0018,1149)', name: 'Field of View Dimension(s)', keyword: 'FieldOfViewDimensions', valueRepresentation: 'IS', valueMultiplicity: '1-2', retired: 'N', id: '00181149', vr: 'IS', description: 'Dimensions of the Image Intensifier Field of View in mm' },
-
-  // Siemens private tags commonly used
-  { tag: '0019,1028', name: 'MultibandFactor', vr: 'IS', description: 'Multiband acceleration factor (Siemens private)' },
-  { tag: '0051,1011', name: 'ParallelReductionFactorInPlane', vr: 'DS', description: 'In-plane parallel imaging factor (Siemens private)' }
-];
 
 // Search/filter functions for field selection UI with efficient searching
 export const searchDicomFields = async (query: string, limit: number = 50): Promise<DicomFieldDefinition[]> => {
