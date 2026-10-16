@@ -54,7 +54,7 @@ function seriesFieldList(fields: unknown): SeriesField[] {
 
 function ruleToSchema(func: SelectedValidationFunction, acqName: string, idx: number) {
   const f = func as SelectedValidationFunction & { parameters?: unknown };
-  return {
+  const rule: Record<string, unknown> = {
     id: f.id ?? `rule_${acqName.toLowerCase().replace(/ /g, '_')}_${idx}`,
     name: f.customName ?? f.name ?? '',
     description: f.customDescription ?? f.description ?? '',
@@ -70,6 +70,9 @@ function ruleToSchema(func: SelectedValidationFunction, acqName: string, idx: nu
     optional_fields: f.optional_fields || [],
     testCases: f.customTestCases ?? f.testCases ?? [],
   };
+  // System fields (e.g. Count) the rule editor feeds into test cases.
+  if (f.enabledSystemFields?.length) rule.enabledSystemFields = f.enabledSystemFields;
+  return rule;
 }
 
 export function buildSchemaFromAcquisitions(

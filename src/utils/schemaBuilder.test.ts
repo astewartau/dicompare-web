@@ -85,7 +85,7 @@ describe('shipped schemas round-trip through import and save', () => {
     const out: Record<string, any> = {};
     for (const k of Object.keys(o).sort()) {
       const v = o[k];
-      if (k === 'vr' || k === 'dataType' || k === 'enabledSystemFields') continue;
+      if (k === 'vr' || k === 'dataType') continue;
       if (Array.isArray(v) && !v.length) continue;
       if (v && typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length) continue;
       // Some schemas store a field's value wrapped as { value, validationRule }.
