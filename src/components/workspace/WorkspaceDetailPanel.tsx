@@ -238,14 +238,10 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
 
   // Handle schema upload from the schema selector.
   // Returns the new schema's id so the selector can highlight/surface it.
+  // Errors propagate so the selector can show them to the user.
   const handleSchemaUpload = useCallback(async (file: File): Promise<string | null> => {
-    try {
-      const metadata = await uploadSchema(file);
-      return metadata.id;
-    } catch (error) {
-      console.error('Failed to upload schema:', error);
-      return null;
-    }
+    const metadata = await uploadSchema(file);
+    return metadata.id;
   }, [uploadSchema]);
 
   // State for PDF export status
@@ -284,6 +280,9 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
           alert('Please allow popups to print the acquisition.');
         }
       }
+    } catch (err) {
+      console.error('Failed to print acquisition:', err);
+      alert(`Failed to generate report: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setPdfExporting(false);
       setShowPrintOptions(false);
