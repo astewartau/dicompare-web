@@ -96,14 +96,6 @@ export function fieldToSchemaField(
 }
 
 /**
- * Convert an acquisition-level DicomField to schema field format.
- * Alias for fieldToSchemaField for semantic clarity.
- */
-export function acquisitionFieldToSchemaField(field: DicomField): SchemaFieldOutput {
-  return fieldToSchemaField(field);
-}
-
-/**
  * Convert a series-level SeriesField to schema field format.
  *
  * Same as fieldToSchemaField except notes are dropped — a series records its

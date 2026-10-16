@@ -267,18 +267,6 @@ export const searchDicomFields = async (query: string, limit: number = 50): Prom
   return combinedResults.slice(0, limit);
 };
 
-// Get field definition by tag
-export const getFieldByTag = async (tag: string): Promise<DicomFieldDefinition | undefined> => {
-  const fieldList = await fetchDicomFieldList();
-  return fieldList.find(field => field.tag === tag);
-};
-
-// Get field definition by name
-export const getFieldByName = async (name: string): Promise<DicomFieldDefinition | undefined> => {
-  const fieldList = await fetchDicomFieldList();
-  return fieldList.find(field => field.name === name);
-};
-
 // Get field definition by keyword
 export const getFieldByKeyword = async (keyword: string): Promise<DicomFieldDefinition | undefined> => {
   const fieldList = await fetchDicomFieldList();
@@ -291,59 +279,6 @@ export const isValidDicomTag = (tag: string): boolean => {
   return tagPattern.test(tag);
 };
 
-// Get field suggestions based on partial input
-export const getFieldSuggestions = async (partialInput: string, limit: number = 10): Promise<DicomFieldDefinition[]> => {
-  const searchResults = await searchDicomFields(partialInput);
-  return searchResults.slice(0, limit);
-};
-
-// Categorize fields by common usage patterns
-export const getFieldsByCategory = async (): Promise<{ [category: string]: DicomFieldDefinition[] }> => {
-  const fieldList = await fetchDicomFieldList();
-  
-  const categories: { [key: string]: DicomFieldDefinition[] } = {
-    'Patient Info': [],
-    'Study Info': [],
-    'Series Info': [],
-    'Hardware': [],
-    'Timing Parameters': [],
-    'Spatial Parameters': [],
-    'Image Properties': [],
-    'Diffusion': [],
-    'Private Tags': [],
-    'Other': []
-  };
-  
-  fieldList.forEach(field => {
-    const tag = field.tag;
-    const name = field.name.toLowerCase();
-    
-    if (tag.startsWith('0010')) {
-      categories['Patient Info'].push(field);
-    } else if (tag.startsWith('0008,0020') || tag.startsWith('0008,0030') || name.includes('study')) {
-      categories['Study Info'].push(field);
-    } else if (name.includes('series') || tag.startsWith('0020,0011')) {
-      categories['Series Info'].push(field);
-    } else if (name.includes('manufacturer') || name.includes('magnetic') || name.includes('coil') || name.includes('station')) {
-      categories['Hardware'].push(field);
-    } else if (name.includes('time') || name.includes('repetition') || name.includes('echo') || name.includes('inversion')) {
-      categories['Timing Parameters'].push(field);
-    } else if (name.includes('slice') || name.includes('pixel') || name.includes('position') || name.includes('orientation')) {
-      categories['Spatial Parameters'].push(field);
-    } else if (name.includes('image') || name.includes('bits') || name.includes('samples') || tag.startsWith('0028')) {
-      categories['Image Properties'].push(field);
-    } else if (name.includes('diffusion') || name.includes('bvalue')) {
-      categories['Diffusion'].push(field);
-    } else if (tag.match(/^[0-9A-Fa-f]{4},[0-9A-Fa-f]{4}$/) && (parseInt(tag.substring(0, 4), 16) % 2 === 1)) {
-      categories['Private Tags'].push(field);
-    } else {
-      categories['Other'].push(field);
-    }
-  });
-  
-  return categories;
-};
-
 // Suggest data type based on DICOM VR (Value Representation) using enhanced mapping
 export const suggestDataType = (vr: string, valueMultiplicity?: string, value?: any): FieldDataType => {
   return getDataTypeFromVR(vr, valueMultiplicity, value);
@@ -352,18 +287,4 @@ export const suggestDataType = (vr: string, valueMultiplicity?: string, value?: 
 // Suggest validation constraint based on field characteristics using enhanced VR mapping
 export const suggestValidationConstraint = (field: DicomFieldDefinition, value?: any, source?: 'dicom' | 'pro'): 'exact' | 'tolerance' | 'contains' | 'range' | 'contains_any' | 'contains_all' => {
   return getSuggestedConstraintForVR(field.vr, field.name, field.tag, source);
-};
-
-// Get field suggestions with data type and constraint recommendations
-export const getEnhancedFieldSuggestions = async (partialInput: string, limit: number = 10): Promise<Array<DicomFieldDefinition & {
-  suggestedDataType: FieldDataType;
-  suggestedConstraint: 'exact' | 'tolerance' | 'contains' | 'range' | 'contains_any' | 'contains_all';
-}>> => {
-  const searchResults = await searchDicomFields(partialInput, limit);
-  
-  return searchResults.map(field => ({
-    ...field,
-    suggestedDataType: suggestDataType(field.vr, field.valueMultiplicity),
-    suggestedConstraint: suggestValidationConstraint(field)
-  }));
 };
