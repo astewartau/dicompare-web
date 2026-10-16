@@ -25,7 +25,7 @@ export const schemaRuleToValidationFunction = (rule: any) => ({
   customDescription: rule.description,
   customFields: rule.fields || [],
   customImplementation: rule.implementation,
-  customTestCases: [],
+  customTestCases: rule.testCases || [],
   enabledSystemFields: []
 });
 
