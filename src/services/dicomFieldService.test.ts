@@ -1,12 +1,5 @@
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect } from 'vitest';
 import { searchDicomFields } from './dicomFieldService';
-
-// Force the offline/fallback path so the test never depends on the Innolitics
-// network fetch. The registry merge is applied to the fallback list too, so
-// derived fields must still appear.
-beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
-});
 
 describe('derived fields in the field suggestion service', () => {
   test('suggests a derived field (no DICOM tag) by keyword', async () => {

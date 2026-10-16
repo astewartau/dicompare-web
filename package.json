@@ -49,7 +49,9 @@
     "type-check": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest",
-    "sync:registry": "python3 -m dicompare.fields > src/data/fieldRegistry.json"
+    "sync:registry": "python3 -m dicompare.fields > src/data/fieldRegistry.json",
+    "sync:metaschema": "python3 -c \"import importlib.resources as r, sys; sys.stdout.write(r.files('dicompare').joinpath('metaschema.json').read_text())\" > src/data/metaschema.json",
+    "sync:dicom-attributes": "node scripts/sync-dicom-attributes.mjs"
   },
   "eslintConfig": {
     "extends": [

@@ -63,5 +63,16 @@ jobs:
             echo "dicompare==$VERSION predates the field registry; skipping drift check."
           fi
 
+      # src/data/metaschema.json must be the metaschema shipped with the pinned
+      # dicompare, so upload validation matches the library. Regenerate with:
+      #   npm run sync:metaschema
+      - name: Metaschema drift check
+        run: |
+          python -c "import importlib.resources as r, sys; sys.stdout.write(r.files('dicompare').joinpath('metaschema.json').read_text())" > /tmp/metaschema.json
+          if ! diff -u src/data/metaschema.json /tmp/metaschema.json; then
+            echo "::error::src/data/metaschema.json is out of sync with the pinned dicompare. Regenerate with 'npm run sync:metaschema' and commit."
+            exit 1
+          fi
+
       - name: Build
         run: npm run build
