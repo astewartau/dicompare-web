@@ -115,6 +115,9 @@ export const convertSchemaToAcquisition = async (
             value: processedField.value ?? field.defaultValue ?? '',
             validationRule: processedField.validationRule || { type: 'exact' as const },
             severity: processedField.severity,
+            ...(processedField.graded ? { graded: processedField.graded } : {}),
+            ...(processedField.warningMessage ? { warningMessage: processedField.warningMessage } : {}),
+            ...(processedField.errorMessage ? { errorMessage: processedField.errorMessage } : {}),
             // No notes: rationale on a series is carried by series.notes below.
             fieldType: processedField.fieldType || field.fieldType  // Preserve field type (standard/derived)
           };
