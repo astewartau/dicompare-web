@@ -284,6 +284,9 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
           alert('Please allow popups to print the acquisition.');
         }
       }
+    } catch (err) {
+      console.error('Failed to print acquisition:', err);
+      alert(`Failed to generate report: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setPdfExporting(false);
       setShowPrintOptions(false);
