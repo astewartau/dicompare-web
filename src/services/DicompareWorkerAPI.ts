@@ -609,14 +609,6 @@ class DicompareWorkerAPI {
   // Schema Generation & Parsing
   // ==========================================================================
 
-  async generateSchemaJS(
-    acquisitions: UIAcquisition[],
-    metadata: { name: string; description?: string; version?: string; authors?: string[]; tags?: string[] }
-  ): Promise<any> {
-    await this.ensureInitialized();
-    return this.sendRequest({ type: 'generateSchema', payload: { acquisitions, metadata } });
-  }
-
   /**
    * Get example schemas - runs on main thread (just fetch, no Python needed)
    */
