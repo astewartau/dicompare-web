@@ -22,8 +22,6 @@ export type {
   WorkspaceItem,
   SchemaMetadata,
   ProcessingProgress,
-  PendingAttachmentSelection,
-  PendingMatchingOperation,
 } from './workspace/types';
 
 import {
