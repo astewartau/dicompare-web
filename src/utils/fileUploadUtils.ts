@@ -247,37 +247,29 @@ export function hasValidDicomFiles(files: FileList): boolean {
 }
 
 /**
- * Recursively get all files from a directory entry (for drag-and-drop folder uploads)
+ * Recursively get all files from a directory entry (for drag-and-drop folder uploads).
+ * Rejects if any directory or file entry can't be read.
  */
 export async function getAllFilesFromDirectory(dirEntry: FileSystemDirectoryEntry): Promise<File[]> {
   const files: File[] = [];
+  const reader = dirEntry.createReader();
+  const readBatch = () =>
+    new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+  const readFile = (entry: FileSystemFileEntry) =>
+    new Promise<File>((resolve, reject) => entry.file(resolve, reject));
 
-  return new Promise((resolve) => {
-    const reader = dirEntry.createReader();
+  // readEntries returns results in batches; keep reading until an empty batch.
+  for (;;) {
+    const entries = await readBatch();
+    if (entries.length === 0) return files;
 
-    const readEntries = () => {
-      reader.readEntries(async (entries) => {
-        if (entries.length === 0) {
-          resolve(files);
-          return;
-        }
-
-        for (const entry of entries) {
-          if (entry.isFile) {
-            const file = await new Promise<File>((fileResolve) => {
-              (entry as FileSystemFileEntry).file(fileResolve);
-            });
-            files.push(file);
-          } else if (entry.isDirectory) {
-            const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
-            files.push(...subFiles);
-          }
-        }
-
-        readEntries();
-      });
-    };
-
-    readEntries();
-  });
+    for (const entry of entries) {
+      if (entry.isFile) {
+        files.push(await readFile(entry as FileSystemFileEntry));
+      } else if (entry.isDirectory) {
+        const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+        files.push(...subFiles);
+      }
+    }
+  }
 }
