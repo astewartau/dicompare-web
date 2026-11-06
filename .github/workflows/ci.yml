@@ -74,5 +74,14 @@ jobs:
             exit 1
           fi
 
+      # The "Example data" button loads public/example-data/; check it still
+      # gives the advertised reports (HCP T1w clean; QSM 8 pass, 2 fail,
+      # 1 warning) with the pinned dicompare. Regenerate the zip with
+      #   python3 scripts/example-data/generate_example_data.py
+      - name: Example data reports
+        run: |
+          pip install --quiet pytest
+          python -m pytest -q -p no:cacheprovider scripts/example-data
+
       - name: Build
         run: npm run build
