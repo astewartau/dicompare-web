@@ -29,6 +29,7 @@ import { useReadmeModal } from '../../hooks/useReadmeModal';
 import { useFileSystemAccess } from '../../hooks/useFileSystemAccess';
 import { useSchemaImportFromViewer } from '../../hooks/useSchemaImportFromViewer';
 import { useSessionPersistence } from '../../contexts/SessionPersistenceContext';
+import { fetchExampleDataFiles } from '../../utils/exampleData';
 
 const UnifiedWorkspace: React.FC = () => {
   const {
@@ -159,6 +160,17 @@ const UnifiedWorkspace: React.FC = () => {
     if (!files) return;
     await addFromData(files, mode);
   }, [addFromData]);
+
+  // Fetch the bundled example session and hand it to an upload handler, so it
+  // takes the same path as files the user drops
+  const handleLoadExampleData = useCallback(async (load: (files: FileList) => Promise<void> | void) => {
+    setDropError(null);
+    try {
+      await load(await fetchExampleDataFiles());
+    } catch (err) {
+      setDropError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
 
   // Large folder upload handler (File System Access API for >2GB datasets)
   const handleLargeFolderBrowse = useCallback(async (mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
@@ -460,6 +472,7 @@ const UnifiedWorkspace: React.FC = () => {
               onDetachCreatedSchema={handleDetachCreatedSchema}
               onToggleEditing={() => selectedId && toggleEditing(selectedId)}
               onAttachData={handleAttachData}
+              onLoadExampleData={handleLoadExampleData}
               onUploadSchemaForItem={handleUploadSchemaForItem}
               onDetachData={handleDetachData}
               onDetachValidationData={handleDetachValidationData}

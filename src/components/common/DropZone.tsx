@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Loader, FolderOpen, Book, Plus, HardDrive } from 'lucide-react';
+import { Download, Loader, FolderOpen, Book, Plus, HardDrive, FlaskConical } from 'lucide-react';
 import { ProcessingProgress } from '../../contexts/WorkspaceContext';
 import { UseDropZoneReturn } from '../../hooks/useDropZone';
 
@@ -28,6 +28,8 @@ export interface DropZoneProps {
   showLibraryButton?: boolean;
   /** Whether to show the Blank button */
   showBlankButton?: boolean;
+  /** Handler for the "Load example data" button; the button shows when set */
+  onExampleDataClick?: () => void;
   /** Label shown when empty (e.g., "No reference") */
   emptyLabel?: string;
   /** Description shown when empty */
@@ -53,6 +55,7 @@ const DropZone: React.FC<DropZoneProps> = ({
   onBlankClick,
   showLibraryButton = false,
   showBlankButton = false,
+  onExampleDataClick,
   emptyLabel = 'No data',
   emptyDescription = 'Drop DICOMs or protocols (.pro, .exar1, ExamCard, Siemens print protocol .xml/.txt), plus diffusion gradients (.dvs/.bvec/.bval)',
   fileInputId,
@@ -176,6 +179,22 @@ const DropZone: React.FC<DropZoneProps> = ({
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Blank
+              </button>
+            )}
+            {onExampleDataClick && (
+              <button
+                data-tutorial="example-data-button"
+                onClick={onExampleDataClick}
+                disabled={isProcessing}
+                title="Load a small synthetic session: a T1w MPRAGE and a multi-echo GRE for QSM"
+                className={`inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md border ${
+                  isProcessing
+                    ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                    : 'border-border-secondary text-content-secondary hover:bg-surface-secondary'
+                }`}
+              >
+                <FlaskConical className="h-4 w-4 mr-1" />
+                Load example data
               </button>
             )}
           </div>
