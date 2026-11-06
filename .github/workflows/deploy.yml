@@ -40,6 +40,9 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # Pages serves this repo at https://astewartau.github.io/dicompare-web/
+          VITE_BASE: /dicompare-web/
 
       - name: Copy index.html to 404.html for SPA routing
         run: cp dist/index.html dist/404.html
