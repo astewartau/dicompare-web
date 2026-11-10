@@ -23,15 +23,6 @@ export interface ValidationRule {
   message?: string;
 }
 
-export interface SchemaField {
-  path: string;
-  tag: string;
-  name: string;
-  required: boolean;
-  dataType: string;
-  validation?: ValidationRule[];
-}
-
 export interface ComplianceFieldResult {
   fieldPath: string;
   fieldName: string;
