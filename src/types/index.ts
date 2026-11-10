@@ -166,31 +166,6 @@ export interface ValidationRule {
   contains_all?: any[]; // Array of values for contains_all constraint (lists only - all must be present)
 }
 
-export interface SchemaField {
-  tag: string;
-  name: string;
-  required: boolean;
-  validationRule: ValidationRule;
-  level: 'acquisition' | 'series';
-  dataType?: FieldDataType;
-}
-
-export interface Template {
-  id: string;
-  name: string;
-  description?: string;
-  authors: string[];
-  version: string;
-  createdDate: string;
-  format: 'json' | 'python';
-  acquisitions: {
-    [acquisitionId: string]: {
-      name: string;
-      fields: SchemaField[];
-    };
-  };
-}
-
 // Compliance Types
 export interface ComplianceResult {
   fieldTag: string;
@@ -206,19 +181,4 @@ export interface SeriesComplianceResult {
   seriesDescription: string;
   overallStatus: 'pass' | 'fail' | 'warning' | 'na';
   fieldResults: ComplianceResult[];
-}
-
-export interface AcquisitionComplianceResult {
-  acquisitionId: string;
-  acquisitionName: string;
-  overallStatus: 'pass' | 'fail' | 'warning' | 'na';
-  acquisitionFieldResults: ComplianceResult[];
-  seriesResults: SeriesComplianceResult[];
-}
-
-export interface ProcessingProgress {
-  currentFile: number;
-  totalFiles: number;
-  currentOperation: string;
-  percentage: number;
 }

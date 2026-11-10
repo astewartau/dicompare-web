@@ -9,13 +9,6 @@ export interface FileObject {
   content: Uint8Array;
 }
 
-export interface FileSizeInfo {
-  totalBytes: number;
-  totalGB: number;
-  fileCount: number;
-  exceedsLimit: boolean;
-}
-
 // Memory limit for browser processing (WebAssembly constraint) - legacy upload path only
 // Testing showed crashes occur after converting ~6000 files at 339KB each (~2GB)
 // For larger datasets, use the File System Access API with batch processing
