@@ -1,6 +1,6 @@
 # dicompare Web & Desktop App
 
-This repository contains the **web and desktop application** for [dicompare](https://github.com/astewartau/dicompare-pip), an open-source tool for automated validation and comparison of MRI acquisition protocols using DICOM metadata.
+This repository contains the **web and desktop application** for [dicompare](https://github.com/astewartau/dicompare), an open-source tool for automated validation and comparison of MRI acquisition protocols using DICOM metadata.
 
 The app provides a visual interface for building, viewing, and validating imaging protocol schemas — all running locally in the browser with no data uploads required.
 
@@ -14,9 +14,9 @@ dicompare is a collaboration between the [Neurodesk](https://www.neurodesk.org/)
 
 ## How It Works
 
-This app is a frontend built on top of the [`dicompare`](https://github.com/astewartau/dicompare-pip) Python package, which runs in the browser via [Pyodide](https://pyodide.org/) (Python compiled to WebAssembly). All DICOM processing happens locally — no imaging data leaves your machine.
+This app is a frontend built on top of the [`dicompare`](https://github.com/astewartau/dicompare) Python package, which runs in the browser via [Pyodide](https://pyodide.org/) (Python compiled to WebAssembly). All DICOM processing happens locally — no imaging data leaves your machine.
 
-For the command-line interface (CLI) or Python API, see the [`dicompare` pip package](https://github.com/astewartau/dicompare-pip).
+For the command-line interface (CLI) or Python API, see the [`dicompare` pip package](https://github.com/astewartau/dicompare).
 
 ---
 
@@ -250,7 +250,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [dicompare Python Package](https://github.com/astewartau/dicompare-pip) — Core engine, CLI, and Python API
+- [dicompare Python Package](https://github.com/astewartau/dicompare) — Core engine, CLI, and Python API
 - [Live App (Neurodesk)](https://dicompare.neurodesk.org/)
 - [Live App (Brainlife)](https://brainlife.io/dicompare)
 - [Report Issues](https://github.com/astewartau/dicompare-web/issues)
