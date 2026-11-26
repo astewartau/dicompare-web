@@ -115,7 +115,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Science"
+      "category": "Science",
+      "maintainer": "Ashley Stewart <9957135+astewartau@users.noreply.github.com>"
     },
     "nsis": {
       "oneClick": false,
